@@ -21,4 +21,8 @@ module.exports = {
   API24_TEMPLATE: process.env.API24_TEMPLATE || 'otp_verify_code',
   API24_LANGUAGE: process.env.API24_LANGUAGE || 'en_US',
   API24_PHONE_NUMBER: process.env.API24_PHONE_NUMBER || '',
+
+  // AI Configuration
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
 };

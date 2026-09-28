@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const authRoutes = require('../modules/auth/auth.routes');
+const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -10,5 +11,8 @@ router.get('/health', (req, res) => {
 
 // Auth Routes
 router.use('/auth', authRoutes);
+
+// Wardrobe Store Routes
+router.use('/wardrobe', wardrobeRoutes);
 
 module.exports = router;
