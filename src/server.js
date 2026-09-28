@@ -1,18 +1,26 @@
 const app = require('./app');
 const connectDB = require('./config/db.config');
-const { PORT } = require('./config/env.config');
+const { PORT, NODE_ENV } = require('./config/env.config');
 
+/**
+ * Initialize and start Arangtik Express Backend Server
+ */
 const startServer = async () => {
   try {
-    // Connect to MongoDB Database
+    // 1. Establish MongoDB Database Connection
     await connectDB();
 
+    // 2. Start HTTP Listener
     app.listen(PORT, () => {
-      console.log(`🚀 Arangtik Backend Server is running on port ${PORT}`);
-      console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
+      console.log('==================================================');
+      console.log(`🚀 Arangtik Backend Server Running in [${NODE_ENV.toUpperCase()}] mode`);
+      console.log(`📡 Local Server URL: http://localhost:${PORT}`);
+      console.log(`🔗 API Base Endpoint: http://localhost:${PORT}/api`);
+      console.log(`📄 Health Check URL: http://localhost:${PORT}/api/health`);
+      console.log('==================================================');
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Critical Server Initialization Failure:', error);
     process.exit(1);
   }
 };
