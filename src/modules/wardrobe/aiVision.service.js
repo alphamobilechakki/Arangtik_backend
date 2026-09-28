@@ -116,7 +116,7 @@ const analyzeImageWithGemini = async (imagePath) => {
 
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
     const imageBuffer = fs.readFileSync(imagePath);
     const mimeType = imagePath.endsWith('.png')
