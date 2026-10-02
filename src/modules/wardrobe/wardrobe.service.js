@@ -12,10 +12,19 @@ const analyzePhoto = async (userId, file) => {
   }
 
   const originalImageUrl = `/uploads/${file.filename}`;
-  const filePath = file.path;
+  let userFaceBoxes = [];
+  try {
+    const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
+    const scanResult = await faceRecognitionService.scanGalleryImage(userId, filePath, { filename: file.filename });
+    if (scanResult.matched && scanResult.matchedFaces?.length > 0) {
+      userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
+    }
+  } catch (err) {
+    // Optional check
+  }
 
-  // 1. Detect garments and extract attributes using AI
-  const rawDetections = await aiVisionService.analyzeImageWithGemini(filePath);
+  // 1. Detect garments and extract attributes using AI (filtering for matched user if available)
+  const rawDetections = await aiVisionService.analyzeImageWithGemini(filePath, userFaceBoxes);
 
   // 2. Crop detected clothing pieces from the original image
   const croppedDetections = await aiVisionService.cropDetectedItems(filePath, rawDetections);
@@ -682,8 +691,9 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       // User IS found in this photo!
       results.matchedUserImagesCount++;
 
-      // 2. Vision AI: Extract clothing items from this matched photo
-      const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
+      // 2. Vision AI: Extract clothing items specifically for the matched user in this photo
+      const userFaceBoxes = (scanResult.matchedFaces || []).map((f) => f.boundingBox);
+      const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
       // 3. Match against existing wardrobe

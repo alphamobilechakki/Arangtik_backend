@@ -139,11 +139,13 @@ const getFallbackAnalysis = (imageMeta) => {
 };
 
 /**
- * Call Gemini Vision AI to detect garments and extract attributes
+ * Call Gemini Vision AI to detect garments and extract attributes specifically for the matched user
  */
-const analyzeImageWithGemini = async (imagePath) => {
+const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
+  const metadata = await sharp(imagePath).metadata();
+  const { width: imgWidth, height: imgHeight } = metadata;
+
   if (!GEMINI_API_KEY) {
-    const metadata = await sharp(imagePath).metadata();
     return getFallbackAnalysis(metadata);
   }
 
@@ -158,11 +160,42 @@ const analyzeImageWithGemini = async (imagePath) => {
       ? 'image/webp'
       : 'image/jpeg';
 
+    // Normalize face boxes to 0-1000 scale
+    const normalizedFaceBoxes = (userFaceBoxes || [])
+      .map((box) => {
+        if (!box) return null;
+        const x = box.x ?? box._x ?? 0;
+        const y = box.y ?? box._y ?? 0;
+        const w = box.width ?? box._width ?? 0;
+        const h = box.height ?? box._height ?? 0;
+        if (!imgWidth || !imgHeight) return null;
+        return [
+          Math.max(0, Math.floor((y / imgHeight) * 1000)),
+          Math.max(0, Math.floor((x / imgWidth) * 1000)),
+          Math.min(1000, Math.ceil(((y + h) / imgHeight) * 1000)),
+          Math.min(1000, Math.ceil(((x + w) / imgWidth) * 1000)),
+        ];
+      })
+      .filter(Boolean);
+
+    let userFaceContext = '';
+    if (normalizedFaceBoxes.length > 0) {
+      userFaceContext = `
+TARGET PERSON IDENTIFICATION:
+The authenticated user's face has been verified at the following normalized bounding box coordinates [ymin, xmin, ymax, xmax] (0-1000 scale):
+${JSON.stringify(normalizedFaceBoxes)}
+
+CRITICAL MULTI-PERSON / GROUP PHOTO INSTRUCTION:
+- ONLY detect and extract the clothing articles worn by the target user identified above (located directly below their face coordinates).
+- STRICTLY IGNORE and DO NOT return clothes worn by other people, friends, or strangers standing next to or around the target user!
+`;
+    }
+
     const prompt = `
 You are an expert Fashion Vision AI specialized in Digital Wardrobe extraction.
 Analyze the uploaded photo (which may be a person wearing clothes, or a standalone clothing piece).
 Identify all clothing items, ethnic wear, footwear, and accessories.
-
+${userFaceContext}
 CRITICAL NEGATIVE FILTER (STRICT):
 - NEVER detect or crop human body parts, bare skin, faces, chins, beards, necks, hands, hair, or heads!
 - ONLY detect physical wearable fabric clothing (Shirts, T-shirts, Jeans, Blazers, Kurtas, Trousers, Dresses, Jackets, Footwear, Bags).
@@ -231,6 +264,20 @@ Return ONLY raw JSON without markdown backticks or commentary.
         const height = ymax - ymin;
         const width = xmax - xmin;
         if (height < 70 || width < 70) return false;
+
+        // If target user face coordinates are known, ensure garment is horizontally aligned with the user
+        if (normalizedFaceBoxes.length > 0) {
+          const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
+            const faceCenterX = (fXmin + fXmax) / 2;
+            const garmentCenterX = (xmin + xmax) / 2;
+            const maxHorizontalOffset = Math.max(250, (fXmax - fXmin) * 2.5);
+            return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
+          });
+          if (!isAlignedWithAnyUser) {
+            console.log(`[aiVision] Discarding garment "${item.name}" as it belongs to another person in the group photo.`);
+            return false;
+          }
+        }
       }
 
       return true;
