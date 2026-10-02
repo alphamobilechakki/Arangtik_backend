@@ -1,12 +1,40 @@
-# Arangtik Backend API Documentation
+# Arangtik Backend API Documentation & Developer Integration Guide
 
-**Base URL:** `http://localhost:5000/api`
+**Base URL:** `http://localhost:8085/api` (or `/api/v1/`)
 
 ---
 
+# 🚀 STEP-BY-STEP DEVELOPER INTEGRATION ROADMAP
+
+Frontend / Client application ko in steps me APIs ko call karna chahiye:
+
+```text
+========================================================================================
+[STEP 1] AUTHENTICATION ──────► POST /api/auth/send-otp -> POST /api/auth/verify-otp (Get JWT Token)
+                                      │
+[STEP 2] PROFILE & REFERENCE ──► User Profile Image Upload -> POST /api/face-recognition/reference
+                                      │
+[STEP 3] SMART GALLERY SCAN ───► POST /api/face-recognition/scan (Detect & Match User Face)
+                                      │
+[STEP 4] AUTO WARDROBE INGEST ─► POST /api/wardrobe/ingest-gallery (Face Match -> AI Clothes -> Store)
+                                      │
+[STEP 5] WARDROBE MANAGEMENT ──► GET /api/wardrobe/get-all-items -> PATCH /api/wardrobe/update-item
+                                      │
+[STEP 6] DAILY WEAR & STYLING ─► POST /api/wardrobe/log-worn-dress -> POST /api/wardrobe/suggest-outfit
+                                      │
+[STEP 7] ITEM LENDING & RETURN ─► POST /api/wardrobe/lend-item -> PATCH /api/wardrobe/return-lent-item
+========================================================================================
+```
+
+---
+
+# ========================================================================
+# ==================== STEP 0: SERVER HEALTH & STATUS ====================
+# ========================================================================
+
 ## 1. Health Check
 
-### Endpoint: `/api/health`
+### Endpoint: `/api/health` (or `/api/v1/health`)
 - **Method:** `GET`
 - **Description:** Server status aur health check karne ke liye.
 - **Access:** Public
@@ -25,6 +53,10 @@
 ```
 
 ---
+
+# ========================================================================
+# ==================== STEP 1: AUTHENTICATION & LOGIN ====================
+# ========================================================================
 
 ## 2. Auth Module
 
@@ -220,6 +252,10 @@
 ```
 
 ---
+
+# ========================================================================
+# ================= STEP 5: DIGITAL WARDROBE STORE MANAGEMENT ===========
+# ========================================================================
 
 ## 3. Wardrobe Store Module
 
@@ -780,6 +816,10 @@
 
 ---
 
+# ========================================================================
+# ============ STEP 6: DAILY WEAR HISTORY & AI OUTFIT STYLIST ============
+# ========================================================================
+
 ### 3.8 Log Worn Dress (Wear History & Frequency Tracking)
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/log-worn-dress`
@@ -995,6 +1035,10 @@
 
 ---
 
+# ========================================================================
+# ================= STEP 7: CLOTHING LENDING & RETURN TRACKING ==========
+# ========================================================================
+
 ## 4. Item Lending & Handover Module (Dost/Relative ko Dena ya Lena)
 
 ### 4.1 Lend Item to Person
@@ -1117,13 +1161,15 @@
     },
     "activeAssignment": null
   },
----
+# ========================================================================
+# ================= STEP 2: USER PROFILE & REFERENCE BIOMETRIC ===========
+# ========================================================================
 
-## 5. Face Recognition Module (Phase 1)
+## 5. Face Recognition Module
 
 ### 5.1 Update Profile Photo
 - **Method:** `POST`
-- **Endpoint:** `/api/auth/profile-image`
+- **Endpoint:** `/api/auth/profile-image` (or `/api/v1/auth/profile-image`)
 - **Description:** Authenticated user ka profile photo upload karta hai. Profile photo badalne par reference face embedding automatically refresh hone ke liye invalidate hoti hai.
 - **Access:** Private (Requires JWT Token)
 
@@ -1273,6 +1319,10 @@
 
 ---
 
+# ========================================================================
+# ================= STEP 3: SMART GALLERY SCAN & FACE MATCHING ===========
+# ========================================================================
+
 ### 5.5 Scan Single Gallery Photo
 - **Method:** `POST`
 - **Endpoint:** `/api/face-recognition/scan`
@@ -1412,5 +1462,152 @@
   },
   "message": "Gallery image scan completed",
   "success": true
+}
+```
+
+---
+
+# ========================================================================
+# ================= STEP 4: SMART AUTO-INGESTION PIPELINE ================
+# ============ (FACE MATCH ➔ AI VISION CLOTHES ➔ DIGITAL WARDROBE) ========
+# ========================================================================
+
+## 6. Smart Gallery Ingestion & Auto-Wardrobe Pipeline
+
+### 6.1 Ingest Gallery Photos into Wardrobe
+- **Method:** `POST`
+- **Endpoint:** `/api/wardrobe/ingest-gallery` (or `/api/face-recognition/scan-and-ingest` / `/api/v1/wardrobe/ingest-gallery`)
+- **Description:** User ke multiple gallery images (1 se 20 photos) ko upload karke end-to-end automate karta hai:
+  1. **Face Recognition Filter:** Har photo me check karta hai ki logged-in user maujood hai ya nahi.
+  2. **Non-User Rejection:** Jin photos me user nahi hai, unhe skip kar deta hai.
+  3. **Fashion AI Extraction:** Jin photos me user match hota hai, unme user ke pehne hue kapde (Shirt, Jeans, Kurta, Dress etc.) detect aur auto-crop karta hai.
+  4. **Wardrobe Deduplication & Storage:**
+     - Agar wo kapda pehle se user ke wardrobe me exist karta hai $\rightarrow$ Automatic **`WearLog` (Daily Wear History)** create kar deta hai.
+     - Agar naya kapda hai $\rightarrow$ Automatically user ke **Digital Wardrobe (`WardrobeItem`)** me new item save kar deta hai!
+- **Access:** Private (Requires JWT Token)
+
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
+  - `Content-Type: multipart/form-data`
+- **Form-Data (Multipart):**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `photos` | `file[]` | Yes | Array of gallery image files (up to 20 files, JPEG/PNG/WebP) |
+| `autoCreateNewItems` | `boolean` | Optional | `true` (Default: Auto creates new WardrobeItem in DB) |
+| `autoLogWear` | `boolean` | Optional | `true` (Default: Auto creates WearLog for matched existing clothes) |
+| `occasion` | `string` | Optional | `"CASUAL"`, `"OFFICE"`, `"PARTY"`, `"WEDDING"`, `"FESTIVE"` (Default: `"CASUAL"`) |
+| `threshold` | `number` | Optional | Custom face distance threshold (e.g. `0.50` or `0.42` for strict) |
+
+#### Response (Success):
+**200 OK:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Gallery scanned: 2 photos matched your face, 3 new items added to wardrobe",
+  "data": {
+    "totalImagesReceived": 3,
+    "matchedUserImagesCount": 2,
+    "unmatchedImagesCount": 1,
+    "newWardrobeItemsCreated": [
+      {
+        "_id": "674f1b2c3d4e5f6a7b8c9d01",
+        "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
+        "name": "Navy Blue Slim Fit Shirt",
+        "storeType": "WARDROBE",
+        "category": "UPPER_WEAR",
+        "subCategory": "Shirt",
+        "images": [
+          {
+            "url": "/uploads/crops/crop-179093-0-1234.webp",
+            "filename": "crop-179093-0-1234.webp",
+            "isPrimary": true
+          }
+        ],
+        "attributes": {
+          "primaryColor": "Navy Blue",
+          "secondaryColors": ["Dark Blue"],
+          "pattern": "SOLID",
+          "fabric": "LINEN",
+          "gender": "MEN",
+          "fit": "SLIM_FIT",
+          "sleeveLength": "FULL_SLEEVE",
+          "occasions": ["OFFICE", "FORMAL", "PARTY"],
+          "seasons": ["SUMMER", "ALL_SEASON"]
+        },
+        "currentStatus": "AVAILABLE",
+        "currentLocation": {
+          "storagePlace": "Main Closet"
+        },
+        "tags": ["Auto-Extracted", "Gallery-Scan", "Navy Blue", "UPPER_WEAR"],
+        "createdAt": "2026-10-02T15:28:00.000Z"
+      },
+      {
+        "_id": "674f1b2c3d4e5f6a7b8c9d02",
+        "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
+        "name": "Light Blue Denim Jeans",
+        "storeType": "WARDROBE",
+        "category": "LOWER_WEAR",
+        "subCategory": "Jeans",
+        "images": [
+          {
+            "url": "/uploads/crops/crop-179093-1-5678.webp",
+            "filename": "crop-179093-1-5678.webp",
+            "isPrimary": true
+          }
+        ],
+        "attributes": {
+          "primaryColor": "Light Blue",
+          "pattern": "SOLID",
+          "fabric": "DENIM",
+          "fit": "REGULAR_FIT",
+          "occasions": ["CASUAL", "DAILY"]
+        },
+        "currentStatus": "AVAILABLE",
+        "currentLocation": {
+          "storagePlace": "Main Closet"
+        },
+        "tags": ["Auto-Extracted", "Gallery-Scan", "Light Blue", "LOWER_WEAR"],
+        "createdAt": "2026-10-02T15:28:00.000Z"
+      }
+    ],
+    "wearLogsCreated": [
+      {
+        "_id": "674f1b2c3d4e5f6a7b8c9d03",
+        "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
+        "items": [
+          {
+            "itemId": "65aba3d593d355788e6bcb8bf",
+            "name": "Charcoal Grey Blazer",
+            "category": "OUTERWEAR",
+            "photoUrl": "/uploads/blazer.jpg"
+          }
+        ],
+        "sourcePhotoUrl": "/uploads/party_gathering.jpg",
+        "occasion": "PARTY",
+        "wornDate": "2026-10-02T15:28:00.000Z",
+        "notes": "Auto-detected from gallery image party_gathering.jpg"
+      }
+    ],
+    "details": [
+      {
+        "filename": "party_gathering.jpg",
+        "originalImageUrl": "/uploads/party_gathering.jpg",
+        "isUserFound": true,
+        "userFaceScore": 0.94,
+        "garmentsDetected": 2,
+        "newItemsAdded": 2,
+        "existingItemsMatched": 1
+      },
+      {
+        "filename": "landscape_mountain.jpg",
+        "originalImageUrl": "/uploads/landscape_mountain.jpg",
+        "isUserFound": false,
+        "facesDetected": 0,
+        "message": "User face not detected in this photo. Skipped wardrobe extraction."
+      }
+    ]
+  }
 }
 ```

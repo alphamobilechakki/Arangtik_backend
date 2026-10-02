@@ -44,4 +44,16 @@ router.post(
   faceRecognitionController.scanImage
 );
 
+const wardrobeController = require('../wardrobe/wardrobe.controller');
+
+/**
+ * @route   POST /api/face-recognition/scan-and-ingest
+ * @desc    Scan gallery photos, match user's face, extract clothing with AI vision and auto-ingest into digital wardrobe
+ */
+router.post(
+  '/scan-and-ingest',
+  upload.array('photos', 20),
+  wardrobeController.ingestGalleryPhotos
+);
+
 module.exports = router;

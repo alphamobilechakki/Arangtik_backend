@@ -149,15 +149,27 @@ const returnLentItem = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get all items currently lent out
- * @route   GET /api/wardrobe/get-lent-items
+ * @desc    Ingest clothes from gallery photos (Face Match -> AI Garment Extract -> Digital Wardrobe Ingest)
+ * @route   POST /api/wardrobe/ingest-gallery
  * @access  Private
  */
-const getLentItems = asyncHandler(async (req, res) => {
+const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await wardrobeService.getLentItems(userId);
+  const files = req.files || (req.file ? [req.file] : []);
+  const options = {
+    autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
+    autoLogWear: req.body.autoLogWear !== 'false' && req.body.autoLogWear !== false,
+    threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
+    occasion: req.body.occasion || 'CASUAL',
+  };
 
-  return ApiResponse.success(res, result, 'Lent items fetched successfully');
+  const result = await wardrobeService.ingestGalleryPhotos(userId, files, options);
+
+  return ApiResponse.success(
+    res,
+    result,
+    `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
+  );
 });
 
 module.exports = {
@@ -174,4 +186,5 @@ module.exports = {
   lendItem,
   returnLentItem,
   getLentItems,
+  ingestGalleryPhotos,
 };

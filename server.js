@@ -1,6 +1,6 @@
-const app = require('./app');
-const connectDB = require('./config/db.config');
-const { PORT, NODE_ENV } = require('./config/env.config');
+const app = require('./src/app');
+const connectDB = require('./src/config/db.config');
+const { PORT, NODE_ENV } = require('./src/config/env.config');
 
 /**
  * Initialize and start Arangtik Express Backend Server

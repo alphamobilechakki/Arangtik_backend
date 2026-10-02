@@ -31,6 +31,18 @@ const WardrobeItemSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    // Ingestion / Upload Source Type
+    sourceType: {
+      type: String,
+      enum: ['MANUAL_UPLOAD', 'GALLERY_SCAN', 'CAMERA_CAPTURE'],
+      default: 'MANUAL_UPLOAD',
+      index: true,
+    },
+    // Reference original photo if cropped from gallery/camera
+    sourcePhotoUrl: {
+      type: String,
+      trim: true,
+    },
     images: [
       {
         url: { type: String, required: true },

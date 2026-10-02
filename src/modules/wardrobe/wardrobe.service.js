@@ -1,4 +1,5 @@
 const WardrobeItem = require('./wardrobe.model');
+const WearLog = require('./wearLog.model');
 const ApiError = require('../../utils/apiError');
 const aiVisionService = require('./aiVision.service');
 
@@ -41,6 +42,8 @@ const addItem = async (userId, itemData) => {
     storeType = 'WARDROBE',
     category,
     subCategory,
+    sourceType = 'MANUAL_UPLOAD',
+    sourcePhotoUrl,
     images = [],
     attributes = {},
     currentStatus = 'AVAILABLE',
@@ -69,6 +72,8 @@ const addItem = async (userId, itemData) => {
     storeType,
     category,
     subCategory,
+    sourceType,
+    sourcePhotoUrl: sourcePhotoUrl || '',
     images: processedImages,
     attributes,
     currentStatus,
@@ -619,6 +624,171 @@ const getLentItems = async (userId) => {
   };
 };
 
+/**
+ * Ingest clothing from Gallery Photos:
+ * 1. Takes array of uploaded gallery image files.
+ * 2. Filters only the photos where the authenticated user's face is found (Face Recognition).
+ * 3. Extracts clothing/garments from user's matched photos using AI Fashion Vision.
+ * 4. Checks against user's existing wardrobe:
+ *    - If garment is already in wardrobe -> Logs wear history (WearLog).
+ *    - If garment is new -> Ingests & creates a new WardrobeItem with cropped image thumbnail & AI metadata.
+ * 5. Returns comprehensive summary with created items and logs.
+ */
+const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
+  if (!files || files.length === 0) {
+    throw new ApiError(400, 'Please provide at least one gallery image to process');
+  }
+
+  const {
+    autoCreateNewItems = true,
+    autoLogWear = true,
+    threshold = null,
+    occasion = 'CASUAL',
+  } = options;
+
+  const results = {
+    totalImagesReceived: files.length,
+    matchedUserImagesCount: 0,
+    unmatchedImagesCount: 0,
+    newWardrobeItemsCreated: [],
+    wearLogsCreated: [],
+    details: [],
+  };
+
+  const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
+
+  for (const file of files) {
+    const fileMeta = {
+      filename: file.filename,
+      size: file.size,
+      mimetype: file.mimetype,
+      path: file.path,
+    };
+
+    try {
+      // 1. Face Recognition: Is the user in this photo?
+      const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, fileMeta, threshold);
+
+      if (!scanResult.matched) {
+        results.unmatchedImagesCount++;
+        results.details.push({
+          filename: file.filename,
+          originalImageUrl: `/uploads/${file.filename}`,
+          isUserFound: false,
+          facesDetected: scanResult.facesDetected,
+          message: 'User face not detected in this photo. Skipped wardrobe extraction.',
+        });
+        continue;
+      }
+
+      // User IS found in this photo!
+      results.matchedUserImagesCount++;
+
+      // 2. Vision AI: Extract clothing items from this matched photo
+      const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
+      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+
+      // 3. Match against existing wardrobe
+      const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+      const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
+
+      const imageNewItems = [];
+      const imageMatchedItemIds = [];
+
+      for (const item of matchedDetections) {
+        if (item.matchType === 'EXISTING_ITEM' && item.matchedItem) {
+          imageMatchedItemIds.push(item.matchedItem._id);
+        } else if (autoCreateNewItems) {
+          // Ingest new WardrobeItem
+          const primaryColor = item.attributes?.primaryColor || '';
+          const subCat = item.subCategory || item.category || 'Dress';
+          const defaultName = primaryColor ? `${primaryColor} ${subCat}` : `${item.category || 'Garment'} Item`;
+
+          const newItem = await WardrobeItem.create({
+            userId,
+            name: item.name || defaultName,
+            storeType: 'WARDROBE',
+            category: item.category || 'OTHER',
+            subCategory: item.subCategory || 'Other',
+            sourceType: 'GALLERY_SCAN',
+            sourcePhotoUrl: `/uploads/${file.filename}`,
+            images: [
+              {
+                url: item.croppedImageUrl || `/uploads/${file.filename}`,
+                filename: item.croppedFilename || file.filename,
+                isPrimary: true,
+              },
+            ],
+            attributes: item.attributes || {},
+            currentStatus: 'AVAILABLE',
+            currentLocation: { storagePlace: 'Main Closet' },
+            laundryCare: { washTypePreferred: 'MACHINE_WASH', ironPreferred: true },
+            tags: ['Auto-Extracted', 'Gallery-Scan', primaryColor, item.category].filter(Boolean),
+          });
+
+          imageNewItems.push(newItem);
+          results.newWardrobeItemsCreated.push(newItem);
+        }
+      }
+
+      // 4. Auto-log wear history for existing items found in this photo
+      let wearLogResult = null;
+      if (autoLogWear && imageMatchedItemIds.length > 0) {
+        const matchedItemsSnapshots = existingItems
+          .filter((ex) => imageMatchedItemIds.includes(ex._id))
+          .map((ex) => ({
+            itemId: ex._id,
+            name: ex.name,
+            category: ex.category,
+            subCategory: ex.subCategory,
+            photoUrl: ex.images?.find((img) => img.isPrimary)?.url || ex.images?.[0]?.url,
+          }));
+
+        const wearLog = await WearLog.create({
+          userId,
+          items: matchedItemsSnapshots,
+          sourcePhotoUrl: `/uploads/${file.filename}`,
+          occasion: occasion || 'CASUAL',
+          wornDate: new Date(),
+          notes: `Auto-detected from gallery image ${file.originalname || file.filename}`,
+        });
+
+        // Update stats
+        await WardrobeItem.updateMany(
+          { _id: { $in: imageMatchedItemIds } },
+          {
+            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
+            $set: { 'usageStats.lastWornDate': new Date() },
+          }
+        );
+
+        wearLogResult = wearLog;
+        results.wearLogsCreated.push(wearLog);
+      }
+
+      results.details.push({
+        filename: file.filename,
+        originalImageUrl: `/uploads/${file.filename}`,
+        isUserFound: true,
+        userFaceScore: scanResult.matchedFaces?.[0]?.similarityScore || 1.0,
+        garmentsDetected: croppedDetections.length,
+        newItemsAdded: imageNewItems.length,
+        existingItemsMatched: imageMatchedItemIds.length,
+        items: matchedDetections,
+        wearLog: wearLogResult,
+      });
+    } catch (err) {
+      console.error(`[WardrobeIngest] Error processing file ${file.filename}:`, err);
+      results.details.push({
+        filename: file.filename,
+        error: err.message,
+      });
+    }
+  }
+
+  return results;
+};
+
 module.exports = {
   analyzePhoto,
   addItem,
@@ -633,4 +803,5 @@ module.exports = {
   lendItem,
   returnLentItem,
   getLentItems,
+  ingestGalleryPhotos,
 };

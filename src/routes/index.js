@@ -15,6 +15,7 @@ router.use('/auth', authRoutes);
 
 // Wardrobe Store Routes
 router.use('/wardrobe', wardrobeRoutes);
+router.use('/v1/wardrobe', wardrobeRoutes);
 
 // Face Recognition Routes (Phase 1)
 router.use('/face-recognition', faceRecognitionRoutes);
