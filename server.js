@@ -11,7 +11,7 @@ const startServer = async () => {
     await connectDB();
 
     // 2. Start HTTP Listener
-    app.listen(PORT, () => {
+    app.listen(8080, () => {
       console.log('==================================================');
       console.log(`🚀 Arangtik Backend Server Running in [${NODE_ENV.toUpperCase()}] mode`);
       console.log(`📡 Local Server URL: http://localhost:${PORT}`);
