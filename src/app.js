@@ -11,7 +11,11 @@ const { errorHandler, notFound } = require('./middlewares/error.middleware');
 const app = express();
 
 // Security Middlewares
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(
   cors({
     origin: CLIENT_URL || '*',
