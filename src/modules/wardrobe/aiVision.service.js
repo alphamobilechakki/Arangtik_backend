@@ -11,6 +11,29 @@ if (!fs.existsSync(cropsDir)) {
 }
 
 /**
+ * Color shade synonym helper for intelligent clothing matching
+ */
+const areColorsSimilar = (c1, c2) => {
+  if (!c1 || !c2) return false;
+  const a = c1.trim().toLowerCase();
+  const b = c2.trim().toLowerCase();
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+
+  const colorFamilies = [
+    ['navy', 'navy blue', 'dark blue', 'midnight blue', 'royal blue', 'blue'],
+    ['black', 'charcoal', 'jet black', 'dark grey'],
+    ['white', 'off white', 'cream', 'ivory', 'milk white'],
+    ['olive', 'olive green', 'military green', 'khaki', 'army green', 'green'],
+    ['maroon', 'burgundy', 'wine', 'dark red', 'ruby'],
+    ['beige', 'tan', 'camel', 'sand', 'nude', 'light brown'],
+    ['grey', 'gray', 'heather grey', 'ash grey', 'silver'],
+  ];
+
+  return colorFamilies.some((fam) => fam.includes(a) && fam.includes(b));
+};
+
+/**
  * Helper to calculate similarity score between analyzed item and existing wardrobe item
  */
 const calculateItemSimilarity = (detectedItem, existingItem) => {
@@ -31,17 +54,27 @@ const calculateItemSimilarity = (detectedItem, existingItem) => {
     detectedItem.subCategory.toLowerCase() === existingItem.subCategory.toLowerCase()
   ) {
     score += 25;
+  } else if (
+    detectedItem.subCategory &&
+    existingItem.subCategory &&
+    (detectedItem.subCategory.toLowerCase().includes(existingItem.subCategory.toLowerCase()) ||
+      existingItem.subCategory.toLowerCase().includes(detectedItem.subCategory.toLowerCase()))
+  ) {
+    score += 18;
   }
 
   // 3. Primary Color match (Weight: 25)
   weightTotal += 25;
-  const detectedColor = detectedItem.attributes?.primaryColor?.toLowerCase();
-  const existingColor = (existingItem.attributes?.get ? existingItem.attributes.get('primaryColor') : existingItem.attributes?.primaryColor)?.toLowerCase();
+  const detectedColor = detectedItem.attributes?.primaryColor;
+  const existingColor = existingItem.attributes?.get
+    ? existingItem.attributes.get('primaryColor')
+    : existingItem.attributes?.primaryColor;
+
   if (detectedColor && existingColor) {
-    if (detectedColor === existingColor) {
+    if (detectedColor.toLowerCase() === existingColor.toLowerCase()) {
       score += 25;
-    } else if (detectedColor.includes(existingColor) || existingColor.includes(detectedColor)) {
-      score += 15;
+    } else if (areColorsSimilar(detectedColor, existingColor)) {
+      score += 20;
     }
   }
 
@@ -71,7 +104,7 @@ const getFallbackAnalysis = (imageMeta) => {
       name: 'Blue Solid Casual Shirt',
       category: 'UPPER_WEAR',
       subCategory: 'Shirt',
-      box2d: [100, 150, 550, 850], // ymin, xmin, ymax, xmax
+      box2d: [80, 100, 580, 900], // ymin, xmin, ymax, xmax
       attributes: {
         primaryColor: 'Navy Blue',
         secondaryColors: ['Dark Blue'],
@@ -90,7 +123,7 @@ const getFallbackAnalysis = (imageMeta) => {
       name: 'Light Blue Denim Jeans',
       category: 'LOWER_WEAR',
       subCategory: 'Jeans',
-      box2d: [550, 180, 950, 820],
+      box2d: [550, 150, 960, 850],
       attributes: {
         primaryColor: 'Light Blue',
         secondaryColors: ['Blue'],
@@ -126,15 +159,24 @@ const analyzeImageWithGemini = async (imagePath) => {
       : 'image/jpeg';
 
     const prompt = `
-You are an expert Fashion Vision AI. Analyze the uploaded photo (which may be a person wearing clothes, or a standalone clothing piece).
-Identify all clothing items, traditional ethnic wear, footwear, and accessories.
+You are an expert Fashion Vision AI specialized in Digital Wardrobe extraction.
+Analyze the uploaded photo (which may be a person wearing clothes, or a standalone clothing piece).
+Identify all clothing items, ethnic wear, footwear, and accessories.
+
+CRITICAL BOUNDING BOX & DETECTION REQUIREMENTS:
+1. "box2d": Normalized integer coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000.
+2. FULL GARMENT BOUNDARIES:
+   - For UPPER_WEAR / TRADITIONAL (Shirts, T-shirts, Kurtas, Blazers, Dresses, Sherwanis): Capture the COMPLETE garment extent from top of shoulders/collar all the way down to bottom waist/hemline, including FULL left & right sleeves. NEVER return a tight chest-only crop!
+   - For LOWER_WEAR (Jeans, Trousers, Pajamas, Skirts, Shorts): Capture from waistline to ankle cuffs.
+   - For FOOTWEAR: Capture entire shoe from heel to toe.
+
 For each distinct clothing item found, return a JSON array containing objects with:
 - "name": Descriptive name (e.g. "Royal Blue Silk Kurta", "Navy Blue Slim Fit Shirt", "Black Distressed Jeans")
 - "category": Broad category ("UPPER_WEAR", "LOWER_WEAR", "TRADITIONAL", "OUTERWEAR", "FOOTWEAR", "ACCESSORIES", "OTHER")
 - "subCategory": Specific type ("Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Dress", "Saree", "Jacket", etc.)
-- "box2d": Normalized bounding box integer coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000.
+- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] covering the full garment extent (0-1000 scale)
 - "attributes": Object with:
-  - "primaryColor": Main color (e.g. "Navy Blue", "Maroon", "White", "Olive Green")
+  - "primaryColor": Main color name (e.g. "Navy Blue", "Maroon", "White", "Olive Green")
   - "secondaryColors": Array of accent colors
   - "pattern": "SOLID", "STRIPED", "CHECKED", "PRINTED", "FLORAL", "EMBROIDERED", "TEXTURED", or "OTHER"
   - "fabric": "COTTON", "LINEN", "DENIM", "SILK", "WOOL", "POLYESTER", "LEATHER", "RAYON", "BLEND", or "OTHER"
@@ -171,7 +213,7 @@ Return ONLY raw JSON without markdown backticks or commentary.
 };
 
 /**
- * Crop detected clothing items using Sharp
+ * Crop detected clothing items using Sharp with smart context padding
  */
 const cropDetectedItems = async (originalImagePath, detectedItems) => {
   const image = sharp(originalImagePath);
@@ -188,11 +230,23 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
     if (item.box2d && item.box2d.length === 4 && imgWidth && imgHeight) {
       const [ymin, xmin, ymax, xmax] = item.box2d;
 
-      // Convert 0-1000 scale to actual pixel dimensions
-      const top = Math.max(0, Math.floor((ymin / 1000) * imgHeight));
-      const left = Math.max(0, Math.floor((xmin / 1000) * imgWidth));
-      const height = Math.min(imgHeight - top, Math.floor(((ymax - ymin) / 1000) * imgHeight));
-      const width = Math.min(imgWidth - left, Math.floor(((xmax - xmin) / 1000) * imgWidth));
+      // Calculate raw pixel coordinates
+      const rawTop = Math.floor((ymin / 1000) * imgHeight);
+      const rawLeft = Math.floor((xmin / 1000) * imgWidth);
+      const rawHeight = Math.floor(((ymax - ymin) / 1000) * imgHeight);
+      const rawWidth = Math.floor(((xmax - xmin) / 1000) * imgWidth);
+
+      // Smart Context Padding (8% breathing room to prevent cutting off sleeves, collar, or waist hem)
+      const padY = Math.round(rawHeight * 0.08);
+      const padX = Math.round(rawWidth * 0.08);
+
+      const top = Math.max(0, rawTop - padY);
+      const left = Math.max(0, rawLeft - padX);
+      const bottom = Math.min(imgHeight, rawTop + rawHeight + padY);
+      const right = Math.min(imgWidth, rawLeft + rawWidth + padX);
+
+      const width = right - left;
+      const height = bottom - top;
 
       if (width > 20 && height > 20) {
         const uniqueCropName = `crop-${Date.now()}-${i}-${Math.round(Math.random() * 1e4)}.webp`;
@@ -200,7 +254,7 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
 
         await sharp(originalImagePath)
           .extract({ left, top, width, height })
-          .webp({ quality: 85 })
+          .webp({ quality: 88 })
           .toFile(cropFilePath);
 
         cropFilename = uniqueCropName;
