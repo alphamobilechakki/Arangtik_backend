@@ -11,7 +11,18 @@ if (!fs.existsSync(cropsDir)) {
 }
 
 /**
- * Color shade synonym helper for intelligent clothing matching
+ * Helper to safely extract attribute value from Mongoose Map or plain object
+ */
+const getAttr = (item, key) => {
+  if (!item) return undefined;
+  const attrs = item.attributes;
+  if (!attrs) return undefined;
+  if (typeof attrs.get === 'function') return attrs.get(key);
+  return attrs[key];
+};
+
+/**
+ * Granular Color shade synonym helper for intelligent clothing matching
  */
 const areColorsSimilar = (c1, c2) => {
   if (!c1 || !c2) return false;
@@ -21,74 +32,116 @@ const areColorsSimilar = (c1, c2) => {
   if (a.includes(b) || b.includes(a)) return true;
 
   const colorFamilies = [
-    ['navy', 'navy blue', 'dark blue', 'midnight blue', 'royal blue', 'blue'],
-    ['black', 'charcoal', 'jet black', 'dark grey'],
-    ['white', 'off white', 'cream', 'ivory', 'milk white'],
-    ['olive', 'olive green', 'military green', 'khaki', 'army green', 'green'],
-    ['maroon', 'burgundy', 'wine', 'dark red', 'ruby'],
-    ['beige', 'tan', 'camel', 'sand', 'nude', 'light brown'],
-    ['grey', 'gray', 'heather grey', 'ash grey', 'silver'],
+    // Blues
+    ['navy', 'navy blue', 'dark blue', 'midnight blue', 'royal blue', 'blue', 'sapphire', 'cobalt', 'cyan', 'sky blue', 'ice blue', 'indigo', 'powder blue', 'teal', 'turquoise'],
+    // Reds & Pinks
+    ['red', 'crimson', 'ruby', 'cherry', 'magenta', 'fuchsia', 'hot pink', 'baby pink', 'blush', 'rose', 'rose gold', 'coral', 'peach', 'salmon', 'pink'],
+    // Maroons & Wines
+    ['maroon', 'burgundy', 'wine', 'dark red', 'ruby', 'berry', 'plum', 'oxblood'],
+    // Greens
+    ['olive', 'olive green', 'military green', 'khaki', 'army green', 'green', 'emerald', 'mint', 'sage', 'bottle green', 'forest green', 'lime', 'pistachio', 'jade'],
+    // Yellows & Golds
+    ['yellow', 'mustard', 'lemon', 'canary', 'gold', 'antique gold', 'metallic gold', 'champagne', 'amber', 'rose gold'],
+    // Purples & Lilacs
+    ['purple', 'violet', 'lavender', 'lilac', 'mauve', 'eggplant', 'orchid'],
+    // Whites & Neutrals
+    ['white', 'off white', 'cream', 'ivory', 'milk white', 'beige', 'tan', 'camel', 'sand', 'nude', 'light brown', 'taupe'],
+    // Blacks & Greys
+    ['black', 'charcoal', 'jet black', 'dark grey', 'grey', 'gray', 'heather grey', 'ash grey', 'silver', 'metallic silver', 'slate'],
+    // Oranges & Browns
+    ['orange', 'rust', 'copper', 'terracotta', 'burnt orange', 'tangerine', 'brown', 'chocolate'],
   ];
 
   return colorFamilies.some((fam) => fam.includes(a) && fam.includes(b));
 };
 
 /**
- * Helper to calculate similarity score between analyzed item and existing wardrobe item
+ * Multi-Dimensional Similarity Engine between analyzed item and existing wardrobe item
  */
 const calculateItemSimilarity = (detectedItem, existingItem) => {
   let score = 0;
   let weightTotal = 0;
 
-  // 1. Category match (Weight: 30)
-  weightTotal += 30;
+  // 1. Broad Category Match (Weight: 15)
+  weightTotal += 15;
   if (detectedItem.category === existingItem.category) {
-    score += 30;
-  }
-
-  // 2. Sub-Category match (Weight: 25)
-  weightTotal += 25;
-  if (
-    detectedItem.subCategory &&
-    existingItem.subCategory &&
-    detectedItem.subCategory.toLowerCase() === existingItem.subCategory.toLowerCase()
-  ) {
-    score += 25;
+    score += 15;
   } else if (
-    detectedItem.subCategory &&
-    existingItem.subCategory &&
-    (detectedItem.subCategory.toLowerCase().includes(existingItem.subCategory.toLowerCase()) ||
-      existingItem.subCategory.toLowerCase().includes(detectedItem.subCategory.toLowerCase()))
+    (detectedItem.category === 'TRADITIONAL' && existingItem.category === 'UPPER_WEAR') ||
+    (detectedItem.category === 'UPPER_WEAR' && existingItem.category === 'TRADITIONAL')
   ) {
-    score += 18;
+    score += 10;
   }
 
-  // 3. Primary Color match (Weight: 25)
-  weightTotal += 25;
-  const detectedColor = detectedItem.attributes?.primaryColor;
-  const existingColor = existingItem.attributes?.get
-    ? existingItem.attributes.get('primaryColor')
-    : existingItem.attributes?.primaryColor;
+  // 2. Specific Sub-Category Match (Weight: 15)
+  weightTotal += 15;
+  const detSub = (detectedItem.subCategory || '').toLowerCase();
+  const existSub = (existingItem.subCategory || '').toLowerCase();
+  if (detSub && existSub) {
+    if (detSub === existSub) {
+      score += 15;
+    } else if (detSub.includes(existSub) || existSub.includes(detSub)) {
+      score += 12;
+    }
+  }
 
-  if (detectedColor && existingColor) {
-    if (detectedColor.toLowerCase() === existingColor.toLowerCase()) {
+  // 3. Color & Theme Match (Weight: 25)
+  weightTotal += 25;
+  const detColor = (getAttr(detectedItem, 'primaryColor') || '').toLowerCase();
+  const existColor = (getAttr(existingItem, 'primaryColor') || '').toLowerCase();
+
+  if (detColor && existColor) {
+    if (detColor === existColor) {
       score += 25;
-    } else if (areColorsSimilar(detectedColor, existingColor)) {
+    } else if (areColorsSimilar(detColor, existColor)) {
       score += 20;
     }
   }
 
-  // 4. Pattern & Fabric match (Weight: 20)
-  weightTotal += 20;
-  const detectedPattern = detectedItem.attributes?.pattern?.toLowerCase();
-  const existingPattern = (existingItem.attributes?.get ? existingItem.attributes.get('pattern') : existingItem.attributes?.pattern)?.toLowerCase();
-  if (detectedPattern && existingPattern && detectedPattern === existingPattern) {
+  // 4. Design Pattern & Embellishments / Work Match (Weight: 15)
+  weightTotal += 15;
+  const detPattern = (getAttr(detectedItem, 'designPattern') || getAttr(detectedItem, 'pattern') || '').toLowerCase();
+  const existPattern = (getAttr(existingItem, 'designPattern') || getAttr(existingItem, 'pattern') || '').toLowerCase();
+  if (detPattern && existPattern) {
+    if (detPattern === existPattern) {
+      score += 15;
+    } else if (
+      (detPattern.includes('embellish') && existPattern.includes('sequin')) ||
+      (detPattern.includes('sequin') && existPattern.includes('embellish')) ||
+      (detPattern.includes('zari') && existPattern.includes('embroider')) ||
+      (detPattern.includes('embroider') && existPattern.includes('zari'))
+    ) {
+      score += 11;
+    }
+  }
+
+  // 5. Fabric & Texture Match (Weight: 15)
+  weightTotal += 15;
+  const detFabric = (getAttr(detectedItem, 'fabric') || '').toLowerCase();
+  const existFabric = (getAttr(existingItem, 'fabric') || '').toLowerCase();
+  if (detFabric && existFabric && (detFabric === existFabric || detFabric.includes(existFabric) || existFabric.includes(detFabric))) {
     score += 10;
   }
-  const detectedFabric = detectedItem.attributes?.fabric?.toLowerCase();
-  const existingFabric = (existingItem.attributes?.get ? existingItem.attributes.get('fabric') : existingItem.attributes?.fabric)?.toLowerCase();
-  if (detectedFabric && existingFabric && detectedFabric === existingFabric) {
+  const detTex = (getAttr(detectedItem, 'fabricTexture') || '').toLowerCase();
+  const existTex = (getAttr(existingItem, 'fabricTexture') || '').toLowerCase();
+  if (detTex && existTex && detTex === existTex) {
+    score += 5;
+  }
+
+  // 6. Silhouette & Fit Match (Weight: 10)
+  weightTotal += 10;
+  const detSil = (getAttr(detectedItem, 'silhouette') || getAttr(detectedItem, 'fit') || '').toLowerCase();
+  const existSil = (getAttr(existingItem, 'silhouette') || getAttr(existingItem, 'fit') || '').toLowerCase();
+  if (detSil && existSil && (detSil === existSil || detSil.includes(existSil) || existSil.includes(detSil))) {
     score += 10;
+  }
+
+  // 7. Neckline & Sleeve Style (Weight: 5)
+  weightTotal += 5;
+  const detNeck = (getAttr(detectedItem, 'neckline') || '').toLowerCase();
+  const existNeck = (getAttr(existingItem, 'neckline') || '').toLowerCase();
+  if (detNeck && existNeck && detNeck === existNeck) {
+    score += 5;
   }
 
   return Math.min(1, score / weightTotal);
@@ -139,6 +192,17 @@ const getFallbackAnalysis = (imageMeta) => {
 };
 
 /**
+ * Supported Gemini Vision Models in priority order (with auto-fallback on quota/spikes)
+ */
+const VISION_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
+];
+
+/**
  * Call Gemini Vision AI to detect garments and extract attributes specifically for the matched user
  */
 const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
@@ -149,38 +213,34 @@ const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
     return getFallbackAnalysis(metadata);
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
+  const imageBuffer = fs.readFileSync(imagePath);
+  const mimeType = imagePath.endsWith('.png')
+    ? 'image/png'
+    : imagePath.endsWith('.webp')
+    ? 'image/webp'
+    : 'image/jpeg';
 
-    const imageBuffer = fs.readFileSync(imagePath);
-    const mimeType = imagePath.endsWith('.png')
-      ? 'image/png'
-      : imagePath.endsWith('.webp')
-      ? 'image/webp'
-      : 'image/jpeg';
+  // Normalize face boxes to 0-1000 scale
+  const normalizedFaceBoxes = (userFaceBoxes || [])
+    .map((box) => {
+      if (!box) return null;
+      const x = box.x ?? box._x ?? 0;
+      const y = box.y ?? box._y ?? 0;
+      const w = box.width ?? box._width ?? 0;
+      const h = box.height ?? box._height ?? 0;
+      if (!imgWidth || !imgHeight) return null;
+      return [
+        Math.max(0, Math.floor((y / imgHeight) * 1000)),
+        Math.max(0, Math.floor((x / imgWidth) * 1000)),
+        Math.min(1000, Math.ceil(((y + h) / imgHeight) * 1000)),
+        Math.min(1000, Math.ceil(((x + w) / imgWidth) * 1000)),
+      ];
+    })
+    .filter(Boolean);
 
-    // Normalize face boxes to 0-1000 scale
-    const normalizedFaceBoxes = (userFaceBoxes || [])
-      .map((box) => {
-        if (!box) return null;
-        const x = box.x ?? box._x ?? 0;
-        const y = box.y ?? box._y ?? 0;
-        const w = box.width ?? box._width ?? 0;
-        const h = box.height ?? box._height ?? 0;
-        if (!imgWidth || !imgHeight) return null;
-        return [
-          Math.max(0, Math.floor((y / imgHeight) * 1000)),
-          Math.max(0, Math.floor((x / imgWidth) * 1000)),
-          Math.min(1000, Math.ceil(((y + h) / imgHeight) * 1000)),
-          Math.min(1000, Math.ceil(((x + w) / imgWidth) * 1000)),
-        ];
-      })
-      .filter(Boolean);
-
-    let userFaceContext = '';
-    if (normalizedFaceBoxes.length > 0) {
-      userFaceContext = `
+  let userFaceContext = '';
+  if (normalizedFaceBoxes.length > 0) {
+    userFaceContext = `
 TARGET PERSON IDENTIFICATION:
 The authenticated user's face has been verified at the following normalized bounding box coordinates [ymin, xmin, ymax, xmax] (0-1000 scale):
 ${JSON.stringify(normalizedFaceBoxes)}
@@ -189,108 +249,133 @@ CRITICAL MULTI-PERSON / GROUP PHOTO INSTRUCTION:
 - ONLY detect and extract the clothing articles worn by the target user identified above (located directly below their face coordinates).
 - STRICTLY IGNORE and DO NOT return clothes worn by other people, friends, or strangers standing next to or around the target user!
 `;
-    }
+  }
 
-    const prompt = `
-You are an expert Fashion Vision AI specialized in Digital Wardrobe extraction.
-Analyze the uploaded photo (which may be a person wearing clothes, or a standalone clothing piece).
-Identify all clothing items, ethnic wear, footwear, and accessories.
+  const prompt = `
+You are an expert World-Class Haute Couture & Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction & Garment Re-identification.
+Analyze the uploaded image (which may contain multiple dresses on mannequins/hangers, single garments, showroom displays, or people wearing clothes).
+Identify EVERY distinct wearable clothing item, gown, dress, ethnic wear, footwear, or accessory present.
 ${userFaceContext}
+CRITICAL INSTRUCTIONS FOR MULTIPLE DRESSES / MANNEQUINS / RACKS:
+- If there are multiple garments/gowns side-by-side (e.g. 2, 3 or more dresses on mannequins or showroom display), extract EACH individual dress as a separate item in the JSON array!
+- For full-length dresses, gowns, anarkalis, frocks, sarees, lehengas, sherwanis, suits:
+  * Category: "TRADITIONAL" or "UPPER_WEAR"
+  * SubCategory: "Gown", "Evening Gown", "Dress", "Maxi Dress", "Anarkali", "Saree", "Lehenga", "Sherwani", "Kurta", "Shirt", "Jeans", "Blazer", etc.
+  * Bounding box [ymin, xmin, ymax, xmax] (0 to 1000 scale):
+    - ymin: Top straps/shoulders/collar neckline of that specific dress (do NOT include mannequin neck/head/cap).
+    - ymax: Complete bottom hemline, skirt flare, or train reaching down to the floor.
+    - xmin & xmax: Exact horizontal fabric boundaries of that dress (including flared skirts/trains), without cutting into neighboring garments.
+
 CRITICAL NEGATIVE FILTER (STRICT):
-- NEVER detect or crop human body parts, bare skin, faces, chins, beards, necks, hands, hair, or heads!
-- ONLY detect physical wearable fabric clothing (Shirts, T-shirts, Jeans, Blazers, Kurtas, Trousers, Dresses, Jackets, Footwear, Bags).
-- For UPPER_WEAR, top coordinate (ymin) MUST start at the base of the neck / collar seam, NEVER at the chin, jaw, or lips!
+- NEVER detect or crop human faces, bare skin, necks, mannequin heads/stands, or background furniture as items!
+- ONLY detect physical wearable fabric clothing.
 
-CRITICAL BOUNDING BOX & DETECTION REQUIREMENTS:
-1. "box2d": Normalized integer coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000.
-2. FULL GARMENT BOUNDARIES:
-   - For UPPER_WEAR / TRADITIONAL (Shirts, T-shirts, Kurtas, Blazers, Dresses, Sherwanis): Capture the COMPLETE garment extent from top of shoulders/collar all the way down to bottom waist/hemline, including FULL left & right sleeves. NEVER return a tight chest-only crop!
-   - For LOWER_WEAR (Jeans, Trousers, Pajamas, Skirts, Shorts): Capture from waistline to ankle cuffs.
-   - For FOOTWEAR: Capture entire shoe from heel to toe.
-
-For each distinct clothing item found, return a JSON array containing objects with:
-- "name": Descriptive name (e.g. "Royal Blue Silk Kurta", "Navy Blue Slim Fit Shirt", "Black Distressed Jeans")
+For each distinct item found, return a JSON array containing objects with:
+- "name": Highly descriptive, elegant fashion title (e.g. "Royal Blue Beaded Deep-Plunge Tulle Gown", "Magenta Glossy Satin Sweetheart Flare Gown", "Rose Gold Sequin Mermaid Trumpet Gown", "Midnight Navy Blue Slim Fit Linen Shirt")
 - "category": Broad category ("UPPER_WEAR", "LOWER_WEAR", "TRADITIONAL", "OUTERWEAR", "FOOTWEAR", "ACCESSORIES", "OTHER")
-- "subCategory": Specific type ("Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Dress", "Saree", "Jacket", etc.)
-- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] covering the full garment extent (0-1000 scale)
+- "subCategory": Specific garment type ("Evening Gown", "Gown", "Dress", "Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Saree", "Jacket", etc.)
+- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact full garment.
 - "attributes": Object with:
-  - "primaryColor": Main color name (e.g. "Navy Blue", "Maroon", "White", "Olive Green")
-  - "secondaryColors": Array of accent colors
-  - "pattern": "SOLID", "STRIPED", "CHECKED", "PRINTED", "FLORAL", "EMBROIDERED", "TEXTURED", or "OTHER"
-  - "fabric": "COTTON", "LINEN", "DENIM", "SILK", "WOOL", "POLYESTER", "LEATHER", "RAYON", "BLEND", or "OTHER"
-  - "gender": "MEN", "WOMEN", "UNISEX", or "KIDS"
-  - "fit": "SLIM_FIT", "REGULAR_FIT", "LOOSE_FIT", "OVERSIZED", "TAILORED", or "OTHER"
-  - "sleeveLength": "SLEEVELESS", "HALF_SLEEVE", "FULL_SLEEVE", or "THREE_QUARTER"
-  - "neckline": "Collar", "Round Neck", "V-Neck", "Mandarin", "Polo", or "Other"
-  - "occasions": Array from ["CASUAL", "OFFICE", "FORMAL", "PARTY", "WEDDING", "FESTIVE", "SPORTS", "DAILY"]
-  - "seasons": Array from ["SUMMER", "WINTER", "MONSOON", "ALL_SEASON"]
+  - "primaryColor": Dominant color shade (e.g. "Royal Blue", "Magenta", "Rose Gold", "Emerald Green", "Midnight Navy", "Ruby Red", "Ivory White", "Champagne Gold")
+  - "secondaryColors": Array of accent/contrast shades (e.g. ["Ice Blue", "Navy Blue"], ["Silver", "Blush Pink"])
+  - "colorTheme": "MONOCHROMATIC" | "DUAL_TONE" | "PASTEL" | "JEWEL_TONE" | "METALLIC" | "OMBRE" | "EARTHY" | "MULTICOLOR"
+  - "designPattern": "SOLID" | "EMBELLISHED_BEADED" | "SEQUINED" | "ZARI_WORK" | "EMBROIDERED" | "CHIKANKARI" | "MIRROR_WORK" | "FLORAL_PRINT" | "GEOMETRIC_PRINT" | "STRIPED" | "CHECKED" | "TEXTURED"
+  - "pattern": "EMBELLISHED" | "SEQUINED" | "SOLID" | "EMBROIDERED" | "PRINTED"
+  - "fabric": "SATIN" | "SILK" | "NET_TULLE" | "VELVET" | "ORGANZA" | "GEORGETTE" | "CHIFFON" | "COTTON" | "LINEN" | "DENIM" | "CREPE" | "BROCADE" | "BLEND" | "OTHER"
+  - "fabricTexture": "GLOSSY_SHEEN" | "MATTE" | "GLITTER_SPARKLE" | "EMBOSSED" | "CRINKLED" | "SMOOTH"
+  - "silhouette": "A_LINE" | "MERMAID_TRUMPET" | "BALL_GOWN" | "STRAIGHT_SHEATH" | "FIT_AND_FLARE" | "BODYCON" | "ANARKALI" | "EMPIRE_WAIST" | "SLIM_FIT" | "REGULAR_FIT"
+  - "fit": "FLARE" | "MERMAID" | "A_LINE" | "SLIM_FIT" | "REGULAR_FIT" | "LOOSE_FIT"
+  - "dressLength": "FLOOR_LENGTH" | "MAXI" | "TRAIN_EXTENDED" | "MIDI" | "KNEE_LENGTH" | "MINI" | "STANDARD"
+  - "neckline": "Sweetheart" | "Deep V-Neck" | "V-Neck" | "Sleeveless" | "Strapless" | "Off-Shoulder" | "Square" | "Halter" | "Boat Neck" | "Mandarin" | "Collar" | "Round Neck" | "Other"
+  - "sleeveStyle": "SLEEVELESS" | "SPAGHETTI_STRAPS" | "CAP_SLEEVE" | "HALF_SLEEVE" | "FULL_SLEEVE" | "OFF_SHOULDER" | "THREE_QUARTER"
+  - "workPlacement": "BODICE_AND_FLARE" | "BODICE_ONLY" | "ALL_OVER" | "BORDER_HEM_ONLY" | "MINIMAL_CLEAN"
+  - "styleAesthetic": "ROYAL_BRIDAL" | "EVENING_COCKTAIL" | "RED_CARPET" | "TRADITIONAL_FESTIVE" | "MODERN_CHIC" | "MINIMALIST_FORMAL" | "CASUAL_CHIC"
+  - "gender": "WOMEN" | "MEN" | "UNISEX" | "KIDS"
+  - "occasions": Array from ["WEDDING", "RECEPTION", "PARTY", "RED_CARPET", "FESTIVE", "FORMAL", "CASUAL", "OFFICE", "DAILY"]
+  - "seasons": Array from ["ALL_SEASON", "SUMMER", "WINTER", "MONSOON"]
 
 Return ONLY raw JSON without markdown backticks or commentary.
 `;
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: imageBuffer.toString('base64'),
-          mimeType: mimeType,
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  let rawList = [];
+  let lastError = null;
+
+  // Multi-Model Cascade: Try working models in priority order
+  for (const modelName of VISION_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: imageBuffer.toString('base64'),
+            mimeType: mimeType,
+          },
         },
-      },
-    ]);
+      ]);
 
-    const responseText = result.response.text().trim();
-    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
-    const rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
+      const responseText = result.response.text().trim();
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
+      console.log(`[aiVision] Successfully analyzed image with model: ${modelName} (${rawList.length} items found)`);
+      lastError = null;
+      break;
+    } catch (err) {
+      console.warn(`[aiVision] Model ${modelName} attempt failed (${err.message.slice(0, 100)}), cascading to next model...`);
+      lastError = err;
+    }
+  }
 
-    // STRICT NON-GARMENT / FACE POST-FILTER
-    const nonGarmentTerms = ['face', 'chin', 'beard', 'neck', 'skin', 'head', 'hand', 'hair', 'lips', 'person', 'body', 'jaw'];
-    return rawList.filter((item) => {
-      const name = (item.name || '').toLowerCase();
-      const sub = (item.subCategory || '').toLowerCase();
-      const cat = (item.category || '').toLowerCase();
-
-      // Filter out any body parts
-      if (nonGarmentTerms.some((t) => name.includes(t) || sub.includes(t))) {
-        return false;
-      }
-      if (cat === 'other' && !item.attributes?.primaryColor) {
-        return false;
-      }
-
-      // Check minimum dimensions (skip tiny false crops)
-      if (item.box2d && item.box2d.length === 4) {
-        const [ymin, xmin, ymax, xmax] = item.box2d;
-        const height = ymax - ymin;
-        const width = xmax - xmin;
-        if (height < 70 || width < 70) return false;
-
-        // If target user face coordinates are known, ensure garment is horizontally aligned with the user
-        if (normalizedFaceBoxes.length > 0) {
-          const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
-            const faceCenterX = (fXmin + fXmax) / 2;
-            const garmentCenterX = (xmin + xmax) / 2;
-            const maxHorizontalOffset = Math.max(250, (fXmax - fXmin) * 2.5);
-            return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
-          });
-          if (!isAlignedWithAnyUser) {
-            console.log(`[aiVision] Discarding garment "${item.name}" as it belongs to another person in the group photo.`);
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-  } catch (error) {
-    console.error('Gemini Vision AI error, falling back to local analysis:', error.message);
-    const metadata = await sharp(imagePath).metadata();
+  if (lastError && rawList.length === 0) {
+    console.error('[aiVision] All Gemini Vision models failed or quota exceeded:', lastError.message);
     return getFallbackAnalysis(metadata);
   }
+
+  // STRICT NON-GARMENT / FACE POST-FILTER (Whole word matching to avoid false positives like "v-neck" or "bodycon")
+  const nonGarmentRegex = /\b(face|chin|beard|hair|human head|human face|bare skin|mannequin stand|dummy stand)\b/i;
+  return rawList.filter((item) => {
+    const name = (item.name || '').toLowerCase();
+    const sub = (item.subCategory || '').toLowerCase();
+    const cat = (item.category || '').toLowerCase();
+
+    // Filter out non-garment body parts
+    if (nonGarmentRegex.test(name) || nonGarmentRegex.test(sub)) {
+      return false;
+    }
+    if (cat === 'other' && !item.attributes?.primaryColor) {
+      return false;
+    }
+
+    // Check minimum dimensions (skip tiny false crops)
+    if (item.box2d && item.box2d.length === 4) {
+      const [ymin, xmin, ymax, xmax] = item.box2d;
+      const height = ymax - ymin;
+      const width = xmax - xmin;
+      if (height < 50 || width < 40) return false;
+
+      // If target user face coordinates are known, ensure garment is horizontally aligned with the user
+      if (normalizedFaceBoxes.length > 0) {
+        const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
+          const faceCenterX = (fXmin + fXmax) / 2;
+          const garmentCenterX = (xmin + xmax) / 2;
+          const maxHorizontalOffset = Math.max(250, (fXmax - fXmin) * 2.5);
+          return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
+        });
+        if (!isAlignedWithAnyUser) {
+          console.log(`[aiVision] Discarding garment "${item.name}" as it belongs to another person in the group photo.`);
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
 };
 
 /**
- * Crop detected clothing items using Sharp with smart context padding
+ * Crop detected clothing items using Sharp with precision bounds
  */
 const cropDetectedItems = async (originalImagePath, detectedItems) => {
   const image = sharp(originalImagePath);
@@ -298,6 +383,7 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
   const { width: imgWidth, height: imgHeight } = metadata;
 
   const results = [];
+  const isMultiItem = (detectedItems || []).length > 1;
 
   for (let i = 0; i < detectedItems.length; i++) {
     const item = detectedItems[i];
@@ -308,19 +394,22 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
       const [ymin, xmin, ymax, xmax] = item.box2d;
 
       // Calculate raw pixel coordinates
-      const rawTop = Math.floor((ymin / 1000) * imgHeight);
-      const rawLeft = Math.floor((xmin / 1000) * imgWidth);
-      const rawHeight = Math.floor(((ymax - ymin) / 1000) * imgHeight);
-      const rawWidth = Math.floor(((xmax - xmin) / 1000) * imgWidth);
+      const rawTop = Math.floor((Math.max(0, ymin) / 1000) * imgHeight);
+      const rawLeft = Math.floor((Math.max(0, xmin) / 1000) * imgWidth);
+      const rawBottom = Math.ceil((Math.min(1000, ymax) / 1000) * imgHeight);
+      const rawRight = Math.ceil((Math.min(1000, xmax) / 1000) * imgWidth);
 
-      // Smart Context Padding (8% breathing room to prevent cutting off sleeves, collar, or waist hem)
-      const padY = Math.round(rawHeight * 0.08);
-      const padX = Math.round(rawWidth * 0.08);
+      const rawHeight = rawBottom - rawTop;
+      const rawWidth = rawRight - rawLeft;
+
+      // Smart Padding: Tight for multi-item images to avoid bleed, comfortable for single items
+      const padY = Math.round(rawHeight * (isMultiItem ? 0.02 : 0.04));
+      const padX = Math.round(rawWidth * (isMultiItem ? 0.015 : 0.03));
 
       const top = Math.max(0, rawTop - padY);
       const left = Math.max(0, rawLeft - padX);
-      const bottom = Math.min(imgHeight, rawTop + rawHeight + padY);
-      const right = Math.min(imgWidth, rawLeft + rawWidth + padX);
+      const bottom = Math.min(imgHeight, rawBottom + padY);
+      const right = Math.min(imgWidth, rawRight + padX);
 
       const width = right - left;
       const height = bottom - top;
@@ -331,7 +420,7 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
 
         await sharp(originalImagePath)
           .extract({ left, top, width, height })
-          .webp({ quality: 88 })
+          .webp({ quality: 90 })
           .toFile(cropFilePath);
 
         cropFilename = uniqueCropName;

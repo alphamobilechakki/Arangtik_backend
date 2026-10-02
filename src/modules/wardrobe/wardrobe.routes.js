@@ -11,8 +11,11 @@ router.use(protect);
 // POST /api/wardrobe/analyze-photo (Image upload & AI clothing analysis)
 router.post('/analyze-photo', upload.single('photo'), wardrobeController.analyzePhoto);
 
+// POST /api/wardrobe/bulk-add-photos (Direct Bulk Clothes Digitization 1-100 Photos)
+router.post('/bulk-add-photos', upload.array('photos', 100), wardrobeController.bulkAddPhotos);
+
 // POST /api/wardrobe/ingest-gallery (Face Match -> AI Garment Extract -> Wardrobe Store)
-router.post('/ingest-gallery', upload.array('photos', 20), wardrobeController.ingestGalleryPhotos);
+router.post('/ingest-gallery', upload.array('photos', 100), wardrobeController.ingestGalleryPhotos);
 
 // POST /api/wardrobe/add-item
 router.post('/add-item', wardrobeController.addItem);

@@ -184,6 +184,27 @@ const getLentItems = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Lent items fetched successfully');
 });
 
+/**
+ * @desc    Bulk add standalone dress photos (1 to 100 photos)
+ * @route   POST /api/wardrobe/bulk-add-photos
+ * @access  Private
+ */
+const bulkAddPhotos = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const files = req.files || (req.file ? [req.file] : []);
+  const options = {
+    storagePlace: req.body.storagePlace || 'Main Closet',
+  };
+
+  const result = await wardrobeService.bulkAddDressPhotos(userId, files, options);
+
+  return ApiResponse.success(
+    res,
+    result,
+    `Bulk processing complete: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing items matched`
+  );
+});
+
 module.exports = {
   analyzePhoto,
   addItem,
@@ -199,4 +220,5 @@ module.exports = {
   returnLentItem,
   getLentItems,
   ingestGalleryPhotos,
+  bulkAddPhotos,
 };

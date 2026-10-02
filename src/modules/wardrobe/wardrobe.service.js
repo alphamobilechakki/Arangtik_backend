@@ -804,6 +804,101 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
   return results;
 };
 
+/**
+ * Bulk add standalone dress photos (1 to 100 photos)
+ * Automatically detects garments, crops clean cards, checks duplicates, and saves directly into wardrobe.
+ */
+const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
+  if (!files || files.length === 0) {
+    throw new ApiError(400, 'Please upload at least one clothing photo to digitize');
+  }
+
+  const { storagePlace = 'Main Closet' } = options;
+
+  const results = {
+    totalPhotosReceived: files.length,
+    totalGarmentsExtracted: 0,
+    newItemsCreated: [],
+    existingMatches: [],
+    details: [],
+  };
+
+  for (let idx = 0; idx < files.length; idx++) {
+    const file = files[idx];
+    try {
+      // 1. Detect garments in this photo (standalone clothing item or flat lay)
+      const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
+      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+
+      // 2. Fetch up-to-date closet items to prevent duplicate additions across the batch
+      const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+      const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
+
+      const fileCreatedItems = [];
+      const fileMatchedItems = [];
+
+      for (const item of matchedDetections) {
+        if (item.matchResult?.status === 'EXACT_MATCH' && item.matchResult?.existingItem) {
+          // Increment wear count on existing item
+          await WardrobeItem.findByIdAndUpdate(item.matchResult.existingItem._id, {
+            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
+            $set: { 'usageStats.lastWornDate': new Date() },
+          });
+          fileMatchedItems.push(item.matchResult.existingItem);
+          results.existingMatches.push(item.matchResult.existingItem);
+        } else {
+          // Create new wardrobe item
+          const primaryColor = item.attributes?.primaryColor || '';
+          const subCat = item.subCategory || item.category || 'Dress';
+          const defaultName = primaryColor ? `${primaryColor} ${subCat}` : `${item.category || 'Garment'} Item`;
+
+          const newItem = await WardrobeItem.create({
+            userId,
+            name: item.name || defaultName,
+            storeType: 'WARDROBE',
+            category: item.category || 'OTHER',
+            subCategory: item.subCategory || 'Other',
+            sourceType: 'MANUAL_UPLOAD',
+            sourcePhotoUrl: `/uploads/${file.filename}`,
+            images: [
+              {
+                url: item.croppedImageUrl || `/uploads/${file.filename}`,
+                filename: item.croppedFilename || file.filename,
+                isPrimary: true,
+              },
+            ],
+            attributes: item.attributes || {},
+            currentStatus: 'AVAILABLE',
+            currentLocation: { storagePlace: storagePlace || 'Main Closet' },
+            laundryCare: { washTypePreferred: 'MACHINE_WASH', ironPreferred: true },
+            tags: ['Bulk-Digitized', primaryColor, item.category].filter(Boolean),
+          });
+
+          fileCreatedItems.push(newItem);
+          results.newItemsCreated.push(newItem);
+        }
+      }
+
+      results.totalGarmentsExtracted += croppedDetections.length;
+      results.details.push({
+        filename: file.filename,
+        originalImageUrl: `/uploads/${file.filename}`,
+        garmentsFound: croppedDetections.length,
+        createdItems: fileCreatedItems,
+        matchedItems: fileMatchedItems,
+      });
+    } catch (err) {
+      console.error(`[bulkAddDressPhotos] Error on file ${file.filename}:`, err);
+      results.details.push({
+        filename: file.filename,
+        error: err.message,
+      });
+    }
+  }
+
+  return results;
+};
+
 module.exports = {
   analyzePhoto,
   addItem,
@@ -819,4 +914,5 @@ module.exports = {
   returnLentItem,
   getLentItems,
   ingestGalleryPhotos,
+  bulkAddDressPhotos,
 };
