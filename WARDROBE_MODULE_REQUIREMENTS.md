@@ -192,9 +192,6 @@ Sabhi APIs ke naam simple, intuitive aur purpose-clear hain. **Sabhi update oper
 
 ### 6.3 Laundry & Dhobi Management APIs (With Pricing & Payments)
 
-
-
-
 | Method | Endpoint Name | Description |
 |---|---|---|
 | `POST` | `/api/laundry/create-order` | Wardrobe se kapde select karke Dhobi ko bhejna (Charges/Services select karke). |
