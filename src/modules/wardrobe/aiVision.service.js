@@ -339,7 +339,10 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
       category: detected.category,
       subCategory: detected.subCategory,
       croppedImageUrl: detected.croppedImageUrl,
+      croppedFilename: detected.croppedFilename,
       attributes: detected.attributes,
+      matchType: matchStatus === 'EXACT_MATCH' ? 'EXISTING_ITEM' : 'NEW_ITEM',
+      matchedItem: matchedItem,
       matchResult: {
         status: matchStatus,
         confidenceScore: Math.round(highestScore * 100) / 100,

@@ -694,9 +694,16 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       const imageMatchedItemIds = [];
 
       for (const item of matchedDetections) {
-        if (item.matchType === 'EXISTING_ITEM' && item.matchedItem) {
-          imageMatchedItemIds.push(item.matchedItem._id);
-        } else if (autoCreateNewItems) {
+        const isExisting =
+          item.matchResult?.status === 'EXACT_MATCH' ||
+          item.matchType === 'EXISTING_ITEM' ||
+          item.matchResult?.status === 'AMBIGUOUS_MATCH';
+
+        const matchedItem = item.matchResult?.existingItem || item.matchedItem;
+
+        if (item.matchResult?.status === 'EXACT_MATCH' && matchedItem) {
+          imageMatchedItemIds.push(matchedItem._id);
+        } else if (autoCreateNewItems && item.matchResult?.status !== 'EXACT_MATCH') {
           // Ingest new WardrobeItem
           const primaryColor = item.attributes?.primaryColor || '';
           const subCat = item.subCategory || item.category || 'Dress';
