@@ -1117,13 +1117,300 @@
     },
     "activeAssignment": null
   },
-  "message": "Lent item returned and status set to AVAILABLE",
+---
+
+## 5. Face Recognition Module (Phase 1)
+
+### 5.1 Update Profile Photo
+- **Method:** `POST`
+- **Endpoint:** `/api/auth/profile-image`
+- **Description:** Authenticated user ka profile photo upload karta hai. Profile photo badalne par reference face embedding automatically refresh hone ke liye invalidate hoti hai.
+- **Access:** Private (Requires JWT Token)
+
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
+  - `Content-Type: multipart/form-data`
+- **Form-Data:**
+  - `image`: Profile image file (JPEG, PNG, WEBP)
+
+#### Response:
+**200 OK (Success):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
+    "phone": "919876543210",
+    "name": "Alex Mercer",
+    "role": "user",
+    "status": "active",
+    "profileImage": "/uploads/image-1712000000000-123456789.jpg"
+  },
+  "message": "Profile image uploaded successfully",
   "success": true
 }
 ```
 
+---
 
+### 5.2 Validate Reference Face
+- **Method:** `POST`
+- **Endpoint:** `/api/face-recognition/reference/validate`
+- **Description:** Authenticated user ki existing profile image ko scan karke verify karta hai ki usme exactly 1 clear face maujood hai ya nahi.
+- **Access:** Private (Requires JWT Token)
 
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
 
+#### Response:
+**200 OK (Success):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "isValid": true,
+    "profileImage": "/uploads/image-1712000000000-123456789.jpg",
+    "faceDetected": true,
+    "confidence": 0.9921,
+    "boundingBox": {
+      "x": 120,
+      "y": 80,
+      "width": 180,
+      "height": 220
+    },
+    "message": "Profile image contains a valid single reference face ready for recognition."
+  },
+  "message": "Profile image validated for face recognition",
+  "success": true
+}
+```
 
+**422 Unprocessable Entity (Multiple Faces):**
+```json
+{
+  "success": false,
+  "statusCode": 422,
+  "message": "Multiple faces (2) detected in the profile image. Please upload a photo with only yourself.",
+  "errors": [
+    {
+      "code": "PROFILE_MULTIPLE_FACES",
+      "message": "Reference photo must contain exactly one face"
+    }
+  ]
+}
+```
 
+---
+
+### 5.3 Generate / Refresh Reference Face Embedding
+- **Method:** `POST`
+- **Endpoint:** `/api/face-recognition/reference`
+- **Description:** User ki profile image se 128-d reference face embedding generate karke secure database me cache karta hai. (Raw vector API me expose nahi hota).
+- **Access:** Private (Requires JWT Token)
+
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
+
+#### Response:
+**200 OK (Success):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "hasReferenceFace": true,
+    "profileImage": "/uploads/image-1712000000000-123456789.jpg",
+    "boundingBox": {
+      "x": 120,
+      "y": 80,
+      "width": 180,
+      "height": 220
+    },
+    "detectionConfidence": 0.9921,
+    "lastGeneratedAt": "2026-10-02T12:00:00.000Z"
+  },
+  "message": "Reference face embedding generated successfully",
+  "success": true
+}
+```
+
+---
+
+### 5.4 Get Reference Face Status
+- **Method:** `GET`
+- **Endpoint:** `/api/face-recognition/reference`
+- **Description:** Reference face embedding status aur metadata check karne ke liye.
+- **Access:** Private (Requires JWT Token)
+
+#### Response:
+**200 OK (Success):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
+    "hasProfileImage": true,
+    "profileImage": "/uploads/image-1712000000000-123456789.jpg",
+    "hasReferenceFace": true,
+    "referenceMetadata": {
+      "boundingBox": {
+        "x": 120,
+        "y": 80,
+        "width": 180,
+        "height": 220
+      },
+      "detectionConfidence": 0.9921,
+      "lastGeneratedAt": "2026-10-02T12:00:00.000Z",
+      "imagePath": "/uploads/image-1712000000000-123456789.jpg"
+    }
+  },
+  "message": "Reference face status retrieved successfully",
+  "success": true
+}
+```
+
+---
+
+### 5.5 Scan Single Gallery Photo
+- **Method:** `POST`
+- **Endpoint:** `/api/face-recognition/scan`
+- **Description:** Ek gallery photo ko logged-in user ke reference face ke sath scan aur compare karta hai. Sabhi detected faces ko analyze karke user match identify karta hai.
+- **Access:** Private (Requires JWT Token)
+
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
+  - `Content-Type: multipart/form-data`
+- **Form-Data:**
+  - `image`: Gallery photo file (JPEG, PNG, WEBP)
+- **Query Parameters (Optional):**
+  - `threshold`: Custom Euclidean distance threshold (e.g. `0.55` or `0.6`)
+
+#### Response (User Found / Matched):
+**200 OK:**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "imageId": "image-1712000045000-987654321.jpg",
+    "matched": true,
+    "facesDetected": 3,
+    "matchedFaces": [
+      {
+        "faceIndex": 0,
+        "confidence": 0.9854,
+        "similarity": 0.74,
+        "distance": 0.312,
+        "boundingBox": {
+          "x": 140,
+          "y": 95,
+          "width": 210,
+          "height": 245
+        }
+      }
+    ],
+    "allDetectedFaces": [
+      {
+        "faceIndex": 0,
+        "detectionConfidence": 0.9854,
+        "distance": 0.312,
+        "cosineSimilarity": 0.9512,
+        "similarity": 0.74,
+        "matched": true,
+        "boundingBox": {
+          "x": 140,
+          "y": 95,
+          "width": 210,
+          "height": 245
+        }
+      },
+      {
+        "faceIndex": 1,
+        "detectionConfidence": 0.924,
+        "distance": 0.895,
+        "cosineSimilarity": 0.599,
+        "similarity": 0.254,
+        "matched": false,
+        "boundingBox": {
+          "x": 480,
+          "y": 110,
+          "width": 190,
+          "height": 230
+        }
+      },
+      {
+        "faceIndex": 2,
+        "detectionConfidence": 0.881,
+        "distance": 0.962,
+        "cosineSimilarity": 0.538,
+        "similarity": 0.198,
+        "matched": false,
+        "boundingBox": {
+          "x": 750,
+          "y": 130,
+          "width": 175,
+          "height": 215
+        }
+      }
+    ],
+    "thresholdUsed": 0.6,
+    "processingTimeMs": 342
+  },
+  "message": "Gallery image scan completed",
+  "success": true
+}
+```
+
+#### Response (No Match Found):
+**200 OK:**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "imageId": "image-1712000045000-987654321.jpg",
+    "matched": false,
+    "facesDetected": 2,
+    "matchedFaces": [],
+    "allDetectedFaces": [
+      {
+        "faceIndex": 0,
+        "detectionConfidence": 0.941,
+        "distance": 0.842,
+        "cosineSimilarity": 0.645,
+        "similarity": 0.298,
+        "matched": false,
+        "boundingBox": {
+          "x": 100,
+          "y": 120,
+          "width": 180,
+          "height": 210
+        }
+      }
+    ],
+    "thresholdUsed": 0.6,
+    "processingTimeMs": 285
+  },
+  "message": "Gallery image scan completed",
+  "success": true
+}
+```
+
+#### Response (No Faces Detected in Image):
+**200 OK:**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "imageId": "image-1712000045000-987654321.jpg",
+    "matched": false,
+    "facesDetected": 0,
+    "matchedFaces": [],
+    "allDetectedFaces": [],
+    "processingTimeMs": 195
+  },
+  "message": "Gallery image scan completed",
+  "success": true
+}
+```

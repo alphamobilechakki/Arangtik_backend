@@ -1,0 +1,32 @@
+/**
+ * Face Recognition Module Constants & Error Codes
+ * Phase 1: Face Detection & Recognition
+ */
+
+module.exports = {
+  // Error codes & messages
+  ERROR_CODES: {
+    PROFILE_IMAGE_NOT_FOUND: 'PROFILE_IMAGE_NOT_FOUND',
+    PROFILE_FACE_NOT_FOUND: 'PROFILE_FACE_NOT_FOUND',
+    PROFILE_MULTIPLE_FACES: 'PROFILE_MULTIPLE_FACES',
+    PROFILE_FACE_LOW_QUALITY: 'PROFILE_FACE_LOW_QUALITY',
+    NO_FACE_DETECTED: 'NO_FACE_DETECTED',
+    INVALID_IMAGE: 'INVALID_IMAGE',
+    IMAGE_TOO_LARGE: 'IMAGE_TOO_LARGE',
+    UNSUPPORTED_IMAGE: 'UNSUPPORTED_IMAGE',
+    FACE_SERVICE_UNAVAILABLE: 'FACE_SERVICE_UNAVAILABLE',
+    FACE_MATCH_FAILED: 'FACE_MATCH_FAILED',
+    REFERENCE_EMBEDDING_MISSING: 'REFERENCE_EMBEDDING_MISSING',
+    INTERNAL_ERROR: 'INTERNAL_ERROR',
+  },
+
+  // Supported image formats
+  SUPPORTED_IMAGE_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+  MAX_IMAGE_SIZE_BYTES: 15 * 1024 * 1024, // 15MB
+
+  // Face Detection & Recognition Parameters
+  FACE_EMBEDDING_DIMENSIONS: 128,
+  DEFAULT_MATCH_THRESHOLD: 0.6, // Euclidean distance threshold (<= 0.6 is a match)
+  DEFAULT_MIN_CONFIDENCE: 0.5,
+  DEFAULT_MIN_FACE_SIZE: 50, // in pixels (width/height)
+};

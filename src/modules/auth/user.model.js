@@ -23,6 +23,26 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'blocked'],
       default: 'active',
     },
+    profileImage: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    referenceFace: {
+      embedding: {
+        type: [Number],
+        select: false, // Hidden by default from queries for privacy and security
+      },
+      boundingBox: {
+        x: Number,
+        y: Number,
+        width: Number,
+        height: Number,
+      },
+      detectionConfidence: Number,
+      lastGeneratedAt: Date,
+      imagePath: String,
+    },
   },
   { timestamps: true }
 );

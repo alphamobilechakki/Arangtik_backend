@@ -43,6 +43,37 @@ class AuthController {
   logout = asyncHandler(async (req, res) => {
     return ApiResponse.success(res, null, 'Logged out successfully');
   });
+
+  /**
+   * @desc    Update user profile details
+   * @route   PUT /api/auth/profile
+   * @access  Private
+   */
+  updateProfile = asyncHandler(async (req, res) => {
+    const { name, profileImage } = req.body;
+    const user = await authService.updateProfile(req.user.id, { name, profileImage });
+    return ApiResponse.success(res, user, 'Profile updated successfully');
+  });
+
+  /**
+   * @desc    Upload user profile image
+   * @route   POST /api/auth/profile-image
+   * @access  Private
+   */
+  uploadProfileImage = asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'No profile image file uploaded',
+      });
+    }
+
+    const imagePath = `/uploads/${file.filename}`;
+    const user = await authService.updateProfileImage(req.user.id, imagePath);
+    return ApiResponse.success(res, user, 'Profile image uploaded successfully');
+  });
 }
 
 module.exports = new AuthController();

@@ -3,6 +3,7 @@ const router = express.Router();
 
 const authRoutes = require('../modules/auth/auth.routes');
 const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
+const faceRecognitionRoutes = require('../modules/faceRecognition/faceRecognition.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -14,5 +15,9 @@ router.use('/auth', authRoutes);
 
 // Wardrobe Store Routes
 router.use('/wardrobe', wardrobeRoutes);
+
+// Face Recognition Routes (Phase 1)
+router.use('/face-recognition', faceRecognitionRoutes);
+router.use('/v1/face-recognition', faceRecognitionRoutes);
 
 module.exports = router;

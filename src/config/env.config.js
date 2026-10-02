@@ -25,4 +25,11 @@ module.exports = {
   // AI Configuration
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+
+  // Face Recognition Configuration
+  FACE_MATCH_THRESHOLD: parseFloat(process.env.FACE_MATCH_THRESHOLD) || 0.50, // Euclidean distance threshold (<= 0.50 is optimal high-accuracy match)
+  FACE_MIN_CONFIDENCE: parseFloat(process.env.FACE_MIN_CONFIDENCE) || 0.55,
+  FACE_MIN_SIZE: parseInt(process.env.FACE_MIN_SIZE, 10) || 45, // Minimum face bounding box width/height in pixels
+  FACE_AI_SERVICE_URL: process.env.FACE_AI_SERVICE_URL || '', // Optional external Python microservice
+  FACE_AI_TIMEOUT_MS: parseInt(process.env.FACE_AI_TIMEOUT_MS, 10) || 15000,
 };

@@ -135,6 +135,51 @@ class AuthService {
     }
     return user;
   }
+
+  /**
+   * Update user profile information (name, profileImage)
+   * Invalidates referenceFace embedding if profile image changes
+   */
+  async updateProfile(userId, updateData = {}) {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (updateData.name !== undefined) {
+      user.name = String(updateData.name).trim();
+    }
+
+    if (updateData.profileImage !== undefined && updateData.profileImage !== user.profileImage) {
+      user.profileImage = updateData.profileImage;
+      // Invalidate existing reference face embedding so it is refreshed
+      user.referenceFace = undefined;
+    }
+
+    await user.save();
+    return user;
+  }
+
+  /**
+   * Upload and update user profile image
+   */
+  async updateProfileImage(userId, imagePath) {
+    if (!imagePath) {
+      throw new ApiError(400, 'Profile image is required');
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    user.profileImage = imagePath;
+    // Invalidate old reference face embedding
+    user.referenceFace = undefined;
+
+    await user.save();
+    return user;
+  }
 }
 
 module.exports = new AuthService();
