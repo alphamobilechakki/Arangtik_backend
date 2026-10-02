@@ -285,8 +285,6 @@ const deleteItem = async (userId, itemId, permanent = false) => {
   }
 };
 
-const WearLog = require('./wearLog.model');
-
 /**
  * Log a worn dress / outfit into Wear History and increment wear statistics
  */

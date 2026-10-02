@@ -172,6 +172,18 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * @desc    Get all items currently lent out
+ * @route   GET /api/wardrobe/get-lent-items
+ * @access  Private
+ */
+const getLentItems = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await wardrobeService.getLentItems(userId);
+
+  return ApiResponse.success(res, result, 'Lent items fetched successfully');
+});
+
 module.exports = {
   analyzePhoto,
   addItem,
