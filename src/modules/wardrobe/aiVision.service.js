@@ -163,6 +163,11 @@ You are an expert Fashion Vision AI specialized in Digital Wardrobe extraction.
 Analyze the uploaded photo (which may be a person wearing clothes, or a standalone clothing piece).
 Identify all clothing items, ethnic wear, footwear, and accessories.
 
+CRITICAL NEGATIVE FILTER (STRICT):
+- NEVER detect or crop human body parts, bare skin, faces, chins, beards, necks, hands, hair, or heads!
+- ONLY detect physical wearable fabric clothing (Shirts, T-shirts, Jeans, Blazers, Kurtas, Trousers, Dresses, Jackets, Footwear, Bags).
+- For UPPER_WEAR, top coordinate (ymin) MUST start at the base of the neck / collar seam, NEVER at the chin, jaw, or lips!
+
 CRITICAL BOUNDING BOX & DETECTION REQUIREMENTS:
 1. "box2d": Normalized integer coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000.
 2. FULL GARMENT BOUNDARIES:
@@ -203,8 +208,33 @@ Return ONLY raw JSON without markdown backticks or commentary.
     const responseText = result.response.text().trim();
     const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleanJson);
+    const rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
 
-    return Array.isArray(parsed) ? parsed : parsed.items || [];
+    // STRICT NON-GARMENT / FACE POST-FILTER
+    const nonGarmentTerms = ['face', 'chin', 'beard', 'neck', 'skin', 'head', 'hand', 'hair', 'lips', 'person', 'body', 'jaw'];
+    return rawList.filter((item) => {
+      const name = (item.name || '').toLowerCase();
+      const sub = (item.subCategory || '').toLowerCase();
+      const cat = (item.category || '').toLowerCase();
+
+      // Filter out any body parts
+      if (nonGarmentTerms.some((t) => name.includes(t) || sub.includes(t))) {
+        return false;
+      }
+      if (cat === 'other' && !item.attributes?.primaryColor) {
+        return false;
+      }
+
+      // Check minimum dimensions (skip tiny false crops)
+      if (item.box2d && item.box2d.length === 4) {
+        const [ymin, xmin, ymax, xmax] = item.box2d;
+        const height = ymax - ymin;
+        const width = xmax - xmin;
+        if (height < 70 || width < 70) return false;
+      }
+
+      return true;
+    });
   } catch (error) {
     console.error('Gemini Vision AI error, falling back to local analysis:', error.message);
     const metadata = await sharp(imagePath).metadata();
@@ -307,14 +337,14 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
     candidates.sort((a, b) => b.similarityScore - a.similarityScore);
 
     // Decision Thresholds:
-    // >= 0.90 -> EXACT_MATCH (Already in Wardrobe)
-    // 0.65 - 0.89 -> AMBIGUOUS_MATCH (Ask user confirmation)
-    // < 0.65 -> NEW_ITEM
+    // >= 0.72 -> EXACT_MATCH (Same dress! Increment wear count)
+    // 0.52 - 0.71 -> AMBIGUOUS_MATCH (Ask user confirmation)
+    // < 0.52 -> NEW_ITEM
     let matchStatus = 'NEW_ITEM';
     let matchMessage = 'New dress detected! Ready to add to wardrobe.';
     let matchedItem = null;
 
-    if (highestScore >= 0.9) {
+    if (highestScore >= 0.72) {
       matchStatus = 'EXACT_MATCH';
       matchMessage = `This dress is already registered in your wardrobe as "${bestMatch.name}".`;
       matchedItem = {
@@ -328,7 +358,7 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
         wearCount: bestMatch.usageStats?.wearCount || 0,
         similarityScore: Math.round(highestScore * 100) / 100,
       };
-    } else if (highestScore >= 0.65) {
+    } else if (highestScore >= 0.52) {
       matchStatus = 'AMBIGUOUS_MATCH';
       matchMessage = `We found a similar item in your wardrobe: "${bestMatch.name}". Is this the same item or a new one?`;
     }
