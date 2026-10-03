@@ -97,6 +97,8 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = req.files || (req.file ? [req.file] : []);
   const options = {
+    wardrobeId: req.body.wardrobeId || null,
+    collectionId: req.body.collectionId || null,
     autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
   };
@@ -119,6 +121,8 @@ const bulkAddPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = req.files || (req.file ? [req.file] : []);
   const options = {
+    wardrobeId: req.body.wardrobeId || null,
+    collectionId: req.body.collectionId || null,
     storagePlace: req.body.storagePlace || 'Main Closet',
   };
 
@@ -140,6 +144,8 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const file = req.file || (req.files?.photo?.[0] || req.files?.image?.[0]);
   const options = {
+    wardrobeId: req.body.wardrobeId || null,
+    collectionId: req.body.collectionId || null,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
   };
 
