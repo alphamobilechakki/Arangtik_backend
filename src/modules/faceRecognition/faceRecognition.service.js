@@ -118,45 +118,85 @@ class FaceRecognitionService {
   }
 
   /**
-   * Scans an uploaded gallery image against the logged-in user's reference face embedding.
+   * Scans an uploaded gallery image against the target reference face embedding
+   * (Uses wardrobe-specific face photo if available, otherwise falls back to user profile image).
    * @param {string} userId Authenticated user's ID
    * @param {Buffer|string} galleryImage File buffer or image path
    * @param {Object} fileMeta Metadata (filename, size, mimetype)
    * @param {number} customThreshold Optional custom threshold override
+   * @param {string} wardrobeId Optional specific wardrobe ID to load owner face from
    */
-  async scanGalleryImage(userId, galleryImage, fileMeta = {}, customThreshold = null) {
+  async scanGalleryImage(userId, galleryImage, fileMeta = {}, customThreshold = null, wardrobeId = null) {
     const startTime = Date.now();
 
-    // Query user and explicitly select hidden referenceFace.embedding
-    const user = await User.findById(userId).select('+referenceFace.embedding');
-    if (!user) {
-      throw new ApiError(404, 'User not found');
+    let referenceEmbedding = null;
+    let targetPersonName = 'User';
+
+    // 1. Check if a specific Wardrobe has its own reference face image / embedding
+    if (wardrobeId) {
+      try {
+        const Wardrobe = require('../wardrobe/wardrobe.model');
+        const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId }).select('+referenceFace.embedding');
+        if (wardrobe) {
+          targetPersonName = wardrobe.ownerName || wardrobe.name;
+          const wardrobeFaceImg = wardrobe.ownerFaceImage || wardrobe.coverImage;
+          if (wardrobe.referenceFace?.embedding && wardrobe.referenceFace.embedding.length === 128) {
+            referenceEmbedding = wardrobe.referenceFace.embedding;
+            console.log(`[FaceRecognition] Using wardrobe-specific face for "${wardrobe.name}" (${targetPersonName})`);
+          } else if (wardrobeFaceImg) {
+            const resolvedPath = this.resolveImagePath(wardrobeFaceImg);
+            if (fs.existsSync(resolvedPath)) {
+              console.log(`[FaceRecognition] Generating face embedding for wardrobe "${wardrobe.name}" from ${wardrobeFaceImg}...`);
+              const face = await faceAIService.extractReferenceFace(resolvedPath);
+              wardrobe.referenceFace = {
+                embedding: face.embedding,
+                boundingBox: face.boundingBox,
+                detectionConfidence: face.confidence,
+                lastGeneratedAt: new Date(),
+                imagePath: wardrobeFaceImg,
+              };
+              await wardrobe.save();
+              referenceEmbedding = face.embedding;
+            }
+          }
+        }
+      } catch (wErr) {
+        console.warn(`[FaceRecognition] Could not load wardrobe-specific face (${wErr.message}), falling back to user profile`);
+      }
     }
 
-    let referenceEmbedding = user.referenceFace?.embedding;
-
-    // If reference embedding doesn't exist yet, try to auto-generate if profileImage exists
+    // 2. Fallback to main User profile if no wardrobe-specific embedding
     if (!referenceEmbedding || referenceEmbedding.length !== 128) {
-      if (!user.profileImage) {
-        throw new ApiError(400, 'Profile image is required for face recognition. Please upload a profile photo first.', [
-          { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: 'Reference face embedding not found and no profile image is available' },
-        ]);
+      const user = await User.findById(userId).select('+referenceFace.embedding');
+      if (!user) {
+        throw new ApiError(404, 'User not found');
       }
 
-      console.log(`[FaceRecognition] Reference embedding missing for user ${userId}. Auto-generating from profileImage...`);
-      const resolvedProfilePath = this.resolveImagePath(user.profileImage);
-      const face = await faceAIService.extractReferenceFace(resolvedProfilePath);
+      referenceEmbedding = user.referenceFace?.embedding;
 
-      user.referenceFace = {
-        embedding: face.embedding,
-        boundingBox: face.boundingBox,
-        detectionConfidence: face.confidence,
-        lastGeneratedAt: new Date(),
-        imagePath: user.profileImage,
-      };
+      // If reference embedding doesn't exist yet, try to auto-generate if profileImage exists
+      if (!referenceEmbedding || referenceEmbedding.length !== 128) {
+        if (!user.profileImage) {
+          throw new ApiError(400, 'Profile image or Wardrobe face photo is required for face recognition. Please upload a photo first.', [
+            { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: 'Reference face embedding not found and no reference image is available' },
+          ]);
+        }
 
-      await user.save();
-      referenceEmbedding = face.embedding;
+        console.log(`[FaceRecognition] Reference embedding missing for user ${userId}. Auto-generating from profileImage...`);
+        const resolvedProfilePath = this.resolveImagePath(user.profileImage);
+        const face = await faceAIService.extractReferenceFace(resolvedProfilePath);
+
+        user.referenceFace = {
+          embedding: face.embedding,
+          boundingBox: face.boundingBox,
+          detectionConfidence: face.confidence,
+          lastGeneratedAt: new Date(),
+          imagePath: user.profileImage,
+        };
+
+        await user.save();
+        referenceEmbedding = face.embedding;
+      }
     }
 
     // Detect all faces in the gallery image

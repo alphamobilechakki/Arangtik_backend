@@ -37,6 +37,23 @@ const WardrobeSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    ownerFaceImage: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    referenceFace: {
+      embedding: [{ type: Number, select: false }],
+      boundingBox: {
+        x: Number,
+        y: Number,
+        width: Number,
+        height: Number,
+      },
+      detectionConfidence: Number,
+      lastGeneratedAt: Date,
+      imagePath: String,
+    },
     isDefault: {
       type: Boolean,
       default: false,

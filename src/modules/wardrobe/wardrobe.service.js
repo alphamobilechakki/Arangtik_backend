@@ -501,7 +501,13 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
     try {
       // 1. Face Recognition: Is the user in this photo?
-      const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, fileMeta, threshold);
+      const scanResult = await faceRecognitionService.scanGalleryImage(
+        userId,
+        file.path,
+        fileMeta,
+        threshold,
+        options.wardrobeId || null
+      );
 
       if (!scanResult.matched) {
         results.unmatchedImagesCount++;
@@ -840,12 +846,13 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     userId,
     file.path,
     fileMeta,
-    options.threshold || null
+    options.threshold || null,
+    options.wardrobeId || null
   );
 
   // If user is not present in the photo
   if (!scanResult.matched || !scanResult.matchedFaces || scanResult.matchedFaces.length === 0) {
-    console.log(`[GalleryWardrobe] User ${userId} NOT detected in ${file.filename}. Skipped clothing extraction.`);
+    console.log(`[GalleryWardrobe] Target person for wardrobe ${options.wardrobeId || 'default'} NOT detected in ${file.filename}. Skipped clothing extraction.`);
     return {
       matched: false,
       reason: 'USER_NOT_FOUND',
@@ -858,7 +865,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   // Authenticated user IS present!
   const primaryMatchedFace = scanResult.matchedFaces[0];
   const userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
-  console.log(`[GalleryWardrobe] User ${userId} verified (Faces detected: ${scanResult.facesDetected}, confidence: ${primaryMatchedFace.confidence || primaryMatchedFace.similarity})`);
+  console.log(`[GalleryWardrobe] Target person verified (Faces detected: ${scanResult.facesDetected}, confidence: ${primaryMatchedFace.confidence || primaryMatchedFace.similarity})`);
 
   // 2. Gemini Clothing Detection (targeted specifically to authenticated user face coordinates)
   const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
@@ -992,10 +999,40 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
 /**
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
-const createWardrobe = async (userId, data) => {
-  const { name, description, type, ownerName, coverImage, isDefault } = data;
+const createWardrobe = async (userId, data, file = null) => {
+  const { name, description, type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
+  }
+
+  let coverImage = data.coverImage || '';
+  let ownerFaceImage = data.ownerFaceImage || '';
+
+  if (file) {
+    coverImage = `/uploads/${file.filename}`;
+    ownerFaceImage = `/uploads/${file.filename}`;
+  }
+
+  let referenceFace = undefined;
+  if (ownerFaceImage || coverImage) {
+    try {
+      const faceAIService = require('../../services/faceAI/faceAI.service');
+      const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
+      const resolvedPath = faceRecognitionService.resolveImagePath(ownerFaceImage || coverImage);
+      if (fs.existsSync(resolvedPath)) {
+        const face = await faceAIService.extractReferenceFace(resolvedPath);
+        referenceFace = {
+          embedding: face.embedding,
+          boundingBox: face.boundingBox,
+          detectionConfidence: face.confidence,
+          lastGeneratedAt: new Date(),
+          imagePath: ownerFaceImage || coverImage,
+        };
+        console.log(`[createWardrobe] Reference face generated successfully for wardrobe "${name}"`);
+      }
+    } catch (fErr) {
+      console.warn(`[createWardrobe] Could not extract face from wardrobe image (${fErr.message})`);
+    }
   }
 
   if (isDefault) {
@@ -1009,6 +1046,8 @@ const createWardrobe = async (userId, data) => {
     type: type || 'PERSONAL',
     ownerName: ownerName || '',
     coverImage: coverImage || '',
+    ownerFaceImage: ownerFaceImage || '',
+    referenceFace,
     isDefault: !!isDefault,
     isActive: true,
   });

@@ -10,10 +10,34 @@ router.use(protect);
 /* ==========================================================================
    1. WARDROBE / CLOSET APIs (E.g., "My Wardrobe", "Mummy Wardrobe")
    ========================================================================== */
-// Create Wardrobe
-router.post('/create-wardrobe', wardrobeController.createWardrobe);
-router.post('/create-closet', wardrobeController.createWardrobe);
-router.post('/closets', wardrobeController.createWardrobe);
+// Create Wardrobe (supports optional coverImage / owner face photo upload)
+router.post(
+  '/create-wardrobe',
+  upload.fields([
+    { name: 'coverImage', maxCount: 1 },
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  wardrobeController.createWardrobe
+);
+router.post(
+  '/create-closet',
+  upload.fields([
+    { name: 'coverImage', maxCount: 1 },
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  wardrobeController.createWardrobe
+);
+router.post(
+  '/closets',
+  upload.fields([
+    { name: 'coverImage', maxCount: 1 },
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  wardrobeController.createWardrobe
+);
 
 // Get All Wardrobes
 router.get('/get-wardrobes', wardrobeController.getWardrobes);

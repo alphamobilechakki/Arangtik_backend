@@ -165,7 +165,8 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
  */
 const createWardrobe = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await wardrobeService.createWardrobe(userId, req.body);
+  const file = req.file || (req.files?.coverImage?.[0] || req.files?.photo?.[0] || req.files?.image?.[0]);
+  const result = await wardrobeService.createWardrobe(userId, req.body, file);
 
   return ApiResponse.created(res, result, 'Wardrobe closet created successfully');
 });
