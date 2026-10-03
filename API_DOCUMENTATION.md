@@ -259,7 +259,91 @@ Frontend / Client application ko in steps me APIs ko call karna chahiye:
 
 ## 3. Wardrobe Store Module
 
-### 3.1 Analyze Photo (AI Clothing Recognition, Auto-Crop & Duplicate Matcher)
+### 3.1 Scan Gallery Photo (User Face Identification & Garment Extraction)
+- **Method:** `POST`
+- **Endpoint:** `/api/wardrobe/scan-gallery-photo`
+- **Description:** Scans a user's gallery photo, determines if the authenticated user (`req.user.id`) is present using their reference face embedding, and if matched, extracts only the clothing worn by that user with background removal segmentation (transparent WebP) and duplicate similarity matching. If user is not found, extraction is cleanly skipped.
+- **Access:** Private (Requires JWT Token)
+
+#### Request:
+- **Headers:**
+  - `Authorization: Bearer <JWT_TOKEN>`
+  - `Content-Type: multipart/form-data`
+- **Form Data (Multipart):**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `photo` / `image` | `file` | Yes | Uploaded gallery photo file (JPEG, PNG, WebP) |
+| `threshold` | `number` | No | Optional custom Euclidean distance threshold (Default: `0.50`) |
+
+#### Response:
+**200 OK (User Matched & Clothing Extracted):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "matched": true,
+    "matchedFace": {
+      "confidence": 0.9999,
+      "similarity": 1.0,
+      "distance": 0,
+      "boundingBox": {
+        "x": 420,
+        "y": 180,
+        "width": 160,
+        "height": 160
+      }
+    },
+    "facesDetected": 1,
+    "originalImageUrl": "/uploads/photo-1790938133930.png",
+    "detectedItemsCount": 1,
+    "items": [
+      {
+        "tempDetectionId": "det_1",
+        "name": "Navy Blue Slim Fit Linen Shirt",
+        "category": "UPPER_WEAR",
+        "subCategory": "Shirt",
+        "croppedImageUrl": "/uploads/crops/seg-0-1790943556926.webp",
+        "croppedFilename": "seg-0-1790943556926.webp",
+        "attributes": {
+          "primaryColor": "Navy Blue",
+          "pattern": "SOLID",
+          "fabric": "LINEN",
+          "fit": "SLIM_FIT",
+          "occasions": ["CASUAL", "FORMAL"]
+        },
+        "matchType": "NEW_ITEM",
+        "matchedItem": null,
+        "matchResult": {
+          "status": "NEW_ITEM",
+          "confidenceScore": 0,
+          "message": "New dress detected! Ready to add to wardrobe.",
+          "candidateMatches": []
+        }
+      }
+    ]
+  },
+  "message": "User matched successfully! Extracted 1 clothing items.",
+  "success": true
+}
+```
+
+**200 OK (User Not Found in Photo):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "matched": false,
+    "reason": "USER_NOT_FOUND",
+    "facesDetected": 1,
+    "originalImageUrl": "/uploads/photo-1790941677639.jpg",
+    "items": []
+  },
+  "message": "User face not detected in this photo. Skipped clothing extraction.",
+  "success": true
+}
+```
+
+### 3.2 Analyze Photo (AI Clothing Recognition, Auto-Crop & Duplicate Matcher)
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/analyze-photo`
 - **Description:** Gallery photo ya camera image upload karke usme pehni hui dress/clothes detect karta hai, unhe automatically crop karke visual image banata hai, aur user ke existing wardrobe gallery ke sath duplicate/similarity match check karta hai.

@@ -3,6 +3,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GEMINI_API_KEY } = require('../../config/env.config');
+const segmentationService = require('../../services/segmentation/segmentation.service');
 
 // Ensure crops directory exists
 const cropsDir = path.join(__dirname, '../../../uploads/crops');
@@ -192,15 +193,17 @@ const getFallbackAnalysis = (imageMeta) => {
 };
 
 /**
- * Supported Gemini Vision Models in priority order (with auto-fallback on quota/spikes)
+ * Supported Gemini Vision Models in priority order (with auto-fallback on quota/spikes).
+ * Deprecated endpoints (gemini-1.5-flash, gemini-2.0-flash, gemini-3.5-flash) removed to eliminate sequential 404 latency.
  */
+const configuredModel = process.env.GEMINI_VISION_MODEL;
 const VISION_MODELS = [
-  'gemini-3.5-flash',
+  ...(configuredModel ? [configuredModel] : []),
   'gemini-3.6-flash',
-  'gemini-3.7-flash',
   'gemini-3.1-flash-lite',
+  'gemini-3.7-flash',
   'gemini-3.8-flash',
-];
+].filter((model, idx, arr) => arr.indexOf(model) === idx);
 
 /**
  * Call Gemini Vision AI to detect garments and extract attributes specifically for the matched user
@@ -303,6 +306,7 @@ Return ONLY raw JSON without markdown backticks or commentary.
 
   // Multi-Model Cascade: Try working models in priority order
   for (const modelName of VISION_MODELS) {
+    const modelStartTime = Date.now();
     try {
       const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent([
@@ -319,11 +323,14 @@ Return ONLY raw JSON without markdown backticks or commentary.
       const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
       rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
-      console.log(`[aiVision] Successfully analyzed image with model: ${modelName} (${rawList.length} items found)`);
+      const duration = Date.now() - modelStartTime;
+      console.log(`[aiVision] Successfully analyzed image with model: ${modelName} (${rawList.length} items found in ${duration}ms)`);
       lastError = null;
       break;
     } catch (err) {
-      console.warn(`[aiVision] Model ${modelName} attempt failed (${err.message.slice(0, 100)}), cascading to next model...`);
+      const duration = Date.now() - modelStartTime;
+      const nextModel = VISION_MODELS[VISION_MODELS.indexOf(modelName) + 1] || 'none';
+      console.warn(`[aiVision] Model ${modelName} attempt failed after ${duration}ms (${err.message.slice(0, 100)}), cascading to fallback: ${nextModel}...`);
       lastError = err;
     }
   }
@@ -360,7 +367,7 @@ Return ONLY raw JSON without markdown backticks or commentary.
         const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
           const faceCenterX = (fXmin + fXmax) / 2;
           const garmentCenterX = (xmin + xmax) / 2;
-          const maxHorizontalOffset = Math.max(250, (fXmax - fXmin) * 2.5);
+          const maxHorizontalOffset = Math.max(350, (fXmax - fXmin) * 3.0);
           return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
         });
         if (!isAlignedWithAnyUser) {
@@ -375,18 +382,26 @@ Return ONLY raw JSON without markdown backticks or commentary.
 };
 
 /**
- * Crop detected clothing items using Sharp with precision bounds
+ * Crop detected clothing items using Sharp with precision bounds and controlled concurrency (C=2).
+ * Preserves strict item ordering and per-garment failure isolation.
  */
 const cropDetectedItems = async (originalImagePath, detectedItems) => {
-  const image = sharp(originalImagePath);
-  const metadata = await image.metadata();
+  if (!detectedItems || detectedItems.length === 0) {
+    return [];
+  }
+
+  const metadata = await sharp(originalImagePath).metadata();
   const { width: imgWidth, height: imgHeight } = metadata;
 
-  const results = [];
-  const isMultiItem = (detectedItems || []).length > 1;
+  const isMultiItem = detectedItems.length > 1;
+  const rawConcurrency = parseInt(process.env.SEGMENTATION_CONCURRENCY, 10) || 2;
+  const concurrencyLimit = Math.max(1, Math.min(2, rawConcurrency));
 
-  for (let i = 0; i < detectedItems.length; i++) {
-    const item = detectedItems[i];
+  const results = new Array(detectedItems.length);
+  let currentIndex = 0;
+  const startTime = Date.now();
+
+  const processGarment = async (item, index) => {
     let cropFilename = null;
     let cropUrl = null;
 
@@ -415,25 +430,56 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
       const height = bottom - top;
 
       if (width > 20 && height > 20) {
-        const uniqueCropName = `crop-${Date.now()}-${i}-${Math.round(Math.random() * 1e4)}.webp`;
+        const uniqueCropName = `crop-${Date.now()}-${index}-${Math.round(Math.random() * 1e4)}.webp`;
         const cropFilePath = path.join(cropsDir, uniqueCropName);
 
-        await sharp(originalImagePath)
-          .extract({ left, top, width, height })
-          .webp({ quality: 90 })
-          .toFile(cropFilePath);
+        try {
+          await sharp(originalImagePath)
+            .extract({ left, top, width, height })
+            .webp({ quality: 90 })
+            .toFile(cropFilePath);
 
-        cropFilename = uniqueCropName;
-        cropUrl = `/uploads/crops/${uniqueCropName}`;
+          cropFilename = uniqueCropName;
+          cropUrl = `/uploads/crops/${uniqueCropName}`;
+
+          // Perform Clothing Segmentation / Background Removal on the cropped region
+          try {
+            const segResult = await segmentationService.segmentClothing(cropFilePath, {
+              filenamePrefix: `seg-${index}`,
+            });
+            if (segResult && segResult.outputUrl) {
+              cropFilename = segResult.filename;
+              cropUrl = segResult.outputUrl;
+            }
+          } catch (segErr) {
+            console.warn(`[aiVision] Segmentation fallback to rectangular crop for item ${index}:`, segErr.message);
+          }
+        } catch (cropErr) {
+          console.warn(`[aiVision] Sharp crop failed for item ${index}:`, cropErr.message);
+        }
       }
     }
 
-    results.push({
+    return {
       ...item,
       croppedImageUrl: cropUrl,
       croppedFilename: cropFilename,
-    });
-  }
+    };
+  };
+
+  const worker = async () => {
+    while (currentIndex < detectedItems.length) {
+      const idx = currentIndex++;
+      results[idx] = await processGarment(detectedItems[idx], idx);
+    }
+  };
+
+  const workerCount = Math.min(concurrencyLimit, detectedItems.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+  await Promise.all(workers);
+
+  const totalDuration = Date.now() - startTime;
+  console.log(`[aiVision] Segmented & cropped ${detectedItems.length} garments with concurrency=${workerCount} in ${totalDuration}ms`);
 
   return results;
 };

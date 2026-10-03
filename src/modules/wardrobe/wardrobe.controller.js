@@ -205,6 +205,39 @@ const bulkAddPhotos = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * @desc    Scan a single user gallery photo for authenticated user & extract clothing
+ * @route   POST /api/wardrobe/scan-gallery-photo
+ * @access  Private
+ */
+const scanGalleryPhoto = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const file = req.file || (req.files?.photo?.[0] || req.files?.image?.[0]);
+  const options = {
+    threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
+  };
+
+  const result = await wardrobeService.scanGalleryPhoto(userId, file, options);
+
+  const message = result.matched
+    ? `User matched successfully! Extracted ${result.detectedItemsCount} clothing items.`
+    : 'User face not detected in this photo. Skipped clothing extraction.';
+
+  return ApiResponse.success(res, result, message);
+});
+
+/**
+ * @desc    Submit user feedback/correction on AI detection or duplicate match
+ * @route   POST /api/wardrobe/feedback
+ * @access  Private
+ */
+const submitFeedback = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await wardrobeService.submitFeedback(userId, req.body);
+
+  return ApiResponse.created(res, result, 'Feedback recorded successfully');
+});
+
 module.exports = {
   analyzePhoto,
   addItem,
@@ -221,4 +254,6 @@ module.exports = {
   getLentItems,
   ingestGalleryPhotos,
   bulkAddPhotos,
+  scanGalleryPhoto,
+  submitFeedback,
 };
