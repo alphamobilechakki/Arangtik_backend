@@ -570,4 +570,5 @@ module.exports = {
   analyzeImageWithGemini,
   cropDetectedItems,
   matchAgainstWardrobe,
+  calculateItemSimilarity,
 };

@@ -89,66 +89,6 @@ const deleteItem = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Log a worn dress / outfit into wear history
- * @route   POST /api/wardrobe/log-worn-dress
- * @access  Private
- */
-const logWornDress = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.logWornDress(userId, req.body);
-
-  return ApiResponse.created(res, result, 'Worn outfit logged successfully and wear count updated');
-});
-
-/**
- * @desc    Get user wear history logs
- * @route   GET /api/wardrobe/get-wear-history
- * @access  Private
- */
-const getWearHistory = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.getWearHistory(userId, req.query);
-
-  return ApiResponse.success(res, result, 'Wear history fetched successfully');
-});
-
-/**
- * @desc    Get AI smart stylist outfit suggestions for an occasion
- * @route   POST /api/wardrobe/suggest-outfit
- * @access  Private
- */
-const suggestOutfit = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.suggestOutfit(userId, req.body);
-
-  return ApiResponse.success(res, result, 'Outfit suggestions generated successfully');
-});
-
-/**
- * @desc    Lend an item to a friend/relative
- * @route   POST /api/wardrobe/lend-item
- * @access  Private
- */
-const lendItem = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.lendItem(userId, req.body);
-
-  return ApiResponse.success(res, result, `Item lent out to ${req.body.assignedTo} successfully`);
-});
-
-/**
- * @desc    Return a lent item back to wardrobe
- * @route   PATCH /api/wardrobe/return-lent-item/:id
- * @access  Private
- */
-const returnLentItem = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.returnLentItem(userId, req.params.id);
-
-  return ApiResponse.success(res, result, 'Lent item returned and status set to AVAILABLE');
-});
-
-/**
  * @desc    Ingest clothes from gallery photos (Face Match -> AI Garment Extract -> Digital Wardrobe Ingest)
  * @route   POST /api/wardrobe/ingest-gallery
  * @access  Private
@@ -158,9 +98,7 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   const files = req.files || (req.file ? [req.file] : []);
   const options = {
     autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
-    autoLogWear: req.body.autoLogWear !== 'false' && req.body.autoLogWear !== false,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
-    occasion: req.body.occasion || 'CASUAL',
   };
 
   const result = await wardrobeService.ingestGalleryPhotos(userId, files, options);
@@ -170,18 +108,6 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
     result,
     `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
   );
-});
-
-/**
- * @desc    Get all items currently lent out
- * @route   GET /api/wardrobe/get-lent-items
- * @access  Private
- */
-const getLentItems = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.getLentItems(userId);
-
-  return ApiResponse.success(res, result, 'Lent items fetched successfully');
 });
 
 /**
@@ -227,33 +153,66 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Submit user feedback/correction on AI detection or duplicate match
- * @route   POST /api/wardrobe/feedback
+ * @desc    Create a new Wardrobe (Closet container)
+ * @route   POST /api/wardrobe/create-wardrobe OR /api/wardrobe/closets
  * @access  Private
  */
-const submitFeedback = asyncHandler(async (req, res) => {
+const createWardrobe = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await wardrobeService.submitFeedback(userId, req.body);
+  const result = await wardrobeService.createWardrobe(userId, req.body);
 
-  return ApiResponse.created(res, result, 'Feedback recorded successfully');
+  return ApiResponse.created(res, result, 'Wardrobe closet created successfully');
+});
+
+/**
+ * @desc    Get all active Wardrobes for user
+ * @route   GET /api/wardrobe/get-wardrobes OR /api/wardrobe/closets
+ * @access  Private
+ */
+const getWardrobes = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await wardrobeService.getWardrobes(userId);
+
+  return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
+});
+
+/**
+ * @desc    Create a new Collection inside a Wardrobe
+ * @route   POST /api/wardrobe/create-collection OR /api/wardrobe/collections
+ * @access  Private
+ */
+const createCollection = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await wardrobeService.createCollection(userId, req.body);
+
+  return ApiResponse.created(res, result, 'Collection created successfully');
+});
+
+/**
+ * @desc    Get all Collections for user
+ * @route   GET /api/wardrobe/get-collections OR /api/wardrobe/collections
+ * @access  Private
+ */
+const getCollections = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await wardrobeService.getCollections(userId, req.query);
+
+  return ApiResponse.success(res, result, 'Collections fetched successfully');
 });
 
 module.exports = {
-  analyzePhoto,
+  createWardrobe,
+  getWardrobes,
+  createCollection,
+  getCollections,
   addItem,
   getAllItems,
   getItemDetails,
   updateItem,
   updateItemStatus,
   deleteItem,
-  logWornDress,
-  getWearHistory,
-  suggestOutfit,
-  lendItem,
-  returnLentItem,
-  getLentItems,
-  ingestGalleryPhotos,
-  bulkAddPhotos,
+  analyzePhoto,
   scanGalleryPhoto,
-  submitFeedback,
+  bulkAddPhotos,
+  ingestGalleryPhotos,
 };

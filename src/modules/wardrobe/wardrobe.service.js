@@ -1,7 +1,25 @@
-const WardrobeItem = require('./wardrobe.model');
-const WearLog = require('./wearLog.model');
+const fs = require('fs');
+const crypto = require('crypto');
+const Wardrobe = require('./wardrobe.model');
+const Collection = require('./collection.model');
+const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const aiVisionService = require('./aiVision.service');
+
+/**
+ * Deterministic SHA-256 canonical hash of original source image
+ */
+const calculateSourceImageHash = (filePathOrBuffer) => {
+  if (!filePathOrBuffer) return null;
+  try {
+    const buffer = Buffer.isBuffer(filePathOrBuffer)
+      ? filePathOrBuffer
+      : fs.readFileSync(filePathOrBuffer);
+    return crypto.createHash('sha256').update(buffer).digest('hex');
+  } catch (e) {
+    return null;
+  }
+};
 
 /**
  * Analyze an uploaded photo from gallery or camera to detect garments, crop them, and match with wardrobe
@@ -12,6 +30,44 @@ const analyzePhoto = async (userId, file) => {
   }
 
   const originalImageUrl = `/uploads/${file.filename}`;
+  const sourceImageHash = calculateSourceImageHash(file.path);
+
+  // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+  if (sourceImageHash) {
+    const existingExactItems = await WardrobeItem.find({
+      userId,
+      storeType: 'WARDROBE',
+      sourceImageHash,
+    }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+    if (existingExactItems.length > 0) {
+      console.log(`[WardrobeAnalyze] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
+      return {
+        originalImageUrl,
+        sourceImageHash,
+        isExactDuplicateImage: true,
+        detectedItemsCount: existingExactItems.length,
+        analysis: existingExactItems.map((ex) => ({
+          tempDetectionId: `det_exact_${ex._id}`,
+          name: ex.name,
+          category: ex.category,
+          subCategory: ex.subCategory,
+          croppedImageUrl: ex.images?.[0]?.url || originalImageUrl,
+          attributes: ex.attributes ? (typeof ex.attributes.toJSON === 'function' ? ex.attributes.toJSON() : ex.attributes) : {},
+          matchType: 'EXISTING_ITEM',
+          matchedItem: ex,
+          matchResult: {
+            status: 'EXACT_MATCH',
+            matchType: 'IMAGE_HASH',
+            confidenceScore: 1.0,
+            message: `Exact duplicate photo detected. Reusing existing wardrobe item "${ex.name}".`,
+            existingItem: ex,
+          },
+        })),
+      };
+    }
+  }
+
   let userFaceBoxes = [];
   try {
     const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
@@ -37,6 +93,7 @@ const analyzePhoto = async (userId, file) => {
 
   return {
     originalImageUrl,
+    sourceImageHash,
     detectedItemsCount: matchedDetections.length,
     analysis: matchedDetections,
   };
@@ -47,12 +104,37 @@ const analyzePhoto = async (userId, file) => {
  */
 const addItem = async (userId, itemData) => {
   const {
+    wardrobeId = null,
+    collectionId = null,
     name,
     storeType = 'WARDROBE',
     category,
     subCategory,
+    type,
+    color,
+    pattern,
+    fabric,
+    texture,
+    silhouette,
+    fit,
+    neckline,
+    sleeveStyle,
+    sleeveLength,
+    length,
+    occasion,
+    season,
+    style,
+    gender,
+    brand,
+    size,
+    isFavorite,
+    wearCount,
+    lastWornAt,
+    aiAnalysis,
     sourceType = 'MANUAL_UPLOAD',
     sourcePhotoUrl,
+    sourceImageHash,
+    sourceImageIndex = 0,
     images = [],
     attributes = {},
     currentStatus = 'AVAILABLE',
@@ -77,12 +159,37 @@ const addItem = async (userId, itemData) => {
 
   const newItem = await WardrobeItem.create({
     userId,
+    wardrobeId: wardrobeId || null,
+    collectionId: collectionId || null,
     name,
     storeType,
     category,
     subCategory,
+    type,
+    color: color || attributes.primaryColor || '',
+    pattern: pattern || attributes.pattern || '',
+    fabric: fabric || attributes.fabric || '',
+    texture,
+    silhouette,
+    fit: fit || attributes.fit || '',
+    neckline: neckline || attributes.neckline || '',
+    sleeveStyle,
+    sleeveLength: sleeveLength || attributes.sleeveLength || '',
+    length,
+    occasion: occasion || attributes.occasions || [],
+    season: season || attributes.seasons || [],
+    style,
+    gender: gender || attributes.gender || '',
+    brand: brand || attributes.brand || '',
+    size: size || attributes.size || '',
+    isFavorite: isFavorite !== undefined ? isFavorite : false,
+    wearCount: wearCount || 0,
+    lastWornAt: lastWornAt || null,
+    aiAnalysis: aiAnalysis || null,
     sourceType,
     sourcePhotoUrl: sourcePhotoUrl || '',
+    sourceImageHash: sourceImageHash || null,
+    sourceImageIndex: sourceImageIndex || 0,
     images: processedImages,
     attributes,
     currentStatus,
@@ -102,6 +209,8 @@ const addItem = async (userId, itemData) => {
  */
 const getAllItems = async (userId, queryParams = {}) => {
   const {
+    wardrobeId,
+    collectionId,
     storeType = 'WARDROBE',
     category,
     subCategory,
@@ -121,20 +230,34 @@ const getAllItems = async (userId, queryParams = {}) => {
     storeType,
   };
 
+  if (wardrobeId) filter.wardrobeId = wardrobeId;
+  if (collectionId) filter.collectionId = collectionId;
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = new RegExp(`^${subCategory}$`, 'i');
   if (status) filter.currentStatus = status;
-  if (favorite !== undefined) filter['usageStats.isFavorite'] = favorite === 'true' || favorite === true;
+  if (favorite !== undefined) {
+    const isFav = favorite === 'true' || favorite === true;
+    filter.$or = [{ isFavorite: isFav }, { 'usageStats.isFavorite': isFav }];
+  }
 
-  // Filter inside dynamic attributes Map
+  // Filter inside dynamic attributes or top-level fields
   if (color) {
-    filter['attributes.primaryColor'] = new RegExp(color, 'i');
+    filter.$or = [
+      { color: new RegExp(color, 'i') },
+      { 'attributes.primaryColor': new RegExp(color, 'i') },
+    ];
   }
   if (occasion) {
-    filter['attributes.occasions'] = { $in: [new RegExp(occasion, 'i')] };
+    filter.$or = [
+      { occasion: { $in: [new RegExp(occasion, 'i')] } },
+      { 'attributes.occasions': { $in: [new RegExp(occasion, 'i')] } },
+    ];
   }
   if (season) {
-    filter['attributes.seasons'] = { $in: [new RegExp(season, 'i')] };
+    filter.$or = [
+      { season: { $in: [new RegExp(season, 'i')] } },
+      { 'attributes.seasons': { $in: [new RegExp(season, 'i')] } },
+    ];
   }
 
   // Keyword search
@@ -295,357 +418,14 @@ const deleteItem = async (userId, itemId, permanent = false) => {
 };
 
 /**
- * Log a worn dress / outfit into Wear History and increment wear statistics
- */
-const logWornDress = async (userId, logData) => {
-  const {
-    itemIds = [],
-    wornDate = new Date(),
-    occasion = 'CASUAL',
-    sourcePhotoUrl,
-    location,
-    notes,
-    rating,
-    markAsDirty = false,
-  } = logData;
-
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    throw new ApiError(400, 'Please select at least one wardrobe item to log');
-  }
-
-  // Fetch all items to record snapshot details
-  const items = await WardrobeItem.find({ _id: { $in: itemIds }, userId });
-
-  if (items.length === 0) {
-    throw new ApiError(404, 'No valid wardrobe items found for the given IDs');
-  }
-
-  const itemsSnapshot = items.map((item) => ({
-    itemId: item._id,
-    name: item.name,
-    category: item.category,
-    subCategory: item.subCategory,
-    photoUrl: item.images?.find((img) => img.isPrimary)?.url || item.images?.[0]?.url,
-  }));
-
-  // Create WearLog document
-  const wearLog = await WearLog.create({
-    userId,
-    items: itemsSnapshot,
-    wornDate: new Date(wornDate),
-    occasion,
-    sourcePhotoUrl,
-    location,
-    notes,
-    rating,
-  });
-
-  // Increment wear count and update lastWornDate for each item
-  const updatePromises = items.map((item) => {
-    item.usageStats.wearCount = (item.usageStats.wearCount || 0) + 1;
-    item.usageStats.useCount = (item.usageStats.useCount || 0) + 1;
-    item.usageStats.lastWornDate = new Date(wornDate);
-    item.usageStats.lastUsedDate = new Date(wornDate);
-
-    if (markAsDirty === true || markAsDirty === 'true') {
-      item.currentStatus = 'DIRTY';
-    }
-
-    return item.save();
-  });
-
-  await Promise.all(updatePromises);
-
-  return wearLog;
-};
-
-/**
- * Get user wear history logs with pagination and filters
- */
-const getWearHistory = async (userId, queryParams = {}) => {
-  const { occasion, itemId, page = 1, limit = 20 } = queryParams;
-
-  const filter = { userId };
-  if (occasion) filter.occasion = occasion;
-  if (itemId) filter['items.itemId'] = itemId;
-
-  const pageNumber = Math.max(1, parseInt(page, 10));
-  const limitNumber = Math.max(1, Math.min(100, parseInt(limit, 10)));
-  const skip = (pageNumber - 1) * limitNumber;
-
-  const [logs, totalLogs] = await Promise.all([
-    WearLog.find(filter).sort({ wornDate: -1 }).skip(skip).limit(limitNumber),
-    WearLog.countDocuments(filter),
-  ]);
-
-  return {
-    logs,
-    pagination: {
-      totalLogs,
-      totalPages: Math.ceil(totalLogs / limitNumber),
-      currentPage: pageNumber,
-      limit: limitNumber,
-      hasNextPage: pageNumber * limitNumber < totalLogs,
-      hasPrevPage: pageNumber > 1,
-    },
-  };
-};
-
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { GEMINI_API_KEY } = require('../../config/env.config');
-
-/**
- * AI Smart Stylist: Suggest matching outfits from user's currently AVAILABLE wardrobe collection
- */
-const suggestOutfit = async (userId, options = {}) => {
-  const {
-    occasion = 'CASUAL',
-    preferredStyle,
-    weather,
-    colorPreference,
-    customPrompt,
-  } = options;
-
-  // STRICT RULE: Only fetch items that are AVAILABLE in closet
-  const availableItems = await WardrobeItem.find({
-    userId,
-    storeType: 'WARDROBE',
-    currentStatus: 'AVAILABLE',
-  });
-
-  if (availableItems.length === 0) {
-    return {
-      occasion,
-      totalAvailableItems: 0,
-      outfitSuggestions: [],
-      message: 'No available items found in your wardrobe closet. Please add clothes or check items currently in laundry.',
-    };
-  }
-
-  // If Gemini API Key is available, use Gemini for AI Stylist reasoning
-  if (GEMINI_API_KEY) {
-    try {
-      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const activeModelName = process.env.GEMINI_VISION_MODEL || 'gemini-3.6-flash';
-      let model;
-      try {
-        model = genAI.getGenerativeModel({ model: activeModelName });
-      } catch (e) {
-        model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
-      }
-
-      const itemsSummary = availableItems.map((item) => ({
-        id: item._id.toString(),
-        name: item.name,
-        category: item.category,
-        subCategory: item.subCategory,
-        primaryColor: item.attributes?.get ? item.attributes.get('primaryColor') : item.attributes?.primaryColor,
-        pattern: item.attributes?.get ? item.attributes.get('pattern') : item.attributes?.pattern,
-        fabric: item.attributes?.get ? item.attributes.get('fabric') : item.attributes?.fabric,
-        fit: item.attributes?.get ? item.attributes.get('fit') : item.attributes?.fit,
-        occasions: item.attributes?.get ? item.attributes.get('occasions') : item.attributes?.occasions,
-      }));
-
-      const prompt = `
-You are a professional Personal Fashion Stylist for Arangtik.
-User Request:
-- Occasion: "${occasion}"
-- Preferred Style: "${preferredStyle || 'Any'}"
-- Weather: "${JSON.stringify(weather || 'Normal')}"
-- Color Preference: "${colorPreference || 'Any'}"
-- Custom Note: "${customPrompt || 'None'}"
-
-Here are the user's ONLY AVAILABLE clothes in their closet:
-${JSON.stringify(itemsSummary, null, 2)}
-
-Task:
-Create 1 to 3 distinct stylish outfit combinations (e.g. Formal Look, Trendy Look, Festive Look) using ONLY the IDs from the available list.
-For each outfit recommendation, select appropriate Topwear/Upper Wear, Bottomwear/Lower Wear, and if available Traditional/Footwear/Outerwear/Accessories.
-
-Return a raw JSON array of objects with:
-- "title": Descriptive title (e.g. "Sharp Corporate Meeting Look", "Royal Festive Attire")
-- "itemIds": Array of exact IDs used
-- "stylingTip": Explanation in Hinglish/English of why this combination works for ${occasion}
-- "colorHarmony": Description of color match (e.g. "Contrast of Navy Blue with Beige")
-- "matchScore": Number between 80 and 99
-
-Return ONLY raw valid JSON without markdown formatting or code blocks.
-`;
-
-      const result = await model.generateContent(prompt);
-      const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsedOutfits = JSON.parse(cleanJson);
-
-      const formattedSuggestions = (Array.isArray(parsedOutfits) ? parsedOutfits : parsedOutfits.outfits || []).map((outfit) => {
-        const outfitItems = availableItems.filter((it) => (outfit.itemIds || []).includes(it._id.toString()));
-        return {
-          title: outfit.title,
-          stylingTip: outfit.stylingTip,
-          colorHarmony: outfit.colorHarmony,
-          matchScore: outfit.matchScore || 90,
-          itemsCount: outfitItems.length,
-          items: outfitItems,
-        };
-      });
-
-      return {
-        occasion,
-        totalAvailableItems: availableItems.length,
-        outfitSuggestions: formattedSuggestions,
-      };
-    } catch (err) {
-      console.error('Gemini Stylist error, using fashion rules engine fallback:', err.message);
-    }
-  }
-
-  // Intelligent Fallback Fashion Rules Engine
-  const uppers = availableItems.filter((i) => i.category === 'UPPER_WEAR');
-  const lowers = availableItems.filter((i) => i.category === 'LOWER_WEAR');
-  const traditionals = availableItems.filter((i) => i.category === 'TRADITIONAL');
-  const footwears = availableItems.filter((i) => i.category === 'FOOTWEAR');
-
-  const suggestions = [];
-
-  // 1. Traditional Look for Wedding / Festive
-  if (['WEDDING', 'PARTY', 'FESTIVE'].includes(occasion.toUpperCase()) && traditionals.length > 0) {
-    const selectedTrad = traditionals[0];
-    const matchingFootwear = footwears[0];
-    const combo = [selectedTrad, matchingFootwear].filter(Boolean);
-
-    suggestions.push({
-      title: 'Royal Ethnic Look',
-      stylingTip: `Aapka ${selectedTrad.name} ${occasion} ke liye perfect traditional grace deta hai.`,
-      colorHarmony: 'Classic Ethnic Palette',
-      matchScore: 94,
-      itemsCount: combo.length,
-      items: combo,
-    });
-  }
-
-  // 2. Upper + Lower Combination for Office / Interview / Casual
-  if (uppers.length > 0) {
-    const selectedUpper = uppers[0];
-    const selectedLower = lowers.length > 0 ? lowers[0] : null;
-    const selectedFootwear = footwears.length > 0 ? footwears[0] : null;
-    const combo = [selectedUpper, selectedLower, selectedFootwear].filter(Boolean);
-
-    const isFormal = ['OFFICE', 'FORMAL', 'INTERVIEW'].includes(occasion.toUpperCase());
-    suggestions.push({
-      title: isFormal ? 'Sharp Professional Look' : 'Effortless Smart Look',
-      stylingTip: `Ye combination ${selectedUpper.name} ke sath clean contrast banata hai jo ${occasion} ke liye well-balanced hai.`,
-      colorHarmony: 'Balanced Color Contrast',
-      matchScore: isFormal ? 92 : 88,
-      itemsCount: combo.length,
-      items: combo,
-    });
-  }
-
-  return {
-    occasion,
-    totalAvailableItems: availableItems.length,
-    outfitSuggestions: suggestions,
-  };
-};
-
-/**
- * Lend wardrobe item to a friend/relative (Status -> LENT_OUT)
- */
-const lendItem = async (userId, lendData) => {
-  const {
-    itemId,
-    assignedTo,
-    assignedPhone,
-    purpose = 'LENT_FOR_WEARING',
-    givenDate = new Date(),
-    expectedReturnDate,
-  } = lendData;
-
-  if (!itemId || !assignedTo) {
-    throw new ApiError(400, 'Item ID and recipient name (assignedTo) are required');
-  }
-
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
-
-  if (!item) {
-    throw new ApiError(404, 'Wardrobe item not found');
-  }
-
-  if (item.currentStatus === 'LENT_OUT') {
-    throw new ApiError(400, `Item is already lent out to ${item.activeAssignment?.assignedTo || 'someone'}`);
-  }
-
-  item.currentStatus = 'LENT_OUT';
-  item.currentLocation = {
-    ...item.currentLocation.toObject(),
-    holderPerson: {
-      name: assignedTo,
-      phone: assignedPhone || '',
-      relation: 'Friend/Family',
-    },
-  };
-
-  item.activeAssignment = {
-    assignedTo,
-    assignedPhone: assignedPhone || '',
-    purpose,
-    givenDate: new Date(givenDate),
-    expectedReturnDate: expectedReturnDate ? new Date(expectedReturnDate) : null,
-  };
-
-  await item.save();
-  return item;
-};
-
-/**
- * Return a lent item back to Wardrobe Store (Status -> AVAILABLE)
- */
-const returnLentItem = async (userId, itemId) => {
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
-
-  if (!item) {
-    throw new ApiError(404, 'Wardrobe item not found');
-  }
-
-  if (item.currentStatus !== 'LENT_OUT') {
-    throw new ApiError(400, 'Item is not currently lent out');
-  }
-
-  item.currentStatus = 'AVAILABLE';
-  item.currentLocation = {
-    storagePlace: item.currentLocation?.storagePlace || 'Main Closet',
-    holderPerson: null,
-  };
-  item.activeAssignment = null;
-
-  await item.save();
-  return item;
-};
-
-/**
- * Get all items currently lent out to friends / outside
- */
-const getLentItems = async (userId) => {
-  const items = await WardrobeItem.find({
-    userId,
-    storeType: 'WARDROBE',
-    currentStatus: 'LENT_OUT',
-  }).sort({ 'activeAssignment.expectedReturnDate': 1 });
-
-  return {
-    totalLentItems: items.length,
-    items,
-  };
-};
-
-/**
  * Ingest clothing from Gallery Photos:
  * 1. Takes array of uploaded gallery image files.
  * 2. Filters only the photos where the authenticated user's face is found (Face Recognition).
  * 3. Extracts clothing/garments from user's matched photos using AI Fashion Vision.
  * 4. Checks against user's existing wardrobe:
- *    - If garment is already in wardrobe -> Logs wear history (WearLog).
+ *    - If garment is already in wardrobe -> Reuses existing wardrobe item.
  *    - If garment is new -> Ingests & creates a new WardrobeItem with cropped image thumbnail & AI metadata.
- * 5. Returns comprehensive summary with created items and logs.
+ * 5. Returns comprehensive summary with created items.
  */
 const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
   if (!files || files.length === 0) {
@@ -654,9 +434,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
   const {
     autoCreateNewItems = true,
-    autoLogWear = true,
     threshold = null,
-    occasion = 'CASUAL',
   } = options;
 
   const results = {
@@ -664,7 +442,6 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     matchedUserImagesCount: 0,
     unmatchedImagesCount: 0,
     newWardrobeItemsCreated: [],
-    wearLogsCreated: [],
     details: [],
   };
 
@@ -677,6 +454,50 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       mimetype: file.mimetype,
       path: file.path,
     };
+
+    const sourceImageHash = calculateSourceImageHash(file.path);
+
+    // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+    if (sourceImageHash) {
+      const existingExactItems = await WardrobeItem.find({
+        userId,
+        storeType: 'WARDROBE',
+        sourceImageHash,
+      }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+      if (existingExactItems.length > 0) {
+        console.log(`[WardrobeIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        results.matchedUserImagesCount++;
+
+        results.details.push({
+          filename: file.filename,
+          originalImageUrl: `/uploads/${file.filename}`,
+          isUserFound: true,
+          isExactDuplicateImage: true,
+          userFaceScore: 1.0,
+          garmentsDetected: existingExactItems.length,
+          newItemsAdded: 0,
+          existingItemsMatched: existingExactItems.length,
+          items: existingExactItems.map((ex) => ({
+            name: ex.name,
+            category: ex.category,
+            subCategory: ex.subCategory,
+            croppedImageUrl: ex.images?.[0]?.url || `/uploads/${file.filename}`,
+            matchType: 'EXISTING_ITEM',
+            matchedItem: ex,
+            matchResult: {
+              status: 'EXACT_MATCH',
+              matchType: 'IMAGE_HASH',
+              confidenceScore: 1.0,
+              message: 'Exact duplicate photo detected. Reusing existing wardrobe item.',
+              existingItem: ex,
+            },
+          })),
+        });
+
+        continue;
+      }
+    }
 
     try {
       // 1. Face Recognition: Is the user in this photo?
@@ -734,6 +555,8 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
             subCategory: item.subCategory || 'Other',
             sourceType: 'GALLERY_SCAN',
             sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourceImageHash: sourceImageHash || null,
+            sourceImageIndex: gIdx,
             images: [
               {
                 url: item.croppedImageUrl || `/uploads/${file.filename}`,
@@ -754,41 +577,6 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         }
       }
 
-      // 4. Auto-log wear history for existing items found in this photo
-      let wearLogResult = null;
-      if (autoLogWear && imageMatchedItemIds.length > 0) {
-        const matchedItemsSnapshots = existingItems
-          .filter((ex) => imageMatchedItemIds.includes(ex._id))
-          .map((ex) => ({
-            itemId: ex._id,
-            name: ex.name,
-            category: ex.category,
-            subCategory: ex.subCategory,
-            photoUrl: ex.images?.find((img) => img.isPrimary)?.url || ex.images?.[0]?.url,
-          }));
-
-        const wearLog = await WearLog.create({
-          userId,
-          items: matchedItemsSnapshots,
-          sourcePhotoUrl: `/uploads/${file.filename}`,
-          occasion: occasion || 'CASUAL',
-          wornDate: new Date(),
-          notes: `Auto-detected from gallery image ${file.originalname || file.filename}`,
-        });
-
-        // Update stats
-        await WardrobeItem.updateMany(
-          { _id: { $in: imageMatchedItemIds } },
-          {
-            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-            $set: { 'usageStats.lastWornDate': new Date() },
-          }
-        );
-
-        wearLogResult = wearLog;
-        results.wearLogsCreated.push(wearLog);
-      }
-
       results.details.push({
         filename: file.filename,
         originalImageUrl: `/uploads/${file.filename}`,
@@ -798,7 +586,6 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         newItemsAdded: imageNewItems.length,
         existingItemsMatched: imageMatchedItemIds.length,
         items: matchedDetections,
-        wearLog: wearLogResult,
       });
     } catch (err) {
       console.error(`[WardrobeIngest] Error processing file ${file.filename}:`, err);
@@ -833,6 +620,38 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
 
   for (let idx = 0; idx < files.length; idx++) {
     const file = files[idx];
+    const sourceImageHash = calculateSourceImageHash(file.path);
+
+    // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+    if (sourceImageHash) {
+      const existingExactItems = await WardrobeItem.find({
+        userId,
+        storeType: 'WARDROBE',
+        sourceImageHash,
+      }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+      if (existingExactItems.length > 0) {
+        console.log(`[bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        for (const ex of existingExactItems) {
+          await WardrobeItem.findByIdAndUpdate(ex._id, {
+            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
+            $set: { 'usageStats.lastWornDate': new Date() },
+          });
+          results.existingMatches.push(ex);
+        }
+        results.totalGarmentsExtracted += existingExactItems.length;
+        results.details.push({
+          filename: file.filename,
+          originalImageUrl: `/uploads/${file.filename}`,
+          garmentsFound: existingExactItems.length,
+          createdItems: 0,
+          matchedItems: existingExactItems.length,
+          isExactDuplicateImage: true,
+        });
+        continue;
+      }
+    }
+
     try {
       // 1. Detect garments in this photo (standalone clothing item or flat lay)
       const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
@@ -845,7 +664,8 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       const fileCreatedItems = [];
       const fileMatchedItems = [];
 
-      for (const item of matchedDetections) {
+      for (let itemIdx = 0; itemIdx < matchedDetections.length; itemIdx++) {
+        const item = matchedDetections[itemIdx];
         if (item.matchResult?.status === 'EXACT_MATCH' && item.matchResult?.existingItem) {
           // Increment wear count on existing item
           await WardrobeItem.findByIdAndUpdate(item.matchResult.existingItem._id, {
@@ -868,6 +688,8 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
             subCategory: item.subCategory || 'Other',
             sourceType: 'MANUAL_UPLOAD',
             sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourceImageHash: sourceImageHash || null,
+            sourceImageIndex: itemIdx,
             images: [
               {
                 url: item.croppedImageUrl || `/uploads/${file.filename}`,
@@ -916,6 +738,79 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     throw new ApiError(400, 'Please upload a gallery photo to scan');
   }
 
+  const sourceImageHash = calculateSourceImageHash(file.path);
+  const autoPersist = options.autoPersist !== false;
+
+  console.log(`[GalleryWardrobe] Scan initiated for user: ${userId}, file: ${file.filename}, hash: ${sourceImageHash ? sourceImageHash.slice(0, 12) : 'null'}`);
+
+  // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+  if (sourceImageHash) {
+    const existingExactItems = await WardrobeItem.find({
+      userId,
+      storeType: 'WARDROBE',
+      sourceImageHash,
+    }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+    if (existingExactItems.length > 0) {
+      console.log(`[GalleryWardrobe] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
+
+      const processedItems = [];
+      for (const ex of existingExactItems) {
+        let persistedGarment = ex;
+        if (autoPersist) {
+          try {
+            persistedGarment = await WardrobeItem.findByIdAndUpdate(
+              ex._id,
+              {
+                $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
+                $set: { 'usageStats.lastWornDate': new Date() },
+              },
+              { new: true }
+            );
+          } catch (updateErr) {
+            console.warn(`[GalleryWardrobe] Failed to update usageStats for exact match item ${ex._id}:`, updateErr.message);
+          }
+        }
+
+        processedItems.push({
+          tempDetectionId: `det_exact_${ex._id}`,
+          name: ex.name,
+          category: ex.category,
+          subCategory: ex.subCategory,
+          croppedImageUrl: ex.images?.[0]?.url || `/uploads/${file.filename}`,
+          attributes: ex.attributes ? (typeof ex.attributes.toJSON === 'function' ? ex.attributes.toJSON() : ex.attributes) : {},
+          matchType: 'EXISTING_ITEM',
+          matchedItem: persistedGarment,
+          status: 'EXACT_MATCH',
+          wardrobeItemId: ex._id,
+          similarity: 1.0,
+          garment: persistedGarment,
+          matchResult: {
+            status: 'EXACT_MATCH',
+            matchType: 'IMAGE_HASH',
+            confidenceScore: 1.0,
+            message: `Exact duplicate photo detected. Reusing existing wardrobe item "${ex.name}".`,
+            existingItem: persistedGarment,
+          },
+        });
+      }
+
+      return {
+        matched: true,
+        isExactDuplicateImage: true,
+        sourceImageHash,
+        matchedFace: {
+          confidence: 1.0,
+          similarity: 1.0,
+        },
+        facesDetected: 1,
+        originalImageUrl: `/uploads/${file.filename}`,
+        detectedItemsCount: processedItems.length,
+        items: processedItems,
+      };
+    }
+  }
+
   const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
   const fileMeta = {
     filename: file.filename,
@@ -923,8 +818,6 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     mimetype: file.mimetype,
     path: file.path,
   };
-
-  console.log(`[GalleryWardrobe] Scan initiated for user: ${userId}, file: ${file.filename}`);
 
   // 1. Detect all faces in photo and compare against authenticated user's reference face
   const scanResult = await faceRecognitionService.scanGalleryImage(
@@ -963,7 +856,6 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   const inFlightItems = [...existingItems];
 
   const processedItems = [];
-  const autoPersist = options.autoPersist !== false;
 
   for (let i = 0; i < croppedDetections.length; i++) {
     const rawDetection = croppedDetections[i];
@@ -1021,6 +913,8 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
             subCategory: rawDetection.subCategory || 'Other',
             sourceType: 'GALLERY_SCAN',
             sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourceImageHash: sourceImageHash || null,
+            sourceImageIndex: i,
             images: [
               {
                 url: rawDetection.croppedImageUrl || `/uploads/${file.filename}`,
@@ -1072,44 +966,91 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
 };
 
 /**
- * Submit user feedback or correction for an AI clothing match/extraction
+ * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
-const submitFeedback = async (userId, feedbackData) => {
-  const WardrobeFeedback = require('./wardrobeFeedback.model');
-  const { wardrobeItemId, feedbackType, originalPrediction, userCorrection, notes } = feedbackData;
-
-  if (!feedbackType) {
-    throw new ApiError(400, 'Feedback type is required');
+const createWardrobe = async (userId, data) => {
+  const { name, description, type, ownerName, coverImage, isDefault } = data;
+  if (!name) {
+    throw new ApiError(400, 'Wardrobe name is required');
   }
 
-  const feedback = await WardrobeFeedback.create({
+  if (isDefault) {
+    await Wardrobe.updateMany({ userId }, { isDefault: false });
+  }
+
+  const wardrobe = await Wardrobe.create({
     userId,
-    wardrobeItemId: wardrobeItemId || null,
-    feedbackType,
-    originalPrediction: originalPrediction || {},
-    userCorrection: userCorrection || {},
-    notes: notes || '',
+    name,
+    description: description || '',
+    type: type || 'PERSONAL',
+    ownerName: ownerName || '',
+    coverImage: coverImage || '',
+    isDefault: !!isDefault,
+    isActive: true,
   });
 
-  return feedback;
+  return wardrobe;
+};
+
+/**
+ * Get all active Wardrobes for user
+ */
+const getWardrobes = async (userId) => {
+  return await Wardrobe.find({ userId, isActive: true }).sort({ isDefault: -1, createdAt: -1 });
+};
+
+/**
+ * Create a new Collection inside a Wardrobe
+ */
+const createCollection = async (userId, data) => {
+  const { wardrobeId, name, type, colorTheme, description, season, occasion, style } = data;
+  if (!wardrobeId || !name) {
+    throw new ApiError(400, 'Wardrobe ID and Collection name are required');
+  }
+
+  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
+  if (!wardrobe) {
+    throw new ApiError(404, 'Target Wardrobe closet not found');
+  }
+
+  const collection = await Collection.create({
+    userId,
+    wardrobeId,
+    name,
+    type: type || 'CUSTOM',
+    colorTheme: colorTheme || {},
+    description: description || '',
+    season: season || [],
+    occasion: occasion || [],
+    style: style || [],
+    isActive: true,
+  });
+
+  return collection;
+};
+
+/**
+ * Get all Collections for user with optional wardrobeId filter
+ */
+const getCollections = async (userId, query = {}) => {
+  const filter = { userId, isActive: true };
+  if (query.wardrobeId) filter.wardrobeId = query.wardrobeId;
+  return await Collection.find(filter).sort({ createdAt: -1 });
 };
 
 module.exports = {
-  analyzePhoto,
+  createWardrobe,
+  getWardrobes,
+  createCollection,
+  getCollections,
   addItem,
   getAllItems,
   getItemById,
   updateItem,
   updateItemStatus,
   deleteItem,
-  logWornDress,
-  getWearHistory,
-  suggestOutfit,
-  lendItem,
-  returnLentItem,
-  getLentItems,
-  ingestGalleryPhotos,
-  bulkAddDressPhotos,
+  analyzePhoto,
   scanGalleryPhoto,
-  submitFeedback,
+  bulkAddDressPhotos,
+  ingestGalleryPhotos,
 };

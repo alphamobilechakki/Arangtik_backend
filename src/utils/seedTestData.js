@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const connectDB = require('../config/db.config');
 const { JWT_SECRET } = require('../config/env.config');
 const User = require('../modules/auth/user.model');
-const WardrobeItem = require('../modules/wardrobe/wardrobe.model');
+const WardrobeItem = require('../modules/wardrobe/wardrobeItem.model');
 const WearLog = require('../modules/wardrobe/wearLog.model');
 
 async function seedData() {

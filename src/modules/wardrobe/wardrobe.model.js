@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const WardrobeItemSchema = new mongoose.Schema(
+const WardrobeSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -10,116 +10,43 @@ const WardrobeItemSchema = new mongoose.Schema(
     },
     name: {
       type: String,
-      required: [true, 'Item name is required'],
+      required: [true, 'Wardrobe name is required'],
       trim: true,
-      maxlength: [120, 'Item name cannot exceed 120 characters'],
+      maxlength: [100, 'Wardrobe name cannot exceed 100 characters'],
     },
-    storeType: {
-      type: String,
-      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'OTHER'],
-      default: 'WARDROBE',
-      index: true,
-    },
-    category: {
-      type: String,
-      required: [true, 'Category is required'],
-      trim: true,
-      index: true,
-    },
-    subCategory: {
+    description: {
       type: String,
       trim: true,
-      index: true,
+      default: '',
+      maxlength: [500, 'Description cannot exceed 500 characters'],
     },
-    // Ingestion / Upload Source Type
-    sourceType: {
-      type: String,
-      enum: ['MANUAL_UPLOAD', 'GALLERY_SCAN', 'CAMERA_CAPTURE'],
-      default: 'MANUAL_UPLOAD',
-      index: true,
-    },
-    // Reference original photo if cropped from gallery/camera
-    sourcePhotoUrl: {
+    type: {
       type: String,
       trim: true,
+      default: 'PERSONAL',
+      enum: ['PERSONAL', 'FAMILY', 'CAPSULE', 'SHARED', 'SEASONAL', 'OTHER'],
     },
-    images: [
-      {
-        url: { type: String, required: true },
-        thumbnailUrl: { type: String },
-        isPrimary: { type: Boolean, default: false },
-        embedding: [{ type: Number }], // AI feature vector (e.g. 512 dimensions)
-        uploadedAt: { type: Date, default: Date.now },
-      },
-    ],
-    // Dynamic Extensible Attributes Bag (Wardrobe, Kitchen, Electronics, etc.)
-    attributes: {
-      type: Map,
-      of: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
-    // Universal Operational Status
-    currentStatus: {
+    ownerName: {
       type: String,
-      enum: [
-        'AVAILABLE',
-        'IN_USE',
-        'DIRTY',
-        'IN_LAUNDRY',
-        'LENT_OUT',
-        'IN_REPAIR',
-        'ARCHIVED',
-      ],
-      default: 'AVAILABLE',
+      trim: true,
+      default: '',
+      maxlength: [100, 'Owner name cannot exceed 100 characters'],
+    },
+    coverImage: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isDefault: {
+      type: Boolean,
+      default: false,
       index: true,
     },
-    // Physical Storage Location
-    currentLocation: {
-      storagePlace: { type: String, default: 'Main Closet' },
-      holderPerson: {
-        name: { type: String },
-        phone: { type: String },
-        relation: { type: String },
-      },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
-    // Usage and Lifecycle Metrics
-    usageStats: {
-      wearCount: { type: Number, default: 0 },
-      useCount: { type: Number, default: 0 },
-      lastWornDate: { type: Date },
-      lastUsedDate: { type: Date },
-      washCount: { type: Number, default: 0 },
-      lastWashedDate: { type: Date },
-      isFavorite: { type: Boolean, default: false },
-    },
-    // Active Assignment (When item is outside with someone / Dhobi / Tailor)
-    activeAssignment: {
-      assignedTo: { type: String },
-      assignedPhone: { type: String },
-      purpose: {
-        type: String,
-        enum: [
-          'LENT_FOR_WEARING',
-          'WASH_AND_IRON',
-          'DRY_CLEAN',
-          'REPAIR',
-          'OTHER',
-        ],
-      },
-      givenDate: { type: Date },
-      expectedReturnDate: { type: Date },
-    },
-    // Care & Laundry Instructions
-    laundryCare: {
-      washTypePreferred: {
-        type: String,
-        enum: ['MACHINE_WASH', 'HAND_WASH', 'DRY_CLEAN_ONLY', 'EASY_WASH'],
-        default: 'MACHINE_WASH',
-      },
-      ironPreferred: { type: Boolean, default: true },
-      careInstructions: { type: String },
-    },
-    tags: [{ type: String, trim: true }],
   },
   {
     timestamps: true,
@@ -128,9 +55,9 @@ const WardrobeItemSchema = new mongoose.Schema(
   }
 );
 
-// Compound indexes for lightning-fast queries
-WardrobeItemSchema.index({ userId: 1, storeType: 1, currentStatus: 1 });
-WardrobeItemSchema.index({ userId: 1, category: 1 });
-WardrobeItemSchema.index({ userId: 1, createdAt: -1 });
+// Indexes for high-performance user-scoped queries
+WardrobeSchema.index({ userId: 1, isDefault: 1 });
+WardrobeSchema.index({ userId: 1, isActive: 1 });
+WardrobeSchema.index({ userId: 1, createdAt: -1 });
 
-module.exports = mongoose.model('WardrobeItem', WardrobeItemSchema);
+module.exports = mongoose.models.Wardrobe || mongoose.model('Wardrobe', WardrobeSchema);
