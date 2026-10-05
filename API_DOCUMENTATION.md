@@ -165,23 +165,24 @@
 - **Response:**
 ```json
 {
-  "statusCode": 200,
-  "success": true,
-  "message": "Profile fetched successfully",
-  "data": {
-    "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "name": "Rahul Sharma",
-    "phone": "919876543210",
-    "gender": "MALE",
-    "accountType": "INDIVIDUAL",
-    "country": "India",
-    "currency": "INR",
-    "preferredLanguage": "en",
-    "profileImage": "/uploads/image-1718000000000.jpg",
-    "hasReferenceFace": true,
-    "role": "user",
-    "status": "active"
-  }
+    "statusCode": 200,
+    "data": {
+        "country": "India",
+        "currency": "INR",
+        "preferredLanguage": "en",
+        "_id": "6ac34c5bfd79ed5569324cd1",
+        "name": "",
+        "phone": "916202579799",
+        "role": "user",
+        "status": "active",
+        "gender": "UNSPECIFIED",
+        "accountType": "INDIVIDUAL",
+        "profileImage": "",
+        "createdAt": "2026-10-05T07:06:03.821Z",
+        "updatedAt": "2026-10-05T07:06:03.821Z"
+    },
+    "message": "User profile fetched successfully",
+    "success": true
 }
 ```
 
