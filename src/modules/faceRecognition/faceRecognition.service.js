@@ -69,30 +69,41 @@ class FaceRecognitionService {
   }
 
   /**
-   * Generates and stores the reference face embedding for the logged-in user from their profile photo.
+   * Generates and stores the reference face embedding for the logged-in user from their profile photo or uploaded file.
    * @param {string} userId Authenticated user's ID
+   * @param {Object} file Optional uploaded file
    */
-  async generateReferenceEmbedding(userId) {
+  async generateReferenceEmbedding(userId, file = null) {
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, 'User not found');
     }
 
-    if (!user.profileImage || user.profileImage.trim() === '') {
-      throw new ApiError(400, 'Profile image is required for face recognition. Please upload a profile photo first.', [
-        { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: 'No profile image found on account' },
-      ]);
+    let targetImagePath = '';
+    let relativeUrl = '';
+
+    if (file && file.filename) {
+      targetImagePath = file.path;
+      relativeUrl = `/uploads/${file.filename}`;
+      user.profileImage = relativeUrl;
+    } else {
+      if (!user.profileImage || user.profileImage.trim() === '') {
+        throw new ApiError(400, 'Profile image is required for face recognition. Please upload a profile photo.', [
+          { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: 'No profile image found on account' },
+        ]);
+      }
+      targetImagePath = this.resolveImagePath(user.profileImage);
+      relativeUrl = user.profileImage;
     }
 
-    const resolvedPath = this.resolveImagePath(user.profileImage);
-    if (!fs.existsSync(resolvedPath)) {
+    if (!fs.existsSync(targetImagePath)) {
       throw new ApiError(400, 'Profile image file could not be found on server storage.', [
-        { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: `File missing on disk: ${user.profileImage}` },
+        { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: `File missing on disk: ${targetImagePath}` },
       ]);
     }
 
     // Extract exactly one face and 128-d descriptor vector
-    const face = await faceAIService.extractReferenceFace(resolvedPath);
+    const face = await faceAIService.extractReferenceFace(targetImagePath);
 
     // Save reference face into user record
     user.referenceFace = {
@@ -100,7 +111,7 @@ class FaceRecognitionService {
       boundingBox: face.boundingBox,
       detectionConfidence: face.confidence,
       lastGeneratedAt: new Date(),
-      imagePath: user.profileImage,
+      imagePath: relativeUrl,
     };
 
     await user.save();

@@ -11,6 +11,7 @@ router.post('/verify-otp', authController.verifyOtp);
 
 // Authenticated User Routes
 router.get('/me', protect, authController.getMe);
+router.patch('/profile', protect, authController.updateProfile);
 router.put('/profile', protect, authController.updateProfile);
 router.post('/profile-image', protect, upload.single('image'), authController.uploadProfileImage);
 router.post('/logout', protect, authController.logout);

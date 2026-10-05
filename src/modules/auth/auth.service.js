@@ -78,7 +78,7 @@ class AuthService {
     let isNewUser = false;
 
     if (!user) {
-      // Create new user with name (only single user role)
+      // Create new user with name (gender & accountType use schema defaults: UNSPECIFIED & INDIVIDUAL)
       user = await User.create({
         phone: formattedPhone,
         name: name ? String(name).trim() : '',
@@ -91,7 +91,6 @@ class AuthService {
         throw new ApiError(403, 'Your account has been deactivated or blocked. Please contact support.');
       }
 
-      // If existing user has no name and name is supplied now, update it
       if ((!user.name || user.name.trim() === '') && name && name.trim()) {
         user.name = name.trim();
         await user.save();
@@ -118,6 +117,9 @@ class AuthService {
         _id: user._id,
         name: user.name,
         phone: user.phone,
+        gender: user.gender || 'UNSPECIFIED',
+        accountType: user.accountType || 'INDIVIDUAL',
+        profileImage: user.profileImage || '',
         role: user.role,
         status: user.status,
       },
@@ -137,7 +139,7 @@ class AuthService {
   }
 
   /**
-   * Update user profile information (name, profileImage)
+   * Update user profile information (name, gender, accountType, profileImage)
    * Invalidates referenceFace embedding if profile image changes
    */
   async updateProfile(userId, updateData = {}) {
@@ -148,6 +150,22 @@ class AuthService {
 
     if (updateData.name !== undefined) {
       user.name = String(updateData.name).trim();
+    }
+
+    if (updateData.gender !== undefined) {
+      const clean = String(updateData.gender).trim().toUpperCase();
+      if (['MALE', 'MEN', 'M'].includes(clean)) user.gender = 'MALE';
+      else if (['FEMALE', 'WOMEN', 'F'].includes(clean)) user.gender = 'FEMALE';
+      else if (['OTHER', 'O'].includes(clean)) user.gender = 'OTHER';
+      else user.gender = 'UNSPECIFIED';
+    }
+
+    if (updateData.accountType !== undefined) {
+      const clean = String(updateData.accountType).trim().toUpperCase();
+      if (['COMMERCIAL', 'BUSINESS', 'STORE'].includes(clean)) user.accountType = 'COMMERCIAL';
+      else if (['INDUSTRIAL', 'FACTORY'].includes(clean)) user.accountType = 'INDUSTRIAL';
+      else if (['OTHER'].includes(clean)) user.accountType = 'OTHER';
+      else user.accountType = 'INDIVIDUAL';
     }
 
     if (updateData.profileImage !== undefined && updateData.profileImage !== user.profileImage) {
@@ -162,8 +180,9 @@ class AuthService {
 
   /**
    * Upload and update user profile image
+   * Automatically validates for exactly 1 clear face and generates/stores the 128-d reference face embedding in a single atomic step.
    */
-  async updateProfileImage(userId, imagePath) {
+  async updateProfileImage(userId, imagePath, filePath = null) {
     if (!imagePath) {
       throw new ApiError(400, 'Profile image is required');
     }
@@ -173,12 +192,44 @@ class AuthService {
       throw new ApiError(404, 'User not found');
     }
 
+    const faceAIService = require('../../services/faceAI/faceAI.service');
+    const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
+    const targetPath = filePath || faceRecognitionService.resolveImagePath(imagePath);
+
+    if (!fs.existsSync(targetPath)) {
+      throw new ApiError(400, 'Profile image file could not be found on server storage');
+    }
+
+    // 1. Automatically validate image contains exactly 1 high-quality face & extract 128-d vector
+    const face = await faceAIService.extractReferenceFace(targetPath);
+
+    // 2. Save both profile image path and reference face biometric embedding
     user.profileImage = imagePath;
-    // Invalidate old reference face embedding
-    user.referenceFace = undefined;
+    user.referenceFace = {
+      embedding: face.embedding,
+      boundingBox: face.boundingBox,
+      detectionConfidence: face.confidence,
+      lastGeneratedAt: new Date(),
+      imagePath: imagePath,
+    };
 
     await user.save();
-    return user;
+    console.log(`[updateProfileImage] Profile image uploaded and reference face embedding generated for user: ${userId}`);
+
+    return {
+      _id: user._id,
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      profileImage: user.profileImage,
+      referenceFace: {
+        hasReferenceFace: true,
+        boundingBox: face.boundingBox,
+        detectionConfidence: face.confidence,
+        lastGeneratedAt: user.referenceFace.lastGeneratedAt,
+      },
+    };
   }
 }
 

@@ -14,11 +14,14 @@ router.use(protect);
  */
 router.post('/reference/validate', faceRecognitionController.validateReference);
 
-/**
- * @route   POST /api/face-recognition/reference
- * @desc    Generate / update reference face embedding from profile image
- */
-router.post('/reference', faceRecognitionController.generateReference);
+router.post(
+  '/reference',
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'photo', maxCount: 1 },
+  ]),
+  faceRecognitionController.generateReference
+);
 
 /**
  * @route   GET /api/face-recognition/reference

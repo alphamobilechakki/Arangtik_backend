@@ -45,18 +45,18 @@ class AuthController {
   });
 
   /**
-   * @desc    Update user profile details
-   * @route   PUT /api/auth/profile
+   * @desc    Update user profile details (name, gender, accountType, profileImage)
+   * @route   PATCH /api/auth/profile
    * @access  Private
    */
   updateProfile = asyncHandler(async (req, res) => {
-    const { name, profileImage } = req.body;
-    const user = await authService.updateProfile(req.user.id, { name, profileImage });
+    const { name, gender, accountType, profileImage } = req.body;
+    const user = await authService.updateProfile(req.user.id, { name, gender, accountType, profileImage });
     return ApiResponse.success(res, user, 'Profile updated successfully');
   });
 
   /**
-   * @desc    Upload user profile image
+   * @desc    Upload user profile image & automatically register reference face embedding
    * @route   POST /api/auth/profile-image
    * @access  Private
    */
@@ -71,8 +71,8 @@ class AuthController {
     }
 
     const imagePath = `/uploads/${file.filename}`;
-    const user = await authService.updateProfileImage(req.user.id, imagePath);
-    return ApiResponse.success(res, user, 'Profile image uploaded successfully');
+    const result = await authService.updateProfileImage(req.user.id, imagePath, file.path);
+    return ApiResponse.success(res, result, 'Profile image uploaded and reference face biometric registered successfully');
   });
 }
 

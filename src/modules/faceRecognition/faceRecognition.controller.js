@@ -19,12 +19,13 @@ class FaceRecognitionController {
   });
 
   /**
-   * @desc    Generate / refresh reference face embedding from user's profile image
+   * @desc    Generate / refresh reference face embedding from user's profile image or directly uploaded photo
    * @route   POST /api/face-recognition/reference
    * @access  Private
    */
   generateReference = asyncHandler(async (req, res) => {
-    const result = await faceRecognitionService.generateReferenceEmbedding(req.user.id);
+    const file = req.file || (req.files?.image?.[0] || req.files?.photo?.[0]);
+    const result = await faceRecognitionService.generateReferenceEmbedding(req.user.id, file);
     return ApiResponse.success(res, result, 'Reference face embedding generated successfully');
   });
 

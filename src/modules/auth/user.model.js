@@ -23,6 +23,20 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'blocked'],
       default: 'active',
     },
+    gender: {
+      type: String,
+      enum: ['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED'],
+      default: 'UNSPECIFIED',
+      uppercase: true,
+      trim: true,
+    },
+    accountType: {
+      type: String,
+      enum: ['INDIVIDUAL', 'COMMERCIAL', 'INDUSTRIAL', 'OTHER'],
+      default: 'INDIVIDUAL',
+      uppercase: true,
+      trim: true,
+    },
     profileImage: {
       type: String,
       trim: true,
