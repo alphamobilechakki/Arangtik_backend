@@ -20,29 +20,10 @@ router.post(
   ]),
   wardrobeController.createWardrobe
 );
-router.post(
-  '/create-closet',
-  upload.fields([
-    { name: 'coverImage', maxCount: 1 },
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  wardrobeController.createWardrobe
-);
-router.post(
-  '/closets',
-  upload.fields([
-    { name: 'coverImage', maxCount: 1 },
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  wardrobeController.createWardrobe
-);
 
 // Get All Wardrobes
+router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
-router.get('/get-closets', wardrobeController.getWardrobes);
-router.get('/closets', wardrobeController.getWardrobes);
 
 /* ==========================================================================
    2. COLLECTION APIs ("Festive", "Daily Wear", "Office")

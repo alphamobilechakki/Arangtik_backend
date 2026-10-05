@@ -21,7 +21,7 @@ Frontend / Client application ko in steps ke anusaar APIs integrate karni chahiy
          │
 [STEP 3] CLOSETS & COLLECTIONS SETUP (Optional / Organizing)
   ├─► POST /api/wardrobe/create-wardrobe (Create Closet, e.g. "My Wardrobe", "Mummy Wardrobe")
-  ├─► GET  /api/wardrobe/get-wardrobes   (List all active closets)
+  ├─► GET  /api/wardrobe/create-wardrobe (List all active closets)
   ├─► POST /api/wardrobe/create-collection (Create tags/collections, e.g. "Festive", "Office")
   └─► GET  /api/wardrobe/get-collections (Fetch collections)
          │
@@ -600,7 +600,7 @@ Sabhi API responses uniform format follow karte hain:
 
 ### 4.1 Create Wardrobe / Closet
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/create-wardrobe` *(Aliases: `/create-closet`, `/closets`)*
+- **Endpoint:** `/api/wardrobe/create-wardrobe`
 - **Access:** Private (`Bearer <JWT_TOKEN>`)
 - **Description:** Ek naya Wardrobe container (jaise "My Wardrobe", "Mummy Wardrobe", "Summer Capsule") create karta hai. Optional photo upload karne par closet owner ka face embedding automatically extract ho jata hai.
 
@@ -644,7 +644,7 @@ Sabhi API responses uniform format follow karte hain:
 
 ### 4.2 Get All Wardrobes / Closets
 - **Method:** `GET`
-- **Endpoint:** `/api/wardrobe/get-wardrobes` *(Aliases: `/get-closets`, `/closets`)*
+- **Endpoint:** `/api/wardrobe/create-wardrobe` *(or `/api/wardrobe/get-wardrobes`)*
 - **Access:** Private (`Bearer <JWT_TOKEN>`)
 - **Description:** Logged-in user ke sabhi active closets fetch karta hai.
 
