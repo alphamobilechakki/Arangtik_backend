@@ -1000,7 +1000,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
 const createWardrobe = async (userId, data, file = null) => {
-  const { name, description, type, ownerName, isDefault } = data;
+  const { name, type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
   }
@@ -1042,7 +1042,6 @@ const createWardrobe = async (userId, data, file = null) => {
   const wardrobe = await Wardrobe.create({
     userId,
     name,
-    description: description || '',
     type: type || 'PERSONAL',
     ownerName: ownerName || '',
     coverImage: coverImage || '',

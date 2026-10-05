@@ -14,12 +14,6 @@ const WardrobeSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Wardrobe name cannot exceed 100 characters'],
     },
-    description: {
-      type: String,
-      trim: true,
-      default: '',
-      maxlength: [500, 'Description cannot exceed 500 characters'],
-    },
     type: {
       type: String,
       trim: true,

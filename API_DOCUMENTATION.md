@@ -612,7 +612,6 @@ Sabhi API responses uniform format follow karte hain:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | `string` | Yes | Closet ka name (e.g. "Main Bedroom Wardrobe") |
-| `description` | `string` | No | Description |
 | `type` | `string` | No | `'PERSONAL'`, `'FAMILY'`, `'CAPSULE'`, `'SHARED'`, `'SEASONAL'`, `'OTHER'` (Default: `PERSONAL`) |
 | `ownerName` | `string` | No | Closet owner name |
 | `isDefault` | `boolean` | No | Primary default wardrobe banana hai ya nahi (`true`/`false`) |
@@ -628,7 +627,6 @@ Sabhi API responses uniform format follow karte hain:
     "_id": "674f1b2c3d4e5f6a7b8c9d10",
     "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
     "name": "Main Bedroom Wardrobe",
-    "description": "Daily and office wear collection",
     "type": "PERSONAL",
     "ownerName": "Rahul Sharma",
     "coverImage": "/uploads/closet-1790000.jpg",

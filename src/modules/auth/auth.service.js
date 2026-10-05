@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET, JWT_EXPIRES_IN, OTP_EXPIRY, OTP_DEV_MODE } = require('../../config/env.config');
 const User = require('./user.model');
