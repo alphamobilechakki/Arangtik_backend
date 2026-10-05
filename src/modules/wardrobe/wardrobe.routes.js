@@ -26,18 +26,7 @@ router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
 
 /* ==========================================================================
-   2. COLLECTION APIs ("Festive", "Daily Wear", "Office")
-   ========================================================================== */
-// Create Collection
-router.post('/create-collection', wardrobeController.createCollection);
-router.post('/collections', wardrobeController.createCollection);
-
-// Get All Collections (supports ?wardrobeId=...)
-router.get('/get-collections', wardrobeController.getCollections);
-router.get('/collections', wardrobeController.getCollections);
-
-/* ==========================================================================
-   3. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
+   2. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
    ========================================================================== */
 // Add Item (Kapda add karein)
 router.post('/add-item', wardrobeController.addItem);

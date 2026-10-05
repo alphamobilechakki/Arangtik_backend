@@ -14,12 +14,6 @@ const WardrobeItemSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    collectionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Collection',
-      default: null,
-      index: true,
-    },
     name: {
       type: String,
       required: [true, 'Item name is required'],
@@ -174,9 +168,8 @@ const WardrobeItemSchema = new mongoose.Schema(
   }
 );
 
-// Compound indexes for user-scoped, wardrobe-scoped, and collection-scoped queries
+// Compound indexes for user-scoped and wardrobe-scoped queries
 WardrobeItemSchema.index({ userId: 1, wardrobeId: 1 });
-WardrobeItemSchema.index({ userId: 1, collectionId: 1 });
 WardrobeItemSchema.index({ userId: 1, category: 1 });
 WardrobeItemSchema.index({ userId: 1, sourceImageHash: 1 });
 WardrobeItemSchema.index({ userId: 1, isFavorite: 1 });

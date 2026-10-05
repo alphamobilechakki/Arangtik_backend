@@ -165,40 +165,14 @@ const createWardrobe = asyncHandler(async (req, res) => {
  */
 const getWardrobes = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await wardrobeService.getWardrobes(userId);
+  const result = await wardrobeService.getWardrobes(userId, req.query);
 
   return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
-});
-
-/**
- * @desc    Create a new Collection inside a Wardrobe
- * @route   POST /api/wardrobe/create-collection OR /api/wardrobe/collections
- * @access  Private
- */
-const createCollection = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.createCollection(userId, req.body);
-
-  return ApiResponse.created(res, result, 'Collection created successfully');
-});
-
-/**
- * @desc    Get all Collections for user
- * @route   GET /api/wardrobe/get-collections OR /api/wardrobe/collections
- * @access  Private
- */
-const getCollections = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const result = await wardrobeService.getCollections(userId, req.query);
-
-  return ApiResponse.success(res, result, 'Collections fetched successfully');
 });
 
 module.exports = {
   createWardrobe,
   getWardrobes,
-  createCollection,
-  getCollections,
   addItem,
   getAllItems,
   getItemDetails,

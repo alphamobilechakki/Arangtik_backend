@@ -14,6 +14,12 @@ const WardrobeSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Wardrobe name cannot exceed 100 characters'],
     },
+    storeType: {
+      type: String,
+      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'VALUABLES', 'OTHER'],
+      default: 'WARDROBE',
+      index: true,
+    },
     type: {
       type: String,
       trim: true,
@@ -67,6 +73,8 @@ const WardrobeSchema = new mongoose.Schema(
 );
 
 // Indexes for high-performance user-scoped queries
+WardrobeSchema.index({ userId: 1, storeType: 1, isDefault: 1 });
+WardrobeSchema.index({ userId: 1, storeType: 1, isActive: 1 });
 WardrobeSchema.index({ userId: 1, isDefault: 1 });
 WardrobeSchema.index({ userId: 1, isActive: 1 });
 WardrobeSchema.index({ userId: 1, createdAt: -1 });

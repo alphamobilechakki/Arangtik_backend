@@ -1,7 +1,6 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const Wardrobe = require('./wardrobe.model');
-const Collection = require('./collection.model');
 const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const aiVisionService = require('./aiVision.service');
@@ -104,9 +103,7 @@ const analyzePhoto = async (userId, file) => {
 const addItem = async (userId, itemData) => {
   const {
     wardrobeId = null,
-    collectionId = null,
     name,
-    storeType = 'WARDROBE',
     category,
     subCategory,
     type,
@@ -136,9 +133,6 @@ const addItem = async (userId, itemData) => {
     sourceImageIndex = 0,
     images = [],
     attributes = {},
-    currentStatus = 'AVAILABLE',
-    storageLocation,
-    laundryCare,
     tags = [],
   } = itemData;
 
@@ -159,15 +153,15 @@ const addItem = async (userId, itemData) => {
   let finalWardrobeId = wardrobeId;
   if (!finalWardrobeId) {
     const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
-    if (defaultW) finalWardrobeId = defaultW._id;
+    if (defaultW) {
+      finalWardrobeId = defaultW._id;
+    }
   }
 
   const newItem = await WardrobeItem.create({
     userId,
     wardrobeId: finalWardrobeId || null,
-    collectionId: collectionId || null,
     name,
-    storeType,
     category,
     subCategory,
     type,
@@ -197,12 +191,6 @@ const addItem = async (userId, itemData) => {
     sourceImageIndex: sourceImageIndex || 0,
     images: processedImages,
     attributes,
-    currentStatus,
-    currentLocation: storageLocation || { storagePlace: 'Main Closet' },
-    laundryCare: laundryCare || {
-      washTypePreferred: 'MACHINE_WASH',
-      ironPreferred: true,
-    },
     tags,
   });
 
@@ -215,11 +203,9 @@ const addItem = async (userId, itemData) => {
 const getAllItems = async (userId, queryParams = {}) => {
   const {
     wardrobeId,
-    collectionId,
-    storeType = 'WARDROBE',
+    storeType,
     category,
     subCategory,
-    status,
     color,
     occasion,
     season,
@@ -232,8 +218,10 @@ const getAllItems = async (userId, queryParams = {}) => {
 
   const andClauses = [{ userId }];
 
-  if (storeType && storeType !== 'WARDROBE' && storeType !== 'ALL') {
-    andClauses.push({ storeType });
+  if (storeType && storeType !== 'ALL') {
+    const matchingStores = await Wardrobe.find({ userId, storeType }).select('_id');
+    const storeIds = matchingStores.map((s) => s._id);
+    andClauses.push({ wardrobeId: { $in: storeIds } });
   }
 
   if (wardrobeId) {
@@ -250,15 +238,11 @@ const getAllItems = async (userId, queryParams = {}) => {
       andClauses.push({ wardrobeId });
     }
   }
-  if (collectionId) andClauses.push({ collectionId });
   if (category) andClauses.push({ category });
   if (subCategory) andClauses.push({ subCategory: new RegExp(`^${subCategory}$`, 'i') });
-  if (status) andClauses.push({ currentStatus: status });
   if (favorite !== undefined) {
     const isFav = favorite === 'true' || favorite === true;
-    andClauses.push({
-      $or: [{ isFavorite: isFav }, { 'usageStats.isFavorite': isFav }],
-    });
+    andClauses.push({ isFavorite: isFav });
   }
 
   // Filter inside dynamic attributes or top-level fields
@@ -396,56 +380,17 @@ const updateItem = async (userId, itemId, updateData) => {
 };
 
 /**
- * Quick update item operational status (PATCH)
+ * Delete item from wardrobe store
  */
-const updateItemStatus = async (userId, itemId, status) => {
-  const validStatuses = [
-    'AVAILABLE',
-    'IN_USE',
-    'DIRTY',
-    'IN_LAUNDRY',
-    'LENT_OUT',
-    'IN_REPAIR',
-    'ARCHIVED',
-  ];
-
-  if (!status || !validStatuses.includes(status)) {
-    throw new ApiError(
-      400,
-      `Invalid status. Must be one of: ${validStatuses.join(', ')}`
-    );
-  }
-
+const deleteItem = async (userId, itemId) => {
   const item = await WardrobeItem.findOne({ _id: itemId, userId });
 
   if (!item) {
     throw new ApiError(404, 'Wardrobe item not found');
   }
 
-  item.currentStatus = status;
-  await item.save();
-
-  return item;
-};
-
-/**
- * Delete / Archive item from wardrobe store
- */
-const deleteItem = async (userId, itemId, permanent = false) => {
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
-
-  if (!item) {
-    throw new ApiError(404, 'Wardrobe item not found');
-  }
-
-  if (permanent === true || permanent === 'true') {
-    await WardrobeItem.deleteOne({ _id: itemId, userId });
-    return { deleted: true, permanent: true };
-  } else {
-    item.currentStatus = 'ARCHIVED';
-    await item.save();
-    return { deleted: true, archived: true, item };
-  }
+  await WardrobeItem.deleteOne({ _id: itemId, userId });
+  return { deleted: true, itemId };
 };
 
 /**
@@ -592,9 +537,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
           const newItem = await WardrobeItem.create({
             userId,
             wardrobeId: finalWardrobeId || null,
-            collectionId: options.collectionId || null,
             name: item.name || defaultName,
-            storeType: 'WARDROBE',
             category: item.category || 'OTHER',
             subCategory: item.subCategory || 'Other',
             color: primaryColor,
@@ -615,9 +558,6 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
               },
             ],
             attributes: item.attributes || {},
-            currentStatus: 'AVAILABLE',
-            currentLocation: { storagePlace: 'Main Closet' },
-            laundryCare: { washTypePreferred: 'MACHINE_WASH', ironPreferred: true },
             tags: ['Auto-Extracted', 'Gallery-Scan', primaryColor, item.category].filter(Boolean),
           });
 
@@ -732,9 +672,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
           const newItem = await WardrobeItem.create({
             userId,
             wardrobeId: options.wardrobeId || null,
-            collectionId: options.collectionId || null,
             name: item.name || defaultName,
-            storeType: 'WARDROBE',
             category: item.category || 'OTHER',
             subCategory: item.subCategory || 'Other',
             color: primaryColor,
@@ -755,9 +693,6 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
               },
             ],
             attributes: item.attributes || {},
-            currentStatus: 'AVAILABLE',
-            currentLocation: { storagePlace: storagePlace || 'Main Closet' },
-            laundryCare: { washTypePreferred: 'MACHINE_WASH', ironPreferred: true },
             tags: ['Bulk-Digitized', primaryColor, item.category].filter(Boolean),
           });
 
@@ -972,9 +907,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
           const newItem = await WardrobeItem.create({
             userId,
             wardrobeId: finalWardrobeId || null,
-            collectionId: options.collectionId || null,
             name: rawDetection.name || defaultName,
-            storeType: 'WARDROBE',
             category: rawDetection.category || 'OTHER',
             subCategory: rawDetection.subCategory || 'Other',
             color: primaryColor,
@@ -995,9 +928,6 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
               },
             ],
             attributes: rawDetection.attributes || {},
-            currentStatus: 'AVAILABLE',
-            currentLocation: { storagePlace: 'Main Closet' },
-            laundryCare: { washTypePreferred: 'MACHINE_WASH', ironPreferred: true },
             tags: ['Auto-Extracted', 'Gallery-Scan', primaryColor, rawDetection.category].filter(Boolean),
           });
 
@@ -1041,7 +971,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
 const createWardrobe = async (userId, data, file = null) => {
-  const { name, type, ownerName, isDefault } = data;
+  const { name, storeType = 'WARDROBE', type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
   }
@@ -1077,12 +1007,13 @@ const createWardrobe = async (userId, data, file = null) => {
   }
 
   if (isDefault) {
-    await Wardrobe.updateMany({ userId }, { isDefault: false });
+    await Wardrobe.updateMany({ userId, storeType }, { isDefault: false });
   }
 
   const wardrobe = await Wardrobe.create({
     userId,
     name,
+    storeType: storeType || 'WARDROBE',
     type: type || 'PERSONAL',
     ownerName: ownerName || '',
     coverImage: coverImage || '',
@@ -1096,61 +1027,23 @@ const createWardrobe = async (userId, data, file = null) => {
 };
 
 /**
- * Get all active Wardrobes for user
+ * Get all active Wardrobes / Stores for user
  */
-const getWardrobes = async (userId) => {
-  return await Wardrobe.find({ userId, isActive: true }).sort({ isDefault: -1, createdAt: -1 });
-};
-
-/**
- * Create a new Collection inside a Wardrobe
- */
-const createCollection = async (userId, data) => {
-  const { wardrobeId, name, type, colorTheme, description, season, occasion, style } = data;
-  if (!wardrobeId || !name) {
-    throw new ApiError(400, 'Wardrobe ID and Collection name are required');
-  }
-
-  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
-  if (!wardrobe) {
-    throw new ApiError(404, 'Target Wardrobe closet not found');
-  }
-
-  const collection = await Collection.create({
-    userId,
-    wardrobeId,
-    name,
-    type: type || 'CUSTOM',
-    colorTheme: colorTheme || {},
-    description: description || '',
-    season: season || [],
-    occasion: occasion || [],
-    style: style || [],
-    isActive: true,
-  });
-
-  return collection;
-};
-
-/**
- * Get all Collections for user with optional wardrobeId filter
- */
-const getCollections = async (userId, query = {}) => {
+const getWardrobes = async (userId, query = {}) => {
   const filter = { userId, isActive: true };
-  if (query.wardrobeId) filter.wardrobeId = query.wardrobeId;
-  return await Collection.find(filter).sort({ createdAt: -1 });
+  if (query.storeType) {
+    filter.storeType = query.storeType;
+  }
+  return await Wardrobe.find(filter).sort({ isDefault: -1, createdAt: -1 });
 };
 
 module.exports = {
   createWardrobe,
   getWardrobes,
-  createCollection,
-  getCollections,
   addItem,
   getAllItems,
   getItemById,
   updateItem,
-  updateItemStatus,
   deleteItem,
   analyzePhoto,
   scanGalleryPhoto,
