@@ -4,7 +4,6 @@ const connectDB = require('../config/db.config');
 const { JWT_SECRET } = require('../config/env.config');
 const User = require('../modules/auth/user.model');
 const WardrobeItem = require('../modules/wardrobe/wardrobeItem.model');
-const WearLog = require('../modules/wardrobe/wearLog.model');
 
 async function seedData() {
   try {
@@ -39,7 +38,6 @@ async function seedData() {
 
     // Clear old wardrobe test items for this user to avoid excessive duplicates
     await WardrobeItem.deleteMany({ userId: user._id });
-    await WearLog.deleteMany({ userId: user._id });
 
     // Seed Sample Clothes
     const sampleClothes = [

@@ -167,10 +167,11 @@ class AuthService {
 
     if (updateData.accountType !== undefined) {
       const clean = String(updateData.accountType).trim().toUpperCase();
-      if (['COMMERCIAL', 'BUSINESS', 'STORE'].includes(clean)) user.accountType = 'COMMERCIAL';
-      else if (['INDUSTRIAL', 'FACTORY'].includes(clean)) user.accountType = 'INDUSTRIAL';
-      else if (['OTHER'].includes(clean)) user.accountType = 'OTHER';
-      else user.accountType = 'INDIVIDUAL';
+      if (['COMMERCIAL', 'BUSINESS', 'STORE', 'SHOP'].includes(clean)) {
+        user.accountType = 'COMMERCIAL';
+      } else {
+        user.accountType = 'INDIVIDUAL';
+      }
     }
 
     if (updateData.country !== undefined) {
