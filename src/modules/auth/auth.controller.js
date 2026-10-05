@@ -45,13 +45,13 @@ class AuthController {
   });
 
   /**
-   * @desc    Update user profile details (name, gender, accountType, profileImage)
+   * @desc    Update user profile details (name, gender, accountType, country, currency, preferredLanguage, profileImage / file)
    * @route   PATCH /api/auth/profile
    * @access  Private
    */
   updateProfile = asyncHandler(async (req, res) => {
-    const { name, gender, accountType, profileImage } = req.body;
-    const user = await authService.updateProfile(req.user.id, { name, gender, accountType, profileImage });
+    const file = req.file || (req.files?.image ? req.files.image[0] : (req.files?.profileImage ? req.files.profileImage[0] : null));
+    const user = await authService.updateProfile(req.user.id, req.body, file);
     return ApiResponse.success(res, user, 'Profile updated successfully');
   });
 

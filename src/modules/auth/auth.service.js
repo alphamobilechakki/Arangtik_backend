@@ -121,6 +121,9 @@ class AuthService {
         phone: user.phone,
         gender: user.gender || 'UNSPECIFIED',
         accountType: user.accountType || 'INDIVIDUAL',
+        country: user.country || 'India',
+        currency: user.currency || 'INR',
+        preferredLanguage: user.preferredLanguage || 'en',
         profileImage: user.profileImage || '',
         role: user.role,
         status: user.status,
@@ -141,10 +144,10 @@ class AuthService {
   }
 
   /**
-   * Update user profile information (name, gender, accountType, profileImage)
-   * Invalidates referenceFace embedding if profile image changes
+   * Update user profile information (name, gender, accountType, country, currency, preferredLanguage, profileImage / file)
+   * If a profile image file is uploaded, automatically validates 1 clear face and generates 128-d reference face biometric embedding
    */
-  async updateProfile(userId, updateData = {}) {
+  async updateProfile(userId, updateData = {}, file = null) {
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, 'User not found');
@@ -170,9 +173,41 @@ class AuthService {
       else user.accountType = 'INDIVIDUAL';
     }
 
-    if (updateData.profileImage !== undefined && updateData.profileImage !== user.profileImage) {
+    if (updateData.country !== undefined) {
+      user.country = String(updateData.country).trim();
+    }
+
+    if (updateData.currency !== undefined) {
+      user.currency = String(updateData.currency).trim().toUpperCase();
+    }
+
+    if (updateData.preferredLanguage !== undefined) {
+      user.preferredLanguage = String(updateData.preferredLanguage).trim();
+    }
+
+    // Handle file upload if provided
+    if (file) {
+      const imagePath = `/uploads/${file.filename}`;
+      const targetPath = file.path;
+
+      try {
+        const faceAIService = require('../../services/faceAI/faceAI.service');
+        const face = await faceAIService.extractReferenceFace(targetPath);
+        user.referenceFace = {
+          embedding: face.embedding,
+          boundingBox: face.boundingBox,
+          detectionConfidence: face.confidence,
+          lastGeneratedAt: new Date(),
+          imagePath: imagePath,
+        };
+      } catch (err) {
+        console.warn(`[updateProfile] Biometric extraction note: ${err.message}`);
+        // If it's a strict single face validation error, throw to inform caller
+        if (err.statusCode) throw err;
+      }
+      user.profileImage = imagePath;
+    } else if (updateData.profileImage !== undefined && updateData.profileImage !== user.profileImage) {
       user.profileImage = updateData.profileImage;
-      // Invalidate existing reference face embedding so it is refreshed
       user.referenceFace = undefined;
     }
 

@@ -32,10 +32,26 @@ const userSchema = new mongoose.Schema(
     },
     accountType: {
       type: String,
-      enum: ['INDIVIDUAL', 'COMMERCIAL', 'INDUSTRIAL', 'OTHER'],
+      enum: ['INDIVIDUAL', 'COMMERCIAL'],
       default: 'INDIVIDUAL',
       uppercase: true,
       trim: true,
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: 'India',
+    },
+    currency: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: 'INR',
+    },
+    preferredLanguage: {
+      type: String,
+      trim: true,
+      default: 'en',
     },
     profileImage: {
       type: String,

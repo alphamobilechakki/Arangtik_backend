@@ -1,88 +1,53 @@
-# Arangtik Backend API Documentation & Developer Integration Guide
+# Arangtik Backend API Documentation
 
 **Base URL:** `http://localhost:8085/api` (or `/api/v1/`)
 
 ---
 
-## 🧭 Developer Integration Flow
-
-Frontend / Client application ko in steps ke anusaar APIs integrate karni chahiye:
+## 🧭 System Workflow Overview
 
 ```text
-========================================================================================
-[STEP 1] AUTHENTICATION (Quick Mobile Login)
-  ├─► POST /api/auth/send-otp           (WhatsApp OTP dispatch)
-  └─► POST /api/auth/verify-otp         (Verify OTP, login/register, receive JWT token)
-         │
-[STEP 2] PROFILE SETUP & REFERENCE BIOMETRIC
-  ├─► PATCH /api/auth/profile           (Set Profile: Name, Gender [MALE/FEMALE for AI Styling], Account Type [INDIVIDUAL/COMMERCIAL/INDUSTRIAL])
-  ├─► POST /api/auth/profile-image      (Upload Photo -> Auto 1-Face Validate -> Auto 128-d Biometric Embedding Cache)
-  └─► GET  /api/face-recognition/reference (Optional: Check biometric status / metadata)
-         │
-[STEP 3] CLOSETS & COLLECTIONS SETUP (Optional / Organizing)
-  ├─► POST /api/wardrobe/create-wardrobe (Create Closet, e.g. "My Wardrobe", "Mummy Wardrobe")
-  ├─► GET  /api/wardrobe/create-wardrobe (List all active closets)
-  ├─► POST /api/wardrobe/create-collection (Create tags/collections, e.g. "Festive", "Office")
-  └─► GET  /api/wardrobe/get-collections (Fetch collections)
-         │
-[STEP 4] AI VISION & SMART GALLERY PIPELINE
-  ├─► POST /api/face-recognition/scan    (Detect & match user face in gallery photo)
-  ├─► POST /api/wardrobe/analyze-photo   (AI extract garments, auto-crop, detect duplicates)
-  ├─► POST /api/wardrobe/scan-gallery-photo (Single photo: Face match + garment extraction)
-  ├─► POST /api/wardrobe/bulk-add-photos (Bulk 1-100 standalone dress photos ingestion)
-  └─► POST /api/wardrobe/ingest-gallery  (End-to-end: Face match -> AI clothes -> Wardrobe DB)
-         │
-[STEP 5] DIGITAL WARDROBE STORE MANAGEMENT
-  ├─► POST   /api/wardrobe/add-item           (Manual or verified item addition)
-  ├─► GET    /api/wardrobe/get-all-items      (Search, filter, paginate wardrobe items)
-  ├─► GET    /api/wardrobe/get-item-details/:id (Get single item complete details)
-  ├─► PATCH  /api/wardrobe/update-item/:id    (Edit item metadata/attributes)
-  ├─► PATCH  /api/wardrobe/update-item-status/:id (Update status: AVAILABLE, DIRTY, etc.)
-  └─► DELETE /api/wardrobe/delete-item/:id    (Soft archive or permanent delete)
-========================================================================================
+[STEP 1: AUTH]
+  ├─► POST /api/auth/send-otp           (Send WhatsApp OTP)
+  └─► POST /api/auth/verify-otp         (Verify OTP, Login/Register, Get JWT Token)
+
+[STEP 2: PROFILE & BIOMETRICS]
+  ├─► GET    /api/auth/profile          (Get Profile Info)
+  ├─► PATCH  /api/auth/profile          (Unified Profile Update: Text Details + Photo Upload)
+  ├─► GET    /api/face-recognition/reference (Check Biometric Status)
+  ├─► DELETE /api/face-recognition/reference (Delete Reference Face)
+  └─► POST   /api/face-recognition/scan (Scan Photo for User Face Match)
+
+[STEP 3: STORE CONTAINERS]
+  ├─► POST /api/wardrobe/create-wardrobe (Create Almari / Store Container)
+  └─► GET  /api/wardrobe/get-wardrobes   (List User Almaris / Stores)
+
+[STEP 4: AI VISION & DIGITIZATION]
+  ├─► POST /api/wardrobe/analyze-photo      (AI Garment Detection & Auto-Crop)
+  ├─► POST /api/wardrobe/scan-gallery-photo (Single Photo: Face Check + Clothes Extract)
+  ├─► POST /api/wardrobe/bulk-add-photos    (Bulk 1 to 100 Photos Auto-Digitize & Store)
+  └─► POST /api/wardrobe/ingest-gallery     (Batch Ingestion Pipeline)
+
+[STEP 5: DRESS & STORE ITEMS]
+  ├─► POST   /api/wardrobe/add-item           (Directly Add Item to Almari)
+  ├─► GET    /api/wardrobe/get-all-items      (Search, Filter & Paginate Items)
+  ├─► GET    /api/wardrobe/get-item-details/:id (Get Full Item Details)
+  ├─► PATCH  /api/wardrobe/update-item/:id    (Update Item Details)
+  └─► DELETE /api/wardrobe/delete-item/:id    (Delete Item from Almari)
 ```
 
 ---
 
-## 📌 Standard API Response Structure
-
-Sabhi API responses uniform format follow karte hain:
-
-### Success Response:
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Action completed successfully",
-  "data": { ... }
-}
-```
-
-### Error Response:
-```json
-{
-  "statusCode": 400,
-  "success": false,
-  "message": "Specific error description",
-  "errors": []
-}
-```
-
----
-
-# ========================================================================
-# ==================== STEP 0: SERVER HEALTH & STATUS ====================
-# ========================================================================
-
-## 1. Health Check & Root
+# SECTION 1: SYSTEM & HEALTH
 
 ### 1.1 Root Info
+- **Description:** Server health aur version check karne ke liye base endpoint.
 - **Method:** `GET`
 - **Endpoint:** `/`
-- **Access:** Public
-- **Description:** Server status aur basic metadata check karne ke liye.
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: None
+  - Body: None
+- **Response:**
 ```json
 {
   "name": "Arangtik Backend API",
@@ -95,48 +60,46 @@ Sabhi API responses uniform format follow karte hain:
 ---
 
 ### 1.2 Health Check
+- **Description:** Database connectivity aur server status check karta hai.
 - **Method:** `GET`
 - **Endpoint:** `/api/health`
-- **Access:** Public
-- **Description:** Backend service uptime aur health monitoring ke liye.
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: None
+  - Body: None
+- **Response:**
 ```json
 {
-  "status": "ok",
-  "message": "Arangtik Backend API is healthy"
+  "statusCode": 200,
+  "success": true,
+  "message": "System is healthy",
+  "data": {
+    "status": "UP",
+    "timestamp": "2026-10-05T17:10:00.000Z",
+    "services": {
+      "database": "connected",
+      "server": "running"
+    }
+  }
 }
 ```
 
 ---
 
-# ========================================================================
-# ==================== STEP 1: AUTHENTICATION & PROFILE ==================
-# ========================================================================
+# SECTION 2: AUTHENTICATION MODULE (`/api/auth`)
 
-## 2. Authentication Module (`/api/auth`)
-
-### 2.1 Send OTP (WhatsApp)
+### 2.1 Send WhatsApp OTP
+- **Description:** User ke WhatsApp mobile number par 6-digit login OTP bhejta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/auth/send-otp`
-- **Access:** Public
-- **Description:** WhatsApp par 4-digit OTP bhejta hai aur check karta hai ki user registered hai ya new.
-
-#### Request Headers:
-`Content-Type: application/json`
-
-#### Request Body:
+- **Request:**
+  - Headers: `Content-Type: application/json`
+  - Body:
 ```json
 {
-  "phone": "9876543210"
+  "phone": "919876543210"
 }
 ```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `phone` | `string` | Yes | 10-digit mobile number (country code optional, auto-formats to 91...) |
-
-#### Response `200 OK` (Success):
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -144,151 +107,112 @@ Sabhi API responses uniform format follow karte hain:
   "message": "OTP sent successfully to your WhatsApp number",
   "data": {
     "phone": "919876543210",
-    "isExistingUser": false,
-    "expiresInMinutes": 5,
-    "devOtp": "4821"
+    "expiresInSeconds": 300
   }
-}
-```
-*(Note: `devOtp` sirf development / testing environment me aata hai).*
-
-#### Response `400 Bad Request`:
-```json
-{
-  "statusCode": 400,
-  "success": false,
-  "message": "Please provide a valid 10-digit mobile number"
 }
 ```
 
 ---
 
-### 2.2 Verify OTP & Login / Register
+### 2.2 Verify OTP & Login
+- **Description:** WhatsApp OTP verify karke user ko login/register karta hai aur JWT access token return karta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/auth/verify-otp`
-- **Access:** Public
-- **Description:** OTP verify karke user ko login ya new account register karta hai aur JWT access token return karta hai.
-
-#### Request Headers:
-`Content-Type: application/json`
-
-#### Request Body:
+- **Request:**
+  - Headers: `Content-Type: application/json`
+  - Body:
 ```json
 {
-  "phone": "9876543210",
-  "otp": "4821",
+  "phone": "919876543210",
+  "otp": "123456",
   "name": "Rahul Sharma"
 }
 ```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `phone` | `string` | Yes | 10-digit mobile number |
-| `otp` | `string` | Yes | 4-digit OTP code |
-| `name` | `string` | Optional | User ka name (new user registration ke time) |
-
-#### Response `200 OK` (Success):
+- **Response:**
 ```json
 {
   "statusCode": 200,
   "success": true,
   "message": "Authentication successful",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY1ZjFhMmIzYzRkNWU2ZjdhOGI5YzBkMSIsInBob25lIjoiOTE5ODc2NTQzMjEwIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3MTIwMDAwMDB9...",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isNewUser": false,
     "user": {
       "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
       "name": "Rahul Sharma",
       "phone": "919876543210",
       "gender": "UNSPECIFIED",
       "accountType": "INDIVIDUAL",
+      "country": "India",
+      "currency": "INR",
+      "preferredLanguage": "en",
       "role": "user",
       "status": "active"
-    },
-    "isNewUser": true
+    }
   }
-}
-```
-
-#### Response `400 Bad Request` (Invalid OTP):
-```json
-{
-  "statusCode": 400,
-  "success": false,
-  "message": "Invalid or expired OTP"
-}
-```
-
-#### Response `403 Forbidden` (Account Blocked):
-```json
-{
-  "statusCode": 403,
-  "success": false,
-  "message": "Your account has been deactivated or blocked. Please contact support."
 }
 ```
 
 ---
 
-### 2.3 Get Current User Profile (`/me`)
+### 2.3 Get Current User Profile
+- **Description:** Logged-in user ka complete profile data (name, gender, accountType, country, currency, preferredLanguage, profileImage) aur biometric status fetch karta hai.
 - **Method:** `GET`
-- **Endpoint:** `/api/auth/me`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Logged-in user ki profile details fetch karta hai.
-
-#### Request Headers:
-- `Authorization: Bearer <JWT_TOKEN>`
-
-#### Response `200 OK` (Success):
+- **Endpoint:** `/api/auth/profile` *(or `/api/auth/me`)*
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Body: None
+- **Response:**
 ```json
 {
   "statusCode": 200,
   "success": true,
-  "message": "User profile fetched successfully",
+  "message": "Profile fetched successfully",
   "data": {
     "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "phone": "919876543210",
     "name": "Rahul Sharma",
+    "phone": "919876543210",
     "gender": "MALE",
     "accountType": "INDIVIDUAL",
+    "country": "India",
+    "currency": "INR",
+    "preferredLanguage": "en",
+    "profileImage": "/uploads/image-1718000000000.jpg",
+    "hasReferenceFace": true,
     "role": "user",
-    "status": "active",
-    "profileImage": "/uploads/image-1712000000000.jpg",
-    "createdAt": "2026-09-26T10:00:00.000Z",
-    "updatedAt": "2026-09-26T10:00:00.000Z"
+    "status": "active"
   }
 }
 ```
 
 ---
 
-### 2.4 Update Profile Details (Edit Profile)
+### 2.4 Update Profile (Text Details & Photo File)
+- **Description:** User profile details (name, gender, country, currency, language) update karta hai. Photo file (`image`) attach karne par automatically single clear face check karke 128-d reference face embedding generate aur save karta hai.
 - **Method:** `PATCH`
 - **Endpoint:** `/api/auth/profile`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ki profile details edit karta hai jaise Name, Gender (`MALE`/`FEMALE`/`OTHER`), Account Type (`INDIVIDUAL`/`COMMERCIAL`/`INDUSTRIAL`), aur Profile Image URL.
-
-#### Request Headers:
-- `Authorization: Bearer <JWT_TOKEN>`
-- `Content-Type: application/json`
-
-#### Request Body:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - **Option A (JSON - Text Only):** `Content-Type: application/json`
 ```json
 {
   "name": "Rahul Sharma",
   "gender": "MALE",
-  "accountType": "COMMERCIAL",
-  "profileImage": "/uploads/image-1712000000000.jpg"
+  "accountType": "INDIVIDUAL",
+  "country": "India",
+  "currency": "INR",
+  "preferredLanguage": "en"
 }
 ```
-
-| Field | Type | Required | Allowed Values | Description |
-|---|---|---|---|---|
-| `name` | `string` | Optional | Any valid string | User display name |
-| `gender` | `string` | Optional | `'MALE'`, `'FEMALE'`, `'OTHER'`, `'UNSPECIFIED'` | AI suggestion customization ke liye |
-| `accountType` | `string` | Optional | `'INDIVIDUAL'`, `'COMMERCIAL'`, `'INDUSTRIAL'`, `'OTHER'` | Individual person vs Commercial store vs Industrial setup |
-| `profileImage` | `string` | Optional | Image URL / path | Profile image link |
-
-#### Response `200 OK`:
+  - **Option B (Multipart Form-Data - Text + Photo File):** `Content-Type: multipart/form-data`
+    - `name` (text, optional): `"Rahul Sharma"`
+    - `gender` (text, optional): `"MALE"`
+    - `accountType` (text, optional): `"INDIVIDUAL"`
+    - `country` (text, optional): `"India"`
+    - `currency` (text, optional): `"INR"`
+    - `preferredLanguage` (text, optional): `"en"`
+    - `image` (file, optional): `profile_photo.jpg`
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -299,87 +223,26 @@ Sabhi API responses uniform format follow karte hain:
     "name": "Rahul Sharma",
     "phone": "919876543210",
     "gender": "MALE",
-    "accountType": "COMMERCIAL",
-    "role": "user",
-    "status": "active",
-    "profileImage": "/uploads/image-1712000000000.jpg",
-    "updatedAt": "2026-10-02T14:30:00.000Z"
+    "accountType": "INDIVIDUAL",
+    "country": "India",
+    "currency": "INR",
+    "preferredLanguage": "en",
+    "profileImage": "/uploads/image-1718000000000.jpg",
+    "status": "active"
   }
 }
 ```
 
 ---
 
-### 2.5 Upload Profile Photo & Auto-Register Face Biometric (1-Step Unified Setup)
-- **Method:** `POST`
-- **Endpoint:** `/api/auth/profile-image`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** **1-Step Unified API:** User ki profile photo upload karta hai, backend par automatically check karta hai ki photo me exactly 1 clear single face hai, aur sath hi 128-d reference face embedding generate karke database me cache kar deta hai. *(Frontend ko alag se validation ya embedding generation API call karne ki koi zaroorat nahi hai).*
-
-#### Request Headers:
-- `Authorization: Bearer <JWT_TOKEN>`
-- `Content-Type: multipart/form-data`
-
-#### Multipart Form Data:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `image` | `file` | Yes | Profile photo file (JPEG, PNG, WebP) |
-
-#### Response `200 OK` (Success):
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Profile image uploaded and reference face biometric registered successfully",
-  "data": {
-    "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "name": "Rahul Sharma",
-    "phone": "919876543210",
-    "role": "user",
-    "status": "active",
-    "profileImage": "/uploads/image-1712000000000-123456789.jpg",
-    "referenceFace": {
-      "hasReferenceFace": true,
-      "boundingBox": {
-        "x": 120,
-        "y": 80,
-        "width": 180,
-        "height": 220
-      },
-      "detectionConfidence": 0.9921,
-      "lastGeneratedAt": "2026-10-02T12:00:00.000Z"
-    }
-  }
-}
-```
-
-#### Response `422 Unprocessable Entity` (Multiple Faces in Photo):
-```json
-{
-  "statusCode": 422,
-  "success": false,
-  "message": "Multiple faces (2) detected in the profile image. Please upload a photo with only yourself."
-}
-```
-
-#### Response `422 Unprocessable Entity` (No Face Detected):
-```json
-{
-  "statusCode": 422,
-  "success": false,
-  "message": "No face detected in the profile image. Please upload a clear profile photo containing your face."
-}
-```
-
----
-
-### 2.6 Logout
+### 2.5 Logout
+- **Description:** User session logout karta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/auth/logout`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User session logout karta hai.
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Body: None
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -391,19 +254,16 @@ Sabhi API responses uniform format follow karte hain:
 
 ---
 
-# ========================================================================
-# ================= STEP 2: FACE RECOGNITION & BIOMETRICS ===============
-# ========================================================================
-
-## 3. Face Recognition Module (`/api/face-recognition` or `/api/v1/face-recognition`)
+# SECTION 3: FACE RECOGNITION & BIOMETRICS (`/api/face-recognition`)
 
 ### 3.1 Validate Reference Profile Photo
+- **Description:** Current profile photo ko check karta hai ki usme single clear face present hai ya nahi.
 - **Method:** `POST`
 - **Endpoint:** `/api/face-recognition/reference/validate`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ki existing profile photo ko scan karke verify karta hai ki usme exactly 1 clear face maujood hai ya nahi.
-
-#### Response `200 OK` (Valid Single Face):
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Body: None
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -411,101 +271,47 @@ Sabhi API responses uniform format follow karte hain:
   "message": "Profile image validated for face recognition",
   "data": {
     "isValid": true,
-    "profileImage": "/uploads/image-1712000000000.jpg",
+    "profileImage": "/uploads/image-1718000000000.jpg",
     "faceDetected": true,
-    "confidence": 0.9921,
-    "boundingBox": {
-      "x": 120,
-      "y": 80,
-      "width": 180,
-      "height": 220
-    },
+    "confidence": 0.992,
     "message": "Profile image contains a valid single reference face ready for recognition."
   }
 }
 ```
 
-#### Response `422 Unprocessable Entity` (Multiple Faces Detected):
-```json
-{
-  "statusCode": 422,
-  "success": false,
-  "message": "Multiple faces (2) detected in the profile image. Please upload a photo with only yourself."
-}
-```
-
 ---
 
-### 3.2 Generate / Refresh Reference Face Embedding
-- **Method:** `POST`
-- **Endpoint:** `/api/face-recognition/reference`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ki profile image se 128-d reference face embedding calculate karke secure database me cache karta hai.
-
-#### Response `200 OK`:
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Reference face embedding generated successfully",
-  "data": {
-    "hasReferenceFace": true,
-    "profileImage": "/uploads/image-1712000000000.jpg",
-    "boundingBox": {
-      "x": 120,
-      "y": 80,
-      "width": 180,
-      "height": 220
-    },
-    "detectionConfidence": 0.9921,
-    "lastGeneratedAt": "2026-10-02T12:00:00.000Z"
-  }
-}
-```
-
----
-
-### 3.3 Get Reference Face Status
+### 3.2 Get Reference Face Biometric Status
+- **Description:** User ke registered biometric embedding ki metadata aur generation timestamp fetch karta hai.
 - **Method:** `GET`
 - **Endpoint:** `/api/face-recognition/reference`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Reference face embedding status aur metadata retrieve karta hai.
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Body: None
+- **Response:**
 ```json
 {
   "statusCode": 200,
   "success": true,
-  "message": "Reference face status retrieved successfully",
+  "message": "Reference face biometric status fetched",
   "data": {
-    "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "hasProfileImage": true,
-    "profileImage": "/uploads/image-1712000000000.jpg",
     "hasReferenceFace": true,
-    "referenceMetadata": {
-      "boundingBox": {
-        "x": 120,
-        "y": 80,
-        "width": 180,
-        "height": 220
-      },
-      "detectionConfidence": 0.9921,
-      "lastGeneratedAt": "2026-10-02T12:00:00.000Z",
-      "imagePath": "/uploads/image-1712000000000.jpg"
-    }
+    "profileImage": "/uploads/image-1718000000000.jpg",
+    "lastGeneratedAt": "2026-10-05T12:00:00.000Z"
   }
 }
 ```
 
 ---
 
-### 3.4 Delete Reference Face Embedding
+### 3.3 Delete Reference Face Biometric
+- **Description:** Registered reference face embedding delete karta hai.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/face-recognition/reference`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ka cached reference face embedding delete karta hai.
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Body: None
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -519,105 +325,55 @@ Sabhi API responses uniform format follow karte hain:
 
 ---
 
-### 3.5 Scan Single Gallery Photo for Face Matching
+### 3.4 Scan Photo for Face Matching
+- **Description:** Kisi bhi photo me user ka face match check karta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/face-recognition/scan`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Ek gallery photo me sabhi chehre scan karke authenticated user ke reference face ke sath Euclidean distance & cosine similarity compare karta hai.
-
-#### Request Options:
-1. **Multipart Form-Data:** `image` file
-2. **JSON Body:** `{ "imageUrl": "/uploads/photo.jpg" }`
-3. **Query Parameter (Optional):** `?threshold=0.55` (Default: `0.60`)
-
-#### Response `200 OK` (User Face Matched):
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `image` (file, required): Photo file to match
+    - `threshold` (number, optional): Distance threshold (Default: `0.55`)
+- **Response:**
 ```json
 {
   "statusCode": 200,
   "success": true,
   "message": "Gallery image scan completed",
   "data": {
-    "imageId": "image-1712000045000-987654321.jpg",
     "matched": true,
-    "facesDetected": 2,
+    "facesDetected": 1,
     "matchedFaces": [
       {
-        "faceIndex": 0,
-        "confidence": 0.9854,
-        "similarity": 0.78,
-        "distance": 0.312,
-        "boundingBox": {
-          "x": 140,
-          "y": 95,
-          "width": 210,
-          "height": 245
-        }
+        "confidence": 0.985,
+        "similarity": 0.88,
+        "distance": 0.28
       }
-    ],
-    "allDetectedFaces": [
-      {
-        "faceIndex": 0,
-        "detectionConfidence": 0.9854,
-        "distance": 0.312,
-        "cosineSimilarity": 0.9512,
-        "similarity": 0.78,
-        "matched": true,
-        "boundingBox": {
-          "x": 140,
-          "y": 95,
-          "width": 210,
-          "height": 245
-        }
-      },
-      {
-        "faceIndex": 1,
-        "detectionConfidence": 0.924,
-        "distance": 0.895,
-        "cosineSimilarity": 0.599,
-        "similarity": 0.254,
-        "matched": false,
-        "boundingBox": {
-          "x": 480,
-          "y": 110,
-          "width": 190,
-          "height": 230
-        }
-      }
-    ],
-    "thresholdUsed": 0.6,
-    "processingTimeMs": 312
+    ]
   }
 }
 ```
 
 ---
 
-# ========================================================================
-# ================= STEP 3: CLOSETS & COLLECTIONS =======================
-# ========================================================================
+# SECTION 4: STORE CONTAINERS (ALMARI / CLOSETS) (`/api/wardrobe`)
 
-## 4. Closets & Collections Management (`/api/wardrobe` or `/api/v1/wardrobe`)
-
-### 4.1 Create Wardrobe / Closet
+### 4.1 Create Wardrobe / Almari Container
+- **Description:** User ke liye naya Almari container create karta hai (e.g. "Master Bedroom Almari", "Mummy ki Almari"). Backend silently `storeType: 'WARDROBE'` set karta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/create-wardrobe`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Ek naya Wardrobe container (jaise "My Wardrobe", "Mummy Wardrobe", "Summer Capsule") create karta hai. Optional photo upload karne par closet owner ka face embedding automatically extract ho jata hai.
-
-#### Request Headers:
-- `Authorization: Bearer <JWT_TOKEN>`
-- `Content-Type: multipart/form-data` ya `application/json`
-
-#### Request Fields:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | `string` | Yes | Closet ka name (e.g. "Main Bedroom Wardrobe") |
-| `type` | `string` | No | `'PERSONAL'`, `'FAMILY'`, `'CAPSULE'`, `'SHARED'`, `'SEASONAL'`, `'OTHER'` (Default: `PERSONAL`) |
-| `ownerName` | `string` | No | Closet owner name |
-| `isDefault` | `boolean` | No | Primary default wardrobe banana hai ya nahi (`true`/`false`) |
-| `coverImage` / `photo` / `image` | `file` / `string` | No | Cover photo ya owner face photo |
-
-#### Response `201 Created`:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: application/json` (or `multipart/form-data`)
+  - Body:
+```json
+{
+  "name": "Master Bedroom Almari",
+  "ownerName": "Rahul Sharma",
+  "type": "PERSONAL",
+  "isDefault": true
+}
+```
+- **Response:**
 ```json
 {
   "statusCode": 201,
@@ -626,27 +382,27 @@ Sabhi API responses uniform format follow karte hain:
   "data": {
     "_id": "674f1b2c3d4e5f6a7b8c9d10",
     "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "name": "Main Bedroom Wardrobe",
+    "name": "Master Bedroom Almari",
+    "storeType": "WARDROBE",
     "type": "PERSONAL",
     "ownerName": "Rahul Sharma",
-    "coverImage": "/uploads/closet-1790000.jpg",
     "isDefault": true,
     "isActive": true,
-    "createdAt": "2026-10-02T14:00:00.000Z",
-    "updatedAt": "2026-10-02T14:00:00.000Z"
+    "createdAt": "2026-10-05T14:00:00.000Z"
   }
 }
 ```
 
 ---
 
-### 4.2 Get All Wardrobes / Closets
+### 4.2 Get All Wardrobes / Stores
+- **Description:** User ki sabhi active Almaris aur Stores ki list fetch karta hai.
 - **Method:** `GET`
-- **Endpoint:** `/api/wardrobe/create-wardrobe` *(or `/api/wardrobe/get-wardrobes`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Logged-in user ke sabhi active closets fetch karta hai.
-
-#### Response `200 OK`:
+- **Endpoint:** `/api/wardrobe/get-wardrobes`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Query Parameters (Optional): `?storeType=WARDROBE`
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -656,11 +412,12 @@ Sabhi API responses uniform format follow karte hain:
     {
       "_id": "674f1b2c3d4e5f6a7b8c9d10",
       "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-      "name": "Main Bedroom Wardrobe",
+      "name": "Master Bedroom Almari",
+      "storeType": "WARDROBE",
       "type": "PERSONAL",
       "isDefault": true,
       "isActive": true,
-      "createdAt": "2026-10-02T14:00:00.000Z"
+      "createdAt": "2026-10-05T14:00:00.000Z"
     }
   ]
 }
@@ -668,96 +425,17 @@ Sabhi API responses uniform format follow karte hain:
 
 ---
 
-### 4.3 Create Collection Inside a Wardrobe
+# SECTION 5: AI FASHION VISION & DIGITIZATION (`/api/wardrobe`)
+
+### 5.1 Analyze Single Photo (AI Vision & Auto-Crop)
+- **Description:** Photo upload karke AI se garments recognize aur segment karta hai, transparent cropped images banata hai aur color/fabric/occasion extract karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/create-collection` *(Alias: `/collections`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Kisi specific wardrobe ke andar Collection/Album create karta hai (e.g. "Festive Wear", "Office Formals").
-
-#### Request Body (`application/json`):
-```json
-{
-  "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
-  "name": "Office Formals",
-  "type": "CUSTOM",
-  "description": "Shirts, blazers and trousers for corporate work",
-  "colorTheme": {
-    "primary": "#1E3A8A",
-    "secondary": "#93C5FD",
-    "accent": "#F59E0B"
-  },
-  "season": ["ALL_SEASON"],
-  "occasion": ["OFFICE", "FORMAL"],
-  "style": ["FORMAL", "SMART_CASUAL"]
-}
-```
-
-#### Response `201 Created`:
-```json
-{
-  "statusCode": 201,
-  "success": true,
-  "message": "Collection created successfully",
-  "data": {
-    "_id": "674f1b2c3d4e5f6a7b8c9d20",
-    "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
-    "name": "Office Formals",
-    "type": "CUSTOM",
-    "isActive": true,
-    "createdAt": "2026-10-02T14:15:00.000Z"
-  }
-}
-```
-
----
-
-### 4.4 Get Collections
-- **Method:** `GET`
-- **Endpoint:** `/api/wardrobe/get-collections` *(Alias: `/collections`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Query Parameter:** `?wardrobeId=674f1b2c3d4e5f6a7b8c9d10` (Optional filter)
-- **Description:** User ke sabhi collections fetch karta hai.
-
-#### Response `200 OK`:
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Collections fetched successfully",
-  "data": [
-    {
-      "_id": "674f1b2c3d4e5f6a7b8c9d20",
-      "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-      "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
-      "name": "Office Formals",
-      "type": "CUSTOM",
-      "isActive": true
-    }
-  ]
-}
-```
-
----
-
-# ========================================================================
-# ================= STEP 4: AI SCAN & SMART GALLERY INGESTION ===========
-# ========================================================================
-
-## 5. AI Vision & Ingestion Module (`/api/wardrobe` or `/api/v1/wardrobe`)
-
-### 5.1 Analyze Single Photo (AI Garment Recognition & Crop)
-- **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/analyze-photo` *(Alias: `/analyze`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Photo upload karke usme maujood kapde recognize karta hai, auto-crop karke transparent/segmented images banata hai, aur user ke existing wardrobe ke sath similarity match evaluate karta hai.
-
-#### Request Form-Data:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `photo` | `file` | Yes | Uploaded photo file (JPEG, PNG, WebP) |
-
-#### Response `200 OK`:
+- **Endpoint:** `/api/wardrobe/analyze-photo`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `photo` (file, required): Garment image file
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -766,54 +444,21 @@ Sabhi API responses uniform format follow karte hain:
   "data": {
     "originalImageUrl": "/uploads/photo-1790589292516.jpg",
     "sourceImageHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "detectedItemsCount": 2,
+    "detectedItemsCount": 1,
     "analysis": [
       {
-        "tempDetectionId": "det_1",
         "name": "Navy Blue Slim Fit Linen Shirt",
         "category": "UPPER_WEAR",
         "subCategory": "Shirt",
-        "croppedImageUrl": "/uploads/crops/crop-1790589292535-0-2425.webp",
+        "croppedImageUrl": "/uploads/crops/crop-1790589292535-0.webp",
         "attributes": {
           "primaryColor": "Navy Blue",
-          "secondaryColors": ["Dark Blue"],
           "pattern": "SOLID",
           "fabric": "LINEN",
           "fit": "SLIM_FIT",
           "sleeveLength": "FULL_SLEEVE",
           "occasions": ["OFFICE", "FORMAL", "PARTY"],
           "seasons": ["SUMMER", "ALL_SEASON"]
-        },
-        "matchResult": {
-          "status": "NEW_ITEM",
-          "confidenceScore": 0.1,
-          "message": "New dress detected! Ready to add to wardrobe.",
-          "existingItem": null,
-          "candidateMatches": []
-        }
-      },
-      {
-        "tempDetectionId": "det_2",
-        "name": "Light Blue Denim Jeans",
-        "category": "LOWER_WEAR",
-        "subCategory": "Jeans",
-        "croppedImageUrl": "/uploads/crops/crop-1790589292558-1-9800.webp",
-        "attributes": {
-          "primaryColor": "Light Blue",
-          "pattern": "SOLID",
-          "fabric": "DENIM",
-          "fit": "REGULAR_FIT",
-          "occasions": ["CASUAL", "DAILY"]
-        },
-        "matchResult": {
-          "status": "EXACT_MATCH",
-          "confidenceScore": 1.0,
-          "message": "This dress is already registered in your wardrobe as \"Light Blue Denim Jeans\".",
-          "existingItem": {
-            "_id": "6aba317270f26b72d852616f",
-            "name": "Light Blue Denim Jeans",
-            "category": "LOWER_WEAR"
-          }
         }
       }
     ]
@@ -823,21 +468,17 @@ Sabhi API responses uniform format follow karte hain:
 
 ---
 
-### 5.2 Scan Single Gallery Photo (Face Verification + Clothes Extract)
+### 5.2 Scan Gallery Photo (Face Check + Garments Extract)
+- **Description:** Single photo me user face match verify karta hai aur matching kapde extract karke Almari me link karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/scan-gallery-photo` *(Alias: `/scan`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Gallery photo me authenticated user ka face check karta hai. Agar user match hota hai to keval uske dwara pehne hue garments extract karta hai. Agar user match nahi hota to unnecessary analysis skip kar deta hai.
-
-#### Request Form-Data:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `photo` / `image` | `file` | Yes | Gallery photo file |
-| `threshold` | `number` | No | Optional face matching distance threshold (Default: `0.50`) |
-| `wardrobeId` | `string` | No | Target wardrobe ID |
-| `collectionId` | `string` | No | Target collection ID |
-
-#### Response `200 OK` (User Found):
+- **Endpoint:** `/api/wardrobe/scan-gallery-photo`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `photo` (file, required): Gallery image file
+    - `wardrobeId` (text, optional): Target Almari ID
+    - `threshold` (number, optional): Face matching threshold (Default: `0.50`)
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -845,62 +486,33 @@ Sabhi API responses uniform format follow karte hain:
   "message": "User matched successfully! Extracted 1 clothing items.",
   "data": {
     "matched": true,
-    "matchedFace": {
-      "confidence": 0.9999,
-      "similarity": 1.0,
-      "distance": 0,
-      "boundingBox": { "x": 420, "y": 180, "width": 160, "height": 160 }
-    },
     "facesDetected": 1,
     "originalImageUrl": "/uploads/photo-1790938133930.png",
     "detectedItemsCount": 1,
     "items": [
       {
-        "tempDetectionId": "det_1",
-        "name": "Navy Blue Slim Fit Linen Shirt",
+        "name": "Navy Blue Linen Shirt",
         "category": "UPPER_WEAR",
         "subCategory": "Shirt",
-        "croppedImageUrl": "/uploads/crops/seg-0-1790943556926.webp",
-        "matchType": "NEW_ITEM"
+        "croppedImageUrl": "/uploads/crops/seg-0-1790943556926.webp"
       }
     ]
   }
 }
 ```
 
-#### Response `200 OK` (User Not in Photo):
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "User face not detected in this photo. Skipped clothing extraction.",
-  "data": {
-    "matched": false,
-    "reason": "USER_NOT_FOUND",
-    "facesDetected": 1,
-    "originalImageUrl": "/uploads/photo-1790941677639.jpg",
-    "items": []
-  }
-}
-```
-
 ---
 
-### 5.3 Bulk Add Dress Photos (1 to 100 Standalone Photos)
+### 5.3 Bulk Add Dress Photos (1 to 100 Photos)
+- **Description:** Multiple kapdo ki photos ko batch me AI recognize karke sidha target Almari me store kar deta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/bulk-add-photos`
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Multiple standalone kapdo ki photos ko ek sath batch me AI analysis karke direct wardrobe me add karta hai.
-
-#### Request Form-Data:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `photos` | `file[]` | Yes | Array of image files (1 to 100 files) |
-| `wardrobeId` | `string` | No | Target wardrobe ID |
-| `collectionId` | `string` | No | Target collection ID |
-| `storagePlace` | `string` | No | Storage location (Default: `"Main Closet"`) |
-
-#### Response `200 OK`:
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `photos` (file array, required): Multiple image files (1 to 100)
+    - `wardrobeId` (text, optional): Target Almari ID
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -908,34 +520,31 @@ Sabhi API responses uniform format follow karte hain:
   "message": "Bulk processing complete: 5 items added to wardrobe, 1 existing items matched",
   "data": {
     "totalImagesProcessed": 6,
-    "newItemsCreated": [ ... ],
-    "existingMatches": [ ... ]
+    "newItemsCreated": [
+      {
+        "_id": "6aba317270f26b72d852616f",
+        "name": "Navy Blue Linen Shirt",
+        "category": "UPPER_WEAR"
+      }
+    ],
+    "existingMatches": []
   }
 }
 ```
 
 ---
 
-### 5.4 Ingest Entire Gallery (End-to-End Pipeline)
+### 5.4 Ingest Gallery Photos (Batch Ingestion Pipeline)
+- **Description:** Puri gallery photos upload karke user face filter lagata hai aur clothes automatically Almari me store karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/ingest-gallery` *(Alias: `/api/face-recognition/scan-and-ingest`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ki gallery photos (up to 100) upload karke pura pipeline chalata hai:
-  1. User face detect & verify karta hai.
-  2. Matched photos se kapde extract karta hai.
-  3. Jo kapda pehle se wardrobe me hai uske liye wear log update karta hai.
-  4. Jo naya kapda hai use automatically `WardrobeItem` database me store karta hai.
-
-#### Request Form-Data:
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `photos` | `file[]` | Yes | Array of image files |
-| `wardrobeId` | `string` | No | Target wardrobe ID |
-| `collectionId` | `string` | No | Target collection ID |
-| `autoCreateNewItems` | `boolean` | No | Automatic DB item creation (`true`/`false`, default: `true`) |
-| `threshold` | `number` | No | Face match threshold (Default: `0.50`) |
-
-#### Response `200 OK`:
+- **Endpoint:** `/api/wardrobe/ingest-gallery`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `photos` (file array, required): Gallery photos
+    - `wardrobeId` (text, optional): Target Almari ID
+    - `autoCreateNewItems` (boolean, optional): Default: `true`
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -947,38 +556,9 @@ Sabhi API responses uniform format follow karte hain:
     "unmatchedImagesCount": 1,
     "newWardrobeItemsCreated": [
       {
-        "_id": "674f1b2c3d4e5f6a7b8c9d01",
-        "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-        "name": "Navy Blue Slim Fit Shirt",
-        "category": "UPPER_WEAR",
-        "subCategory": "Shirt",
-        "images": [
-          {
-            "url": "/uploads/crops/crop-179093-0-1234.webp",
-            "isPrimary": true
-          }
-        ],
-        "attributes": {
-          "primaryColor": "Navy Blue",
-          "fabric": "LINEN",
-          "fit": "SLIM_FIT"
-        },
-        "currentStatus": "AVAILABLE",
-        "createdAt": "2026-10-02T15:28:00.000Z"
-      }
-    ],
-    "wearLogsCreated": [],
-    "details": [
-      {
-        "filename": "gallery_1.jpg",
-        "isUserFound": true,
-        "garmentsDetected": 2,
-        "newItemsAdded": 2
-      },
-      {
-        "filename": "landscape.jpg",
-        "isUserFound": false,
-        "message": "User face not detected in this photo. Skipped wardrobe extraction."
+        "_id": "6aba317270f26b72d852616f",
+        "name": "Navy Blue Linen Shirt",
+        "category": "UPPER_WEAR"
       }
     ]
   }
@@ -987,73 +567,42 @@ Sabhi API responses uniform format follow karte hain:
 
 ---
 
-# ========================================================================
-# ================= STEP 5: DIGITAL WARDROBE STORE ======================
-# ========================================================================
+# SECTION 6: DRESS & STORE ITEMS MANAGEMENT (`/api/wardrobe`)
 
-## 6. Wardrobe Store & Items Management (`/api/wardrobe` or `/api/v1/wardrobe`)
-
-### 6.1 Add Item Manually
+### 6.1 Add Item Directly to Almari
+- **Description:** Naya dress item sidha targeted Almari me store karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/add-item` *(Alias: `/items`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ke digital wardrobe me naya kapda ya accessory add karta hai.
-
-#### Request Body (`application/json`):
+- **Endpoint:** `/api/wardrobe/add-item`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: application/json`
+  - Body:
 ```json
 {
-  "name": "Navy Blue Formal Linen Shirt",
   "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
-  "collectionId": "674f1b2c3d4e5f6a7b8c9d20",
-  "storeType": "WARDROBE",
+  "name": "Navy Blue Formal Linen Shirt",
   "category": "UPPER_WEAR",
   "subCategory": "Shirt",
+  "color": "Navy Blue",
+  "fabric": "LINEN",
+  "pattern": "SOLID",
+  "fit": "SLIM_FIT",
+  "sleeveLength": "FULL_SLEEVE",
+  "occasion": ["OFFICE", "FORMAL", "PARTY"],
+  "season": ["SUMMER", "ALL_SEASON"],
   "images": [
     {
-      "url": "https://images.arangtik.com/wardrobe/shirt_01.jpg",
+      "url": "/uploads/crops/shirt.webp",
       "isPrimary": true
     }
   ],
   "attributes": {
-    "primaryColor": "Navy Blue",
-    "secondaryColors": ["Dark Blue"],
-    "pattern": "SOLID",
-    "fabric": "LINEN",
-    "gender": "MEN",
-    "size": "40",
     "brand": "Zara",
-    "fit": "SLIM_FIT",
-    "sleeveLength": "FULL_SLEEVE",
-    "neckline": "Collar",
-    "occasions": ["OFFICE", "FORMAL", "PARTY"],
-    "seasons": ["SUMMER", "ALL_SEASON"]
-  },
-  "storageLocation": {
-    "storagePlace": "Master Bedroom Closet - Shelf 2"
-  },
-  "laundryCare": {
-    "washTypePreferred": "HAND_WASH",
-    "ironPreferred": true,
-    "careInstructions": "Use mild detergent"
+    "size": "40"
   },
   "tags": ["formal", "linen", "blue", "office"]
 }
 ```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | `string` | Yes | Item display name |
-| `category` | `string` | Yes | Category (`UPPER_WEAR`, `LOWER_WEAR`, `TRADITIONAL`, `FOOTWEAR`, `OUTERWEAR`, etc.) |
-| `subCategory` | `string` | No | Sub-type (`Shirt`, `Jeans`, `Kurta`, etc.) |
-| `wardrobeId` | `string` | No | Target Wardrobe ID |
-| `collectionId` | `string` | No | Target Collection ID |
-| `images` | `array` | No | Array of image objects `[{ url, isPrimary }]` |
-| `attributes` | `object` | No | Dynamic attributes bag (`primaryColor`, `fabric`, `brand`, etc.) |
-| `currentStatus` | `string` | No | `AVAILABLE`, `IN_USE`, `DIRTY`, `IN_LAUNDRY`, `LENT_OUT`, `IN_REPAIR`, `ARCHIVED` (Default: `AVAILABLE`) |
-| `storageLocation` | `object` | No | `{ storagePlace: "Shelf 2" }` |
-| `tags` | `array` | No | Keywords array |
-
-#### Response `201 Created`:
+- **Response:**
 ```json
 {
   "statusCode": 201,
@@ -1066,38 +615,40 @@ Sabhi API responses uniform format follow karte hain:
     "name": "Navy Blue Formal Linen Shirt",
     "category": "UPPER_WEAR",
     "subCategory": "Shirt",
-    "currentStatus": "AVAILABLE",
-    "createdAt": "2026-09-28T09:20:50.125Z"
+    "color": "Navy Blue",
+    "fabric": "LINEN",
+    "images": [
+      {
+        "url": "/uploads/crops/shirt.webp",
+        "isPrimary": true
+      }
+    ],
+    "isFavorite": false,
+    "createdAt": "2026-10-05T14:30:00.000Z"
   }
 }
 ```
 
 ---
 
-### 6.2 Get All Items (Filter, Search & Paginate)
+### 6.2 Get All Items (Search, Filter & Pagination)
+- **Description:** Almari items ko category, color, occasion, season, favorite, aur search keyword ke hisaab se filter aur paginate karke fetch karta hai.
 - **Method:** `GET`
-- **Endpoint:** `/api/wardrobe/get-all-items` *(Aliases: `/get-items`, `/items`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** User ke wardrobe items ki list fetch karta hai. Search aur filtering support karta hai.
-
-#### Query Parameters:
-| Parameter | Type | Description | Example |
-|---|---|---|---|
-| `wardrobeId` | `string` | Specific closet filter | `674f1b2c...` |
-| `collectionId` | `string` | Specific collection filter | `674f1b2c...` |
-| `category` | `string` | Category filter | `UPPER_WEAR` |
-| `subCategory` | `string` | Sub-category filter | `Shirt` |
-| `status` | `string` | Operational status | `AVAILABLE`, `DIRTY` |
-| `color` | `string` | Color filter | `Blue` |
-| `occasion` | `string` | Occasion filter | `OFFICE` |
-| `season` | `string` | Season filter | `SUMMER` |
-| `favorite` | `boolean` | Favorites only | `true` |
-| `search` | `string` | Keyword search in name, brand, tags | `zara linen` |
-| `sort` | `string` | `newest`, `oldest`, `mostWorn`, `lastWorn` | `newest` |
-| `page` | `number` | Page number (Default: `1`) | `1` |
-| `limit` | `number` | Items per page (Default: `20`, Max: `100`) | `20` |
-
-#### Response `200 OK`:
+- **Endpoint:** `/api/wardrobe/get-all-items`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - Query Parameters:
+    - `wardrobeId` (optional): Filter by specific Almari ID (e.g. `674f1b2c3d4e5f6a7b8c9d10`)
+    - `category` (optional): Filter category (e.g. `UPPER_WEAR`, `TRADITIONAL`, `FOOTWEAR`)
+    - `subCategory` (optional): Filter subcategory (e.g. `Kurta`, `Jeans`, `Shirt`)
+    - `color` (optional): Filter color (e.g. `Navy Blue`, `Black`)
+    - `occasion` (optional): Filter occasion (e.g. `FESTIVE`, `OFFICE`, `CASUAL`)
+    - `season` (optional): Filter season (e.g. `SUMMER`, `WINTER`)
+    - `favorite` (optional): Filter favorites (`true` / `false`)
+    - `search` (optional): Search keyword (e.g. `zara linen`)
+    - `page` (optional): Page number (Default: `1`)
+    - `limit` (optional): Page limit (Default: `20`)
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -1108,25 +659,20 @@ Sabhi API responses uniform format follow karte hain:
       {
         "_id": "6aba317270f26b72d852616f",
         "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
+        "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
         "name": "Navy Blue Formal Linen Shirt",
         "category": "UPPER_WEAR",
         "subCategory": "Shirt",
+        "color": "Navy Blue",
+        "fabric": "LINEN",
         "images": [
           {
-            "url": "https://images.arangtik.com/wardrobe/shirt_01.jpg",
+            "url": "/uploads/crops/shirt.webp",
             "isPrimary": true
           }
         ],
-        "attributes": {
-          "primaryColor": "Navy Blue",
-          "fabric": "LINEN",
-          "brand": "Zara",
-          "fit": "SLIM_FIT"
-        },
-        "currentStatus": "AVAILABLE",
         "isFavorite": false,
-        "wearCount": 0,
-        "createdAt": "2026-09-28T09:20:50.125Z"
+        "createdAt": "2026-10-05T14:30:00.000Z"
       }
     ],
     "pagination": {
@@ -1144,12 +690,13 @@ Sabhi API responses uniform format follow karte hain:
 ---
 
 ### 6.3 Get Item Details by ID
+- **Description:** Item ID ke zariye kapde ki complete details, attributes, aur images fetch karta hai.
 - **Method:** `GET`
-- **Endpoint:** `/api/wardrobe/get-item-details/:id` *(Aliases: `/get-item/:id`, `/items/:id`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Kisi ek kapde ki complete information fetch karta hai.
-
-#### Response `200 OK`:
+- **Endpoint:** `/api/wardrobe/get-item-details/:id`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - URL Params: `id` (e.g. `6aba317270f26b72d852616f`)
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -1160,33 +707,29 @@ Sabhi API responses uniform format follow karte hain:
     "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
     "wardrobeId": "674f1b2c3d4e5f6a7b8c9d10",
     "name": "Navy Blue Formal Linen Shirt",
-    "storeType": "WARDROBE",
     "category": "UPPER_WEAR",
     "subCategory": "Shirt",
+    "color": "Navy Blue",
+    "fabric": "LINEN",
+    "pattern": "SOLID",
+    "fit": "SLIM_FIT",
+    "sleeveLength": "FULL_SLEEVE",
+    "occasion": ["OFFICE", "FORMAL"],
+    "season": ["SUMMER", "ALL_SEASON"],
     "images": [
       {
-        "url": "https://images.arangtik.com/wardrobe/shirt_01.jpg",
+        "url": "/uploads/crops/shirt.webp",
         "isPrimary": true
       }
     ],
     "attributes": {
-      "primaryColor": "Navy Blue",
-      "pattern": "SOLID",
-      "fabric": "LINEN",
-      "brand": "Zara"
+      "brand": "Zara",
+      "size": "40"
     },
-    "currentStatus": "AVAILABLE",
-    "currentLocation": {
-      "storagePlace": "Master Bedroom Closet - Shelf 2"
-    },
-    "laundryCare": {
-      "washTypePreferred": "HAND_WASH",
-      "ironPreferred": true
-    },
-    "wearCount": 0,
-    "tags": ["formal", "linen", "blue", "office"],
-    "createdAt": "2026-09-28T09:20:50.125Z",
-    "updatedAt": "2026-09-28T09:20:50.125Z"
+    "tags": ["formal", "linen", "blue"],
+    "isFavorite": false,
+    "createdAt": "2026-10-05T14:30:00.000Z",
+    "updatedAt": "2026-10-05T14:30:00.000Z"
   }
 }
 ```
@@ -1194,27 +737,26 @@ Sabhi API responses uniform format follow karte hain:
 ---
 
 ### 6.4 Update Wardrobe Item
+- **Description:** Item ke attributes, name, fabric, favorite status, tags update karta hai.
 - **Method:** `PATCH`
-- **Endpoint:** `/api/wardrobe/update-item/:id` *(Alias: `/items/:id`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Existing wardrobe item ke metadata, attributes, tags, images ya storage location ko update karta hai.
-
-#### Request Body (`application/json`):
+- **Endpoint:** `/api/wardrobe/update-item/:id`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: application/json`
+  - URL Params: `id` (e.g. `6aba317270f26b72d852616f`)
+  - Body:
 ```json
 {
   "name": "Navy Blue Royal Linen Shirt (Updated)",
+  "color": "Navy Blue",
+  "fabric": "PURE_LINEN",
+  "isFavorite": true,
   "attributes": {
-    "brand": "Zara Man Exclusive",
-    "fit": "SLIM_FIT"
-  },
-  "storageLocation": {
-    "storagePlace": "Master Bedroom Wardrobe - Top Shelf"
+    "brand": "Zara Man Exclusive"
   },
   "tags": ["formal", "linen", "blue", "exclusive"]
 }
 ```
-
-#### Response `200 OK`:
+- **Response:**
 ```json
 {
   "statusCode": 200,
@@ -1223,107 +765,60 @@ Sabhi API responses uniform format follow karte hain:
   "data": {
     "_id": "6aba317270f26b72d852616f",
     "name": "Navy Blue Royal Linen Shirt (Updated)",
-    "updatedAt": "2026-09-28T09:58:20.123Z"
+    "fabric": "PURE_LINEN",
+    "isFavorite": true,
+    "updatedAt": "2026-10-05T14:45:00.000Z"
   }
 }
 ```
 
 ---
 
-### 6.5 Quick Update Item Status
-- **Method:** `PATCH`
-- **Endpoint:** `/api/wardrobe/update-item-status/:id` *(Alias: `/items/:id/status`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Description:** Item ka status quick change karta hai (`AVAILABLE`, `IN_USE`, `DIRTY`, `IN_LAUNDRY`, `LENT_OUT`, `IN_REPAIR`, `ARCHIVED`).
-
-#### Request Body (`application/json`):
-```json
-{
-  "status": "DIRTY"
-}
-```
-
-#### Response `200 OK`:
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Item status updated to DIRTY successfully",
-  "data": {
-    "_id": "6aba317270f26b72d852616f",
-    "name": "Navy Blue Royal Linen Shirt",
-    "currentStatus": "DIRTY",
-    "updatedAt": "2026-09-28T09:59:10.456Z"
-  }
-}
-```
-
----
-
-### 6.6 Delete / Archive Item
+### 6.5 Delete Item from Wardrobe
+- **Description:** Almari se kapde ko delete karta hai.
 - **Method:** `DELETE`
-- **Endpoint:** `/api/wardrobe/delete-item/:id` *(Alias: `/items/:id`)*
-- **Access:** Private (`Bearer <JWT_TOKEN>`)
-- **Query Parameter:** `?permanent=true` (Optional: Permanent deletion ke liye. Agar omit kiya to soft-archive ho jayega).
-
-#### Response `200 OK` (Soft Archived):
+- **Endpoint:** `/api/wardrobe/delete-item/:id`
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`
+  - URL Params: `id` (e.g. `6aba317270f26b72d852616f`)
+- **Response:**
 ```json
 {
   "statusCode": 200,
   "success": true,
-  "message": "Wardrobe item deleted/archived successfully",
+  "message": "Wardrobe item deleted successfully",
   "data": {
     "deleted": true,
-    "archived": true
-  }
-}
-```
-
-#### Response `200 OK` (Permanent Deleted):
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Wardrobe item deleted/archived successfully",
-  "data": {
-    "deleted": true,
-    "permanent": true
+    "itemId": "6aba317270f26b72d852616f"
   }
 }
 ```
 
 ---
 
-# ========================================================================
-# ==================== SUMMARY OF IMPLEMENTED ENDPOINTS ==================
-# ========================================================================
+# SECTION 7: SUMMARY OF ALL ACTIVE API ENDPOINTS
 
-| Module | Method | Endpoint & Aliases | Purpose | Access |
+| # | Description | Method | Endpoint | Auth |
 |---|---|---|---|---|
-| **System** | `GET` | `/` | Base root health & status | Public |
-| **System** | `GET` | `/api/health` | Health Check | Public |
-| **Auth** | `POST` | `/api/auth/send-otp` | Send WhatsApp OTP | Public |
-| **Auth** | `POST` | `/api/auth/verify-otp` | Verify OTP & JWT login | Public |
-| **Auth** | `GET` | `/api/auth/me` | Fetch logged-in user profile | Private |
-| **Auth** | `PATCH`| `/api/auth/profile` | Update profile name, gender, accountType | Private |
-| **Auth** | `POST` | `/api/auth/profile-image` | Upload profile photo | Private |
-| **Auth** | `POST` | `/api/auth/logout` | Logout user | Private |
-| **Face AI** | `POST` | `/api/face-recognition/reference/validate` | Validate profile picture (1 face check) | Private |
-| **Face AI** | `POST` | `/api/face-recognition/reference` | Generate/cache reference embedding | Private |
-| **Face AI** | `GET` | `/api/face-recognition/reference` | Get reference status & metadata | Private |
-| **Face AI** | `DELETE`| `/api/face-recognition/reference` | Delete reference embedding | Private |
-| **Face AI** | `POST` | `/api/face-recognition/scan` | Scan single photo for user match | Private |
-| **Wardrobe** | `POST` | `/api/wardrobe/create-wardrobe` (`/closets`) | Create Closet container | Private |
-| **Wardrobe** | `GET` | `/api/wardrobe/get-wardrobes` (`/closets`) | List user closets | Private |
-| **Wardrobe** | `POST` | `/api/wardrobe/create-collection` (`/collections`) | Create collection in closet | Private |
-| **Wardrobe** | `GET` | `/api/wardrobe/get-collections` (`/collections`) | List user collections | Private |
-| **AI Vision**| `POST` | `/api/wardrobe/analyze-photo` (`/analyze`) | AI Clothing detection & crop | Private |
-| **AI Vision**| `POST` | `/api/wardrobe/scan-gallery-photo` (`/scan`)| Face match + Garments extract | Private |
-| **AI Vision**| `POST` | `/api/wardrobe/bulk-add-photos` | Bulk 1-100 dress photos ingest | Private |
-| **AI Vision**| `POST` | `/api/wardrobe/ingest-gallery` (`/scan-and-ingest`)| End-to-end gallery scan & DB auto-add | Private |
-| **Items** | `POST` | `/api/wardrobe/add-item` (`/items`) | Add item to wardrobe store | Private |
-| **Items** | `GET` | `/api/wardrobe/get-all-items` (`/items`) | Fetch all items with filters & pagination | Private |
-| **Items** | `GET` | `/api/wardrobe/get-item-details/:id` (`/items/:id`)| Get single item details | Private |
-| **Items** | `PATCH`| `/api/wardrobe/update-item/:id` (`/items/:id`) | Update item fields | Private |
-| **Items** | `PATCH`| `/api/wardrobe/update-item-status/:id` (`/items/:id/status`)| Quick status update | Private |
-| **Items** | `DELETE`| `/api/wardrobe/delete-item/:id` (`/items/:id`)| Soft archive / permanent delete | Private |
+| 1 | Server Root Info | `GET` | `/` | No |
+| 2 | System Health Check | `GET` | `/api/health` | No |
+| 3 | Send WhatsApp OTP | `POST` | `/api/auth/send-otp` | No |
+| 4 | Verify OTP & Login | `POST` | `/api/auth/verify-otp` | No |
+| 5 | Get User Profile | `GET` | `/api/auth/profile` | Yes |
+| 6 | Update Profile (Text + Photo) | `PATCH` | `/api/auth/profile` | Yes |
+| 7 | User Logout | `POST` | `/api/auth/logout` | Yes |
+| 8 | Validate Reference Face | `POST` | `/api/face-recognition/reference/validate` | Yes |
+| 9 | Get Reference Biometric Status | `GET` | `/api/face-recognition/reference` | Yes |
+| 10 | Delete Reference Biometric | `DELETE` | `/api/face-recognition/reference` | Yes |
+| 11 | Match Face in Photo | `POST` | `/api/face-recognition/scan` | Yes |
+| 12 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
+| 13 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
+| 14 | AI Photo Garment Recognition & Crop | `POST` | `/api/wardrobe/analyze-photo` | Yes |
+| 15 | Scan Gallery Photo (Face + Clothes) | `POST` | `/api/wardrobe/scan-gallery-photo` | Yes |
+| 16 | Bulk Add Photos (1-100 Photos) | `POST` | `/api/wardrobe/bulk-add-photos` | Yes |
+| 17 | Ingest Gallery Pipeline | `POST` | `/api/wardrobe/ingest-gallery` | Yes |
+| 18 | Add Item to Almari | `POST` | `/api/wardrobe/add-item` | Yes |
+| 19 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
+| 20 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
+| 21 | Update Wardrobe Item | `PATCH` | `/api/wardrobe/update-item/:id` | Yes |
+| 22 | Delete Wardrobe Item | `DELETE` | `/api/wardrobe/delete-item/:id` | Yes |
