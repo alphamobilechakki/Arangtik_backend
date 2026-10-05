@@ -57,10 +57,6 @@ router.get('/items/:id', wardrobeController.getItemDetails);
 router.patch('/update-item/:id', wardrobeController.updateItem);
 router.patch('/items/:id', wardrobeController.updateItem);
 
-// Update Item Status (AVAILABLE, WORN, LENT, ARCHIVED)
-router.patch('/update-item-status/:id', wardrobeController.updateItemStatus);
-router.patch('/items/:id/status', wardrobeController.updateItemStatus);
-
 // Delete Item
 router.delete('/delete-item/:id', wardrobeController.deleteItem);
 router.delete('/items/:id', wardrobeController.deleteItem);

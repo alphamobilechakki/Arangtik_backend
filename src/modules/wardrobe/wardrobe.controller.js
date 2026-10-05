@@ -63,19 +63,6 @@ const updateItem = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Quick update item operational status
- * @route   PATCH /api/wardrobe/update-item-status/:id
- * @access  Private
- */
-const updateItemStatus = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { status } = req.body;
-  const updatedItem = await wardrobeService.updateItemStatus(userId, req.params.id, status);
-
-  return ApiResponse.success(res, updatedItem, `Item status updated to ${status} successfully`);
-});
-
-/**
  * @desc    Delete / Archive item from wardrobe store
  * @route   DELETE /api/wardrobe/delete-item/:id
  * @access  Private
@@ -216,7 +203,6 @@ module.exports = {
   getAllItems,
   getItemDetails,
   updateItem,
-  updateItemStatus,
   deleteItem,
   analyzePhoto,
   scanGalleryPhoto,

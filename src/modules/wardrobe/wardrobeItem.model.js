@@ -26,12 +26,6 @@ const WardrobeItemSchema = new mongoose.Schema(
       trim: true,
       maxlength: [120, 'Item name cannot exceed 120 characters'],
     },
-    storeType: {
-      type: String,
-      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'OTHER'],
-      default: 'WARDROBE',
-      index: true,
-    },
     // Standardized Images Array Structure
     images: [
       {
@@ -171,67 +165,6 @@ const WardrobeItemSchema = new mongoose.Schema(
       of: mongoose.Schema.Types.Mixed,
       default: {},
     },
-    // Universal Operational Status
-    currentStatus: {
-      type: String,
-      enum: [
-        'AVAILABLE',
-        'IN_USE',
-        'DIRTY',
-        'IN_LAUNDRY',
-        'LENT_OUT',
-        'IN_REPAIR',
-        'ARCHIVED',
-      ],
-      default: 'AVAILABLE',
-      index: true,
-    },
-    // Physical Storage Location
-    currentLocation: {
-      storagePlace: { type: String, default: 'Main Closet' },
-      holderPerson: {
-        name: { type: String },
-        phone: { type: String },
-        relation: { type: String },
-      },
-    },
-    // Usage and Lifecycle Metrics (Preserved for backward compatibility)
-    usageStats: {
-      wearCount: { type: Number, default: 0 },
-      useCount: { type: Number, default: 0 },
-      lastWornDate: { type: Date },
-      lastUsedDate: { type: Date },
-      washCount: { type: Number, default: 0 },
-      lastWashedDate: { type: Date },
-      isFavorite: { type: Boolean, default: false },
-    },
-    // Active Assignment (When item is lent out / Dhobi / Tailor)
-    activeAssignment: {
-      assignedTo: { type: String },
-      assignedPhone: { type: String },
-      purpose: {
-        type: String,
-        enum: [
-          'LENT_FOR_WEARING',
-          'WASH_AND_IRON',
-          'DRY_CLEAN',
-          'REPAIR',
-          'OTHER',
-        ],
-      },
-      givenDate: { type: Date },
-      expectedReturnDate: { type: Date },
-    },
-    // Care & Laundry Instructions
-    laundryCare: {
-      washTypePreferred: {
-        type: String,
-        enum: ['MACHINE_WASH', 'HAND_WASH', 'DRY_CLEAN_ONLY', 'EASY_WASH'],
-        default: 'MACHINE_WASH',
-      },
-      ironPreferred: { type: Boolean, default: true },
-      careInstructions: { type: String },
-    },
     tags: [{ type: String, trim: true }],
   },
   {
@@ -241,38 +174,11 @@ const WardrobeItemSchema = new mongoose.Schema(
   }
 );
 
-// Synchronization pre-save hook for usageStats <-> top-level wear metrics & favorite
-WardrobeItemSchema.pre('save', function (next) {
-  if (this.isModified('wearCount') && !this.isModified('usageStats.wearCount')) {
-    if (!this.usageStats) this.usageStats = {};
-    this.usageStats.wearCount = this.wearCount;
-  } else if (this.isModified('usageStats.wearCount') && !this.isModified('wearCount')) {
-    this.wearCount = this.usageStats.wearCount;
-  }
-
-  if (this.isModified('lastWornAt') && !this.isModified('usageStats.lastWornDate')) {
-    if (!this.usageStats) this.usageStats = {};
-    this.usageStats.lastWornDate = this.lastWornAt;
-  } else if (this.isModified('usageStats.lastWornDate') && !this.isModified('lastWornAt')) {
-    this.lastWornAt = this.usageStats.lastWornDate;
-  }
-
-  if (this.isModified('isFavorite') && !this.isModified('usageStats.isFavorite')) {
-    if (!this.usageStats) this.usageStats = {};
-    this.usageStats.isFavorite = this.isFavorite;
-  } else if (this.isModified('usageStats.isFavorite') && !this.isModified('isFavorite')) {
-    this.isFavorite = this.usageStats.isFavorite;
-  }
-
-  next();
-});
-
 // Compound indexes for user-scoped, wardrobe-scoped, and collection-scoped queries
 WardrobeItemSchema.index({ userId: 1, wardrobeId: 1 });
 WardrobeItemSchema.index({ userId: 1, collectionId: 1 });
-WardrobeItemSchema.index({ userId: 1, storeType: 1, currentStatus: 1 });
-WardrobeItemSchema.index({ userId: 1, storeType: 1, sourceImageHash: 1 });
 WardrobeItemSchema.index({ userId: 1, category: 1 });
+WardrobeItemSchema.index({ userId: 1, sourceImageHash: 1 });
 WardrobeItemSchema.index({ userId: 1, isFavorite: 1 });
 WardrobeItemSchema.index({ userId: 1, createdAt: -1 });
 

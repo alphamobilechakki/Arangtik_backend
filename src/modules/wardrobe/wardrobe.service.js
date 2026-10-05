@@ -36,7 +36,6 @@ const analyzePhoto = async (userId, file) => {
   if (sourceImageHash) {
     const existingExactItems = await WardrobeItem.find({
       userId,
-      storeType: 'WARDROBE',
       sourceImageHash,
     }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
@@ -86,7 +85,7 @@ const analyzePhoto = async (userId, file) => {
   const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
   // 3. Fetch existing wardrobe items for this user to check for duplicates/matches
-  const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+  const existingItems = await WardrobeItem.find({ userId });
 
   // 4. Perform hybrid matching (Exact match, Ambiguous match, New item)
   const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
@@ -157,9 +156,15 @@ const addItem = async (userId, itemData) => {
     }));
   }
 
+  let finalWardrobeId = wardrobeId;
+  if (!finalWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) finalWardrobeId = defaultW._id;
+  }
+
   const newItem = await WardrobeItem.create({
     userId,
-    wardrobeId: wardrobeId || null,
+    wardrobeId: finalWardrobeId || null,
     collectionId: collectionId || null,
     name,
     storeType,
@@ -225,50 +230,76 @@ const getAllItems = async (userId, queryParams = {}) => {
     sort = '-createdAt',
   } = queryParams;
 
-  const filter = {
-    userId,
-    storeType,
-  };
+  const andClauses = [{ userId }];
 
-  if (wardrobeId) filter.wardrobeId = wardrobeId;
-  if (collectionId) filter.collectionId = collectionId;
-  if (category) filter.category = category;
-  if (subCategory) filter.subCategory = new RegExp(`^${subCategory}$`, 'i');
-  if (status) filter.currentStatus = status;
+  if (storeType && storeType !== 'WARDROBE' && storeType !== 'ALL') {
+    andClauses.push({ storeType });
+  }
+
+  if (wardrobeId) {
+    const targetWardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
+    if (targetWardrobe?.isDefault) {
+      andClauses.push({
+        $or: [
+          { wardrobeId },
+          { wardrobeId: null },
+          { wardrobeId: { $exists: false } },
+        ],
+      });
+    } else {
+      andClauses.push({ wardrobeId });
+    }
+  }
+  if (collectionId) andClauses.push({ collectionId });
+  if (category) andClauses.push({ category });
+  if (subCategory) andClauses.push({ subCategory: new RegExp(`^${subCategory}$`, 'i') });
+  if (status) andClauses.push({ currentStatus: status });
   if (favorite !== undefined) {
     const isFav = favorite === 'true' || favorite === true;
-    filter.$or = [{ isFavorite: isFav }, { 'usageStats.isFavorite': isFav }];
+    andClauses.push({
+      $or: [{ isFavorite: isFav }, { 'usageStats.isFavorite': isFav }],
+    });
   }
 
   // Filter inside dynamic attributes or top-level fields
   if (color) {
-    filter.$or = [
-      { color: new RegExp(color, 'i') },
-      { 'attributes.primaryColor': new RegExp(color, 'i') },
-    ];
+    andClauses.push({
+      $or: [
+        { color: new RegExp(color, 'i') },
+        { 'attributes.primaryColor': new RegExp(color, 'i') },
+      ],
+    });
   }
   if (occasion) {
-    filter.$or = [
-      { occasion: { $in: [new RegExp(occasion, 'i')] } },
-      { 'attributes.occasions': { $in: [new RegExp(occasion, 'i')] } },
-    ];
+    andClauses.push({
+      $or: [
+        { occasion: { $in: [new RegExp(occasion, 'i')] } },
+        { 'attributes.occasions': { $in: [new RegExp(occasion, 'i')] } },
+      ],
+    });
   }
   if (season) {
-    filter.$or = [
-      { season: { $in: [new RegExp(season, 'i')] } },
-      { 'attributes.seasons': { $in: [new RegExp(season, 'i')] } },
-    ];
+    andClauses.push({
+      $or: [
+        { season: { $in: [new RegExp(season, 'i')] } },
+        { 'attributes.seasons': { $in: [new RegExp(season, 'i')] } },
+      ],
+    });
   }
 
   // Keyword search
   if (search) {
-    filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { subCategory: { $regex: search, $options: 'i' } },
-      { tags: { $in: [new RegExp(search, 'i')] } },
-      { 'attributes.brand': { $regex: search, $options: 'i' } },
-    ];
+    andClauses.push({
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { subCategory: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } },
+        { 'attributes.brand': { $regex: search, $options: 'i' } },
+      ],
+    });
   }
+
+  const filter = andClauses.length === 1 ? andClauses[0] : { $and: andClauses };
 
   // Sorting
   let sortOption = { createdAt: -1 };
@@ -461,7 +492,6 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     if (sourceImageHash) {
       const existingExactItems = await WardrobeItem.find({
         userId,
-        storeType: 'WARDROBE',
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
@@ -530,7 +560,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
       // 3. Match against existing wardrobe
-      const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+      const existingItems = await WardrobeItem.find({ userId });
       const inFlightItems = [...existingItems];
 
       const imageNewItems = [];
@@ -553,9 +583,15 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
           const subCat = item.subCategory || item.category || 'Dress';
           const defaultName = primaryColor ? `${primaryColor} ${subCat}` : `${item.category || 'Garment'} Item`;
 
+          let finalWardrobeId = options.wardrobeId || null;
+          if (!finalWardrobeId) {
+            const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+            if (defaultW) finalWardrobeId = defaultW._id;
+          }
+
           const newItem = await WardrobeItem.create({
             userId,
-            wardrobeId: options.wardrobeId || null,
+            wardrobeId: finalWardrobeId || null,
             collectionId: options.collectionId || null,
             name: item.name || defaultName,
             storeType: 'WARDROBE',
@@ -640,7 +676,6 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     if (sourceImageHash) {
       const existingExactItems = await WardrobeItem.find({
         userId,
-        storeType: 'WARDROBE',
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
@@ -672,7 +707,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
       // 2. Fetch up-to-date closet items to prevent duplicate additions across the batch
-      const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+      const existingItems = await WardrobeItem.find({ userId });
       const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
 
       const fileCreatedItems = [];
@@ -927,10 +962,16 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
         const subCat = rawDetection.subCategory || rawDetection.category || 'Garment';
         const defaultName = primaryColor ? `${primaryColor} ${subCat}` : `${rawDetection.category || 'Garment'} Item`;
 
+        let finalWardrobeId = options.wardrobeId || null;
+        if (!finalWardrobeId) {
+          const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+          if (defaultW) finalWardrobeId = defaultW._id;
+        }
+
         try {
           const newItem = await WardrobeItem.create({
             userId,
-            wardrobeId: options.wardrobeId || null,
+            wardrobeId: finalWardrobeId || null,
             collectionId: options.collectionId || null,
             name: rawDetection.name || defaultName,
             storeType: 'WARDROBE',
