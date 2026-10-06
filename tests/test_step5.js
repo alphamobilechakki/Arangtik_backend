@@ -2,7 +2,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const BASE_URL = 'http://localhost:8080/api';
+const BASE_URL = `http://localhost:${process.env.PORT || 8083}/api`;
 const JWT_SECRET = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY1ZjFhMmIzYzRkNWU2ZjdhOGI5YzBkMSIsInBob25lIjoiOTE5ODc2NTQzMjEwIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3OTA0MjUyNTMsImV4cCI6MTc5MzAxNzI1M30.LulImFhGV05nFZQXz0otVkTVzQ7HXAfHe9A1J9xUdxU';
 
 // Generate valid test user JWT
