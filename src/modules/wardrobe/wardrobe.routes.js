@@ -10,6 +10,7 @@ router.use(protect);
 /* ==========================================================================
    1. WARDROBE / CLOSET APIs (E.g., "My Wardrobe", "Mummy Wardrobe")
    ========================================================================== */
+
 // Create Wardrobe (supports optional coverImage / owner face photo upload)
 router.post(
   '/create-wardrobe',
@@ -25,9 +26,10 @@ router.post(
 router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
 
-/* ==========================================================================
-   2. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
-   ========================================================================== */
+// __________________________________________________________________________
+// 2. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
+// __________________________________________________________________________
+
 // Add Item (Kapda add karein)
 router.post('/add-item', wardrobeController.addItem);
 router.post('/items', wardrobeController.addItem);
@@ -50,9 +52,10 @@ router.patch('/items/:id', wardrobeController.updateItem);
 router.delete('/delete-item/:id', wardrobeController.deleteItem);
 router.delete('/items/:id', wardrobeController.deleteItem);
 
-/* ==========================================================================
-   4. AI SCAN & UPLOAD APIs (Photo se automatic kapde add karna)
-   ========================================================================== */
+// __________________________________________________________________________
+// 3. AI SCAN & UPLOAD APIs (Photo se automatic kapde add karna)
+// __________________________________________________________________________
+
 // Analyze Single Photo (AI se photo scan karein)
 router.post('/analyze-photo', upload.single('photo'), wardrobeController.analyzePhoto);
 router.post('/analyze', upload.single('photo'), wardrobeController.analyzePhoto);

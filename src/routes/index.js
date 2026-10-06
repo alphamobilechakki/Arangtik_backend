@@ -4,6 +4,7 @@ const router = express.Router();
 const authRoutes = require('../modules/auth/auth.routes');
 const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
 const faceRecognitionRoutes = require('../modules/faceRecognition/faceRecognition.routes');
+const clothAnalysisRoutes = require('../modules/clothAnalysis/clothAnalysis.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -12,6 +13,11 @@ router.get('/health', (req, res) => {
 
 // Auth Routes
 router.use('/auth', authRoutes);
+
+// Cloth Analysis & AI Vision Routes (Phase 2 & 3)
+router.use('/cloth-analysis', clothAnalysisRoutes);
+router.use('/v1/cloth-analysis', clothAnalysisRoutes);
+router.use('/clothing-analysis', clothAnalysisRoutes);
 
 // Wardrobe Store Routes
 router.use('/wardrobe', wardrobeRoutes);

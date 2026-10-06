@@ -22,11 +22,11 @@
   ├─► POST /api/wardrobe/create-wardrobe (Create Almari / Store Container)
   └─► GET  /api/wardrobe/get-wardrobes   (List User Almaris / Stores)
 
-[STEP 4: AI VISION & DIGITIZATION]
-  ├─► POST /api/wardrobe/analyze-photo      (AI Garment Detection & Auto-Crop)
-  ├─► POST /api/wardrobe/scan-gallery-photo (Single Photo: Face Check + Clothes Extract)
-  ├─► POST /api/wardrobe/bulk-add-photos    (Bulk 1 to 100 Photos Auto-Digitize & Store)
-  └─► POST /api/wardrobe/ingest-gallery     (Batch Ingestion Pipeline)
+[STEP 4: AI CLOTH ANALYSIS & DIGITIZATION]
+  ├─► POST /api/cloth-analysis/analyze-photo      (AI Garment Detection & Auto-Crop)
+  ├─► POST /api/cloth-analysis/scan-gallery-photo (Single Photo: Face Check + Clothes Extract)
+  ├─► POST /api/cloth-analysis/bulk-add-photos    (Bulk 1 to 100 Photos Auto-Digitize & Store)
+  └─► POST /api/cloth-analysis/ingest-gallery     (Batch Ingestion Pipeline)
 
 [STEP 5: DRESS & STORE ITEMS]
   ├─► POST   /api/wardrobe/add-item           (Directly Add Item to Almari)
@@ -292,14 +292,16 @@
 - **Response:**
 ```json
 {
-  "statusCode": 200,
-  "success": true,
-  "message": "Reference face biometric status fetched",
-  "data": {
-    "hasReferenceFace": true,
-    "profileImage": "/uploads/image-1718000000000.jpg",
-    "lastGeneratedAt": "2026-10-05T12:00:00.000Z"
-  }
+    "statusCode": 200,
+    "data": {
+        "userId": "6ac34c5bfd79ed5569324cd1",
+        "hasProfileImage": false,
+        "profileImage": null,
+        "hasReferenceFace": false,
+        "referenceMetadata": null
+    },
+    "message": "Reference face status retrieved successfully",
+    "success": true
 }
 ```
 
@@ -426,12 +428,12 @@
 
 ---
 
-# SECTION 5: AI FASHION VISION & DIGITIZATION (`/api/wardrobe`)
+# SECTION 5: AI CLOTH ANALYSIS & DIGITIZATION (`/api/cloth-analysis`)
 
 ### 5.1 Analyze Single Photo (AI Vision & Auto-Crop)
 - **Description:** Photo upload karke AI se garments recognize aur segment karta hai, transparent cropped images banata hai aur color/fabric/occasion extract karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/analyze-photo`
+- **Endpoint:** `/api/cloth-analysis/analyze-photo` *(Alias: `/api/cloth-analysis/analyze`, `/api/wardrobe/analyze-photo`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
@@ -472,7 +474,7 @@
 ### 5.2 Scan Gallery Photo (Face Check + Garments Extract)
 - **Description:** Single photo me user face match verify karta hai aur matching kapde extract karke Almari me link karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/scan-gallery-photo`
+- **Endpoint:** `/api/cloth-analysis/scan-gallery-photo` *(Alias: `/api/cloth-analysis/scan`, `/api/wardrobe/scan-gallery-photo`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
@@ -507,7 +509,7 @@
 ### 5.3 Bulk Add Dress Photos (1 to 100 Photos)
 - **Description:** Multiple kapdo ki photos ko batch me AI recognize karke sidha target Almari me store kar deta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/bulk-add-photos`
+- **Endpoint:** `/api/cloth-analysis/bulk-add-photos` *(Alias: `/api/cloth-analysis/bulk-add`, `/api/wardrobe/bulk-add-photos`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
@@ -538,7 +540,7 @@
 ### 5.4 Ingest Gallery Photos (Batch Ingestion Pipeline)
 - **Description:** Puri gallery photos upload karke user face filter lagata hai aur clothes automatically Almari me store karta hai.
 - **Method:** `POST`
-- **Endpoint:** `/api/wardrobe/ingest-gallery`
+- **Endpoint:** `/api/cloth-analysis/ingest-gallery` *(Alias: `/api/cloth-analysis/ingest`, `/api/wardrobe/ingest-gallery`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
@@ -814,10 +816,10 @@
 | 11 | Match Face in Photo | `POST` | `/api/face-recognition/scan` | Yes |
 | 12 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
 | 13 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
-| 14 | AI Photo Garment Recognition & Crop | `POST` | `/api/wardrobe/analyze-photo` | Yes |
-| 15 | Scan Gallery Photo (Face + Clothes) | `POST` | `/api/wardrobe/scan-gallery-photo` | Yes |
-| 16 | Bulk Add Photos (1-100 Photos) | `POST` | `/api/wardrobe/bulk-add-photos` | Yes |
-| 17 | Ingest Gallery Pipeline | `POST` | `/api/wardrobe/ingest-gallery` | Yes |
+| 14 | AI Photo Garment Recognition & Crop | `POST` | `/api/cloth-analysis/analyze-photo` | Yes |
+| 15 | Scan Gallery Photo (Face + Clothes) | `POST` | `/api/cloth-analysis/scan-gallery-photo` | Yes |
+| 16 | Bulk Add Photos (1-100 Photos) | `POST` | `/api/cloth-analysis/bulk-add-photos` | Yes |
+| 17 | Ingest Gallery Pipeline | `POST` | `/api/cloth-analysis/ingest-gallery` | Yes |
 | 18 | Add Item to Almari | `POST` | `/api/wardrobe/add-item` | Yes |
 | 19 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
 | 20 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
