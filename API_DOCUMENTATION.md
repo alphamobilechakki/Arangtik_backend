@@ -806,6 +806,8 @@
 
 ---
 
+---
+
 ### 6.5 Delete Item from Wardrobe
 - **Description:** Almari se kapde ko delete karta hai.
 - **Method:** `DELETE`
@@ -828,27 +830,120 @@
 
 ---
 
-# SECTION 7: SUMMARY OF ALL ACTIVE API ENDPOINTS
+# SECTION 7: MEDIA UPLOAD & STORAGE APIS
+
+### 7.1 Single Image Upload (Multipart File or Base64)
+- **Description:** Single image ko store karta hai (Pravisti style: `/uploads` directory me short unique filename ke sath).
+- **Method:** `POST`
+- **Endpoint:** `/api/upload/single` (or `/api/v1/upload/single`)
+- **Request Format 1 (Multipart FormData):**
+  - Body: Form-Data with field `image` (File)
+- **Request Format 2 (Base64 JSON):**
+  - Headers: `Content-Type: application/json`
+  - Body:
+```json
+{
+  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
+- **Response:**
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "file": {
+      "uniqueId": "img_muwkdves_65904c",
+      "filename": "img_muwkdves_65904c.jpg",
+      "originalName": "photo.jpg",
+      "mimeType": "image/jpeg",
+      "size": 10240,
+      "url": "http://localhost:8085/api/uploads/img_muwkdves_65904c.jpg"
+    },
+    "url": "http://localhost:8085/api/uploads/img_muwkdves_65904c.jpg"
+  },
+  "message": "Image uploaded successfully",
+  "success": true
+}
+```
+
+---
+
+### 7.2 Multiple Images Upload
+- **Description:** Ek sath multiple images upload karta hai (up to 20 files).
+- **Method:** `POST`
+- **Endpoint:** `/api/upload/multiple` (or `/api/v1/upload/multiple`)
+- **Request Format 1 (Multipart FormData):**
+  - Body: Form-Data with field `images` (Multiple Files)
+- **Request Format 2 (Base64 JSON):**
+  - Body:
+```json
+{
+  "images": [
+    "data:image/jpeg;base64,...",
+    "data:image/jpeg;base64,..."
+  ]
+}
+```
+- **Response:**
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "files": [ ... ],
+    "urls": [
+      "http://localhost:8085/api/uploads/img_123.jpg",
+      "http://localhost:8085/api/uploads/img_456.jpg"
+    ],
+    "count": 2
+  },
+  "message": "Images uploaded successfully",
+  "success": true
+}
+```
+
+---
+
+### 7.3 Delete Stored Image
+- **Description:** Server ke local storage (`uploads/`) se image file delete karta hai.
+- **Method:** `DELETE`
+- **Endpoint:** `/api/upload/:filename`
+- **Response:**
+```json
+{
+  "statusCode": 200,
+  "data": null,
+  "message": "Image deleted successfully",
+  "success": true
+}
+```
+
+---
+
+# SECTION 8: SUMMARY OF ALL ACTIVE API ENDPOINTS
 
 | # | Description | Method | Endpoint | Auth |
 |---|---|---|---|---|
 | 1 | Server Root Info | `GET` | `/` | No |
 | 2 | System Health Check | `GET` | `/api/health` | No |
-| 3 | Send WhatsApp OTP | `POST` | `/api/auth/send-otp` | No |
-| 4 | Verify OTP & Login | `POST` | `/api/auth/verify-otp` | No |
-| 5 | Get User Profile | `GET` | `/api/auth/profile` | Yes |
-| 6 | Update Profile (Text + Photo) | `PATCH` | `/api/auth/profile` | Yes |
-| 7 | User Logout | `POST` | `/api/auth/logout` | Yes |
-| 8 | Validate Reference Face | `POST` | `/api/face-recognition/reference/validate` | Yes |
-| 9 | Get Reference Biometric Status | `GET` | `/api/face-recognition/reference` | Yes |
-| 10 | Delete Reference Biometric | `DELETE` | `/api/face-recognition/reference` | Yes |
-| 11 | Match Face in Gallery Photo | `POST` | `/api/face-recognition/scan-gallery-photo` | Yes |
-| 12 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
-| 13 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
-| 14 | Direct Dress Digitize (Single / 1-100 Photos) | `POST` | `/api/cloth-analysis/extract-dress` | Yes |
-| 15 | Gallery Photos Ingest (Face Match + Auto-Store) | `POST` | `/api/cloth-analysis/extract-from-gallery` | Yes |
-| 16 | Add Item to Almari | `POST` | `/api/wardrobe/add-item` | Yes |
-| 17 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
-| 18 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
-| 19 | Update Wardrobe Item | `PATCH` | `/api/wardrobe/update-item/:id` | Yes |
-| 20 | Delete Wardrobe Item | `DELETE` | `/api/wardrobe/delete-item/:id` | Yes |
+| 3 | Single Image Upload (File / Base64) | `POST` | `/api/upload/single` | No |
+| 4 | Multiple Images Upload | `POST` | `/api/upload/multiple` | No |
+| 5 | Delete Stored Image | `DELETE` | `/api/upload/:filename` | No |
+| 6 | Send WhatsApp OTP | `POST` | `/api/auth/send-otp` | No |
+| 7 | Verify OTP & Login | `POST` | `/api/auth/verify-otp` | No |
+| 8 | Get User Profile | `GET` | `/api/auth/profile` | Yes |
+| 9 | Update Profile (Text + Photo) | `PATCH` | `/api/auth/profile` | Yes |
+| 10 | User Logout | `POST` | `/api/auth/logout` | Yes |
+| 11 | Validate Reference Face | `POST` | `/api/face-recognition/reference/validate` | Yes |
+| 12 | Get Reference Biometric Status | `GET` | `/api/face-recognition/reference` | Yes |
+| 13 | Delete Reference Biometric | `DELETE` | `/api/face-recognition/reference` | Yes |
+| 14 | Match Face in Gallery Photo | `POST` | `/api/face-recognition/scan-gallery-photo` | Yes |
+| 15 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
+| 16 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
+| 17 | Direct Dress Digitize (Single / 1-100 Photos) | `POST` | `/api/cloth-analysis/extract-dress` | Yes |
+| 18 | Gallery Photos Ingest (Face Match + Auto-Store) | `POST` | `/api/cloth-analysis/extract-from-gallery` | Yes |
+| 19 | Add Item to Almari | `POST` | `/api/wardrobe/add-item` | Yes |
+| 20 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
+| 21 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
+| 22 | Update Wardrobe Item | `PATCH` | `/api/wardrobe/update-item/:id` | Yes |
+| 23 | Delete Wardrobe Item | `DELETE` | `/api/wardrobe/delete-item/:id` | Yes |
+

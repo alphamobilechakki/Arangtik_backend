@@ -5,11 +5,16 @@ const authRoutes = require('../modules/auth/auth.routes');
 const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
 const faceRecognitionRoutes = require('../modules/faceRecognition/faceRecognition.routes');
 const clothAnalysisRoutes = require('../modules/clothAnalysis/clothAnalysis.routes');
+const uploadRoutes = require('../modules/upload/upload.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Arangtik Backend API is healthy' });
 });
+
+// Upload Routes (Single & Multiple Image Storage matching Pravisti setup)
+router.use('/upload', uploadRoutes);
+router.use('/v1/upload', uploadRoutes);
 
 // Auth Routes
 router.use('/auth', authRoutes);
