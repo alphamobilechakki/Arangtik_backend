@@ -2,6 +2,95 @@ const asyncHandler = require('../../utils/asyncHandler');
 const ApiResponse = require('../../utils/apiResponse');
 const clothAnalysisService = require('./clothAnalysis.service');
 
+const extractFilesFromReq = (req) => {
+  if (Array.isArray(req.files)) {
+    return req.files;
+  }
+  if (req.files && typeof req.files === 'object') {
+    const collected = [];
+    const fields = ['photos', 'images', 'photo', 'image', 'file', 'files'];
+    for (const f of fields) {
+      if (Array.isArray(req.files[f])) {
+        collected.push(...req.files[f]);
+      }
+    }
+    if (collected.length > 0) return collected;
+  }
+  if (req.file) {
+    return [req.file];
+  }
+  return [];
+};
+
+/**
+ * @desc    Direct Dress Digitization (No Face Scan - Supports single or 1 to 100 photos)
+ * @route   POST /api/cloth-analysis/extract-dress
+ * @access  Private
+ */
+const extractDirectDress = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const files = extractFilesFromReq(req);
+  const options = {
+    wardrobeId: req.body.wardrobeId || null,
+    collectionId: req.body.collectionId || null,
+    storagePlace: req.body.storagePlace || 'Main Closet',
+  };
+
+  if (files.length === 0) {
+    return res.status(400).json({
+      statusCode: 400,
+      success: false,
+      message: 'Please upload at least one clothing photo under field "photo" or "photos"',
+    });
+  }
+
+  // Single file preview analysis mode (if explicitly requested with autoPersist=false)
+  if (files.length === 1 && req.body.autoPersist === 'false') {
+    const result = await clothAnalysisService.analyzePhoto(userId, files[0]);
+    return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
+  }
+
+  const result = await clothAnalysisService.bulkAddDressPhotos(userId, files, options);
+
+  return ApiResponse.success(
+    res,
+    result,
+    `Clothing processed: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing items matched`
+  );
+});
+
+/**
+ * @desc    Gallery Photo Scanning & Digitization (Face Verify + Clothes Extract - Single or 1 to 100 photos)
+ * @route   POST /api/cloth-analysis/extract-from-gallery
+ * @access  Private
+ */
+const extractFromGallery = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const files = extractFilesFromReq(req);
+  const options = {
+    wardrobeId: req.body.wardrobeId || null,
+    collectionId: req.body.collectionId || null,
+    autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
+    threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
+  };
+
+  if (files.length === 0) {
+    return res.status(400).json({
+      statusCode: 400,
+      success: false,
+      message: 'Please upload at least one gallery photo under field "photo" or "photos"',
+    });
+  }
+
+  const result = await clothAnalysisService.ingestGalleryPhotos(userId, files, options);
+
+  return ApiResponse.success(
+    res,
+    result,
+    `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
+  );
+});
+
 /**
  * @desc    Analyze single photo to extract clothes and check wardrobe duplicates
  * @route   POST /api/cloth-analysis/analyze-photo
@@ -9,7 +98,9 @@ const clothAnalysisService = require('./clothAnalysis.service');
  */
 const analyzePhoto = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await clothAnalysisService.analyzePhoto(userId, req.file);
+  const files = extractFilesFromReq(req);
+  const file = files[0] || req.file;
+  const result = await clothAnalysisService.analyzePhoto(userId, file);
 
   return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
 });
@@ -21,7 +112,8 @@ const analyzePhoto = asyncHandler(async (req, res) => {
  */
 const scanGalleryPhoto = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const file = req.file || (req.files?.photo?.[0] || req.files?.image?.[0]);
+  const files = extractFilesFromReq(req);
+  const file = files[0] || req.file;
   const options = {
     wardrobeId: req.body.wardrobeId || null,
     collectionId: req.body.collectionId || null,
@@ -44,7 +136,7 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
  */
 const bulkAddPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const files = req.files || (req.file ? [req.file] : []);
+  const files = extractFilesFromReq(req);
   const options = {
     wardrobeId: req.body.wardrobeId || null,
     collectionId: req.body.collectionId || null,
@@ -67,7 +159,7 @@ const bulkAddPhotos = asyncHandler(async (req, res) => {
  */
 const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const files = req.files || (req.file ? [req.file] : []);
+  const files = extractFilesFromReq(req);
   const options = {
     wardrobeId: req.body.wardrobeId || null,
     collectionId: req.body.collectionId || null,
@@ -85,6 +177,8 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  extractDirectDress,
+  extractFromGallery,
   analyzePhoto,
   scanGalleryPhoto,
   bulkAddPhotos,

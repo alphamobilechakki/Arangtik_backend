@@ -11,3 +11,6 @@
 5. After every functionality, test success, validation, authentication, and edge cases; fix bugs and re-test before moving forward.
 
 6. Keep the code **clean, modular, production-ready**, with no unnecessary files, dead code, duplicate logic, or unused imports.
+
+7. **LOCKED & INTEGRATED APIs PROTECTION (STRICT RULE):** All endpoints marked with `[DONE / INTEGRATED ✅]` (Auth, Profile & Biometrics, Store Containers, Cloth Analysis & Gallery Ingestion, Wardrobe CRUD) are tested, active, and locked. **NEVER modify, refactor, break, or alter the request/response structure of existing working APIs** unless the user explicitly asks to change that specific functionality.
+
