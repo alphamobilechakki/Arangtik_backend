@@ -58,12 +58,13 @@ class FaceRecognitionController {
     let imageInput;
     let fileMeta = {};
 
-    if (req.file) {
-      imageInput = req.file.path || req.file.buffer;
+    const file = req.file || (req.files?.image?.[0] || req.files?.photo?.[0]);
+    if (file) {
+      imageInput = file.path || file.buffer;
       fileMeta = {
-        filename: req.file.filename || req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
+        filename: file.filename || file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
       };
     } else if (req.body.imageUrl || req.body.imagePath) {
       imageInput = req.body.imageUrl || req.body.imagePath;

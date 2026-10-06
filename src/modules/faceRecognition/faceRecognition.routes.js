@@ -36,12 +36,37 @@ router.get('/reference', faceRecognitionController.getReferenceStatus);
 router.delete('/reference', faceRecognitionController.deleteReference);
 
 /**
- * @route   POST /api/face-recognition/scan
+ * @route   POST /api/face-recognition/scan-gallery-photo (Aliases: /scan-gallery, /scan)
  * @desc    Scan a single gallery photo against the logged-in user's reference face
  */
 router.post(
+  '/scan-gallery-photo',
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  validateScanUpload,
+  validateThresholdParam,
+  faceRecognitionController.scanImage
+);
+
+router.post(
+  '/scan-gallery',
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  validateScanUpload,
+  validateThresholdParam,
+  faceRecognitionController.scanImage
+);
+
+router.post(
   '/scan',
-  upload.single('image'),
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
   validateScanUpload,
   validateThresholdParam,
   faceRecognitionController.scanImage

@@ -11,22 +11,22 @@
   ├─► POST /api/auth/send-otp           (Send WhatsApp OTP)
   └─► POST /api/auth/verify-otp         (Verify OTP, Login/Register, Get JWT Token)
 
-[STEP 2: PROFILE & BIOMETRICS]
+[STEP 2: PROFILE & REFERENCE BIOMETRICS]
   ├─► GET    /api/auth/profile          (Get Profile Info)
   ├─► PATCH  /api/auth/profile          (Unified Profile Update: Text Details + Photo Upload)
   ├─► GET    /api/face-recognition/reference (Check Biometric Status)
-  ├─► DELETE /api/face-recognition/reference (Delete Reference Face)
-  └─► POST   /api/face-recognition/scan (Scan Photo for User Face Match)
+  └─► DELETE /api/face-recognition/reference (Delete Reference Face)
 
 [STEP 3: STORE CONTAINERS]
   ├─► POST /api/wardrobe/create-wardrobe (Create Almari / Store Container)
   └─► GET  /api/wardrobe/get-wardrobes   (List User Almaris / Stores)
 
-[STEP 4: AI CLOTH ANALYSIS & DIGITIZATION]
-  ├─► POST /api/cloth-analysis/analyze-photo      (AI Garment Detection & Auto-Crop)
-  ├─► POST /api/cloth-analysis/scan-gallery-photo (Single Photo: Face Check + Clothes Extract)
-  ├─► POST /api/cloth-analysis/bulk-add-photos    (Bulk 1 to 100 Photos Auto-Digitize & Store)
-  └─► POST /api/cloth-analysis/ingest-gallery     (Batch Ingestion Pipeline)
+[STEP 4: GALLERY SCANNING, FACE MATCH & DIGITIZATION]
+  ├─► POST /api/face-recognition/scan-gallery-photo (Check if User Face Exists in Gallery Photo)
+  ├─► POST /api/cloth-analysis/scan-gallery-photo   (Single Photo: Face Check + Clothes Extract)
+  ├─► POST /api/cloth-analysis/analyze-photo        (AI Garment Detection & Auto-Crop)
+  ├─► POST /api/cloth-analysis/bulk-add-photos      (Bulk 1 to 100 Photos Auto-Digitize & Store)
+  └─► POST /api/cloth-analysis/ingest-gallery       (Batch Ingestion Pipeline)
 
 [STEP 5: DRESS & STORE ITEMS]
   ├─► POST   /api/wardrobe/add-item           (Directly Add Item to Almari)
@@ -328,15 +328,15 @@
 
 ---
 
-### 3.4 Scan Photo for Face Matching
-- **Description:** Kisi bhi photo me user ka face match check karta hai.
+### 3.4 Scan Gallery Photo for User Face Match
+- **Description:** Gallery photo me authenticated user ka face check aur match karta hai (taki confirm ho sake photo user ki hi hai).
 - **Method:** `POST`
-- **Endpoint:** `/api/face-recognition/scan`
+- **Endpoint:** `/api/face-recognition/scan-gallery-photo` *(Aliases: `/api/face-recognition/scan-gallery`, `/api/face-recognition/scan`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
-    - `image` (file, required): Photo file to match
-    - `threshold` (number, optional): Distance threshold (Default: `0.55`)
+    - `photo` (or `image`) (file, required): Gallery photo file to check
+    - `threshold` (number, optional): Face distance threshold (Default: `0.55`)
 - **Response:**
 ```json
 {
@@ -813,7 +813,7 @@
 | 8 | Validate Reference Face | `POST` | `/api/face-recognition/reference/validate` | Yes |
 | 9 | Get Reference Biometric Status | `GET` | `/api/face-recognition/reference` | Yes |
 | 10 | Delete Reference Biometric | `DELETE` | `/api/face-recognition/reference` | Yes |
-| 11 | Match Face in Photo | `POST` | `/api/face-recognition/scan` | Yes |
+| 11 | Match Face in Gallery Photo | `POST` | `/api/face-recognition/scan-gallery-photo` | Yes |
 | 12 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
 | 13 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
 | 14 | AI Photo Garment Recognition & Crop | `POST` | `/api/cloth-analysis/analyze-photo` | Yes |
