@@ -69,11 +69,8 @@ app.get(['/api/uploads/:filename', '/uploads/:filename'], (req, res, next) => {
 
 // Root Route
 app.get('/', (req, res) => {
-  res.json({
-    name: 'Arangtik Backend API',
-    version: '1.0.0',
-    status: 'running',
-    docs: '/api/health',
+  res.status(200).json({
+    message: 'Backend API is running',
   });
 });
 
