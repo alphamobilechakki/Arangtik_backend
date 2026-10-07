@@ -47,8 +47,6 @@ class AuthService {
       phone: formattedPhone,
       isExistingUser,
       expiresInMinutes: OTP_EXPIRY,
-      // Included in development/dev mode for testing
-      ...(OTP_DEV_MODE || process.env.NODE_ENV === 'development' ? { devOtp: otp } : {}),
     };
   }
 
