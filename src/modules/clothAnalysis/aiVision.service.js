@@ -271,22 +271,33 @@ CRITICAL NEGATIVE FILTER:
 `;
   } else {
     prompt = `
-You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
+You are an expert World-Class Haute Couture & Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
 Analyze the uploaded image (which may contain multiple dresses on mannequins/hangers, single garments, showroom displays, or people wearing clothes).
 Identify EVERY distinct wearable clothing item, gown, dress, ethnic wear, footwear, or accessory present.
 
-For each distinct item found, return a JSON array containing objects with:
-- "name": Highly descriptive fashion title (e.g. "Royal Blue Beaded Deep-Plunge Tulle Gown", "Midnight Navy Blue Slim Fit Linen Shirt", "Light Blue Denim Jeans")
+CRITICAL MULTI-DRESS / SIDE-BY-SIDE SEPARATION RULES:
+1. Detect EACH distinct dress or outfit as a separate, isolated item in the JSON array.
+2. For SIDE-BY-SIDE dresses or mannequins (e.g. 2, 3 or more dresses next to each other):
+   - The bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for EACH dress must STRICTLY cover ONLY THAT DRESS's primary mannequin and vertical column!
+   - DO NOT let one dress's bounding box overlap or swallow the neighboring mannequin/dress!
+   - Each dress box must split cleanly at the vertical dividing boundary between the two garments.
+3. For full-length dresses, gowns, anarkalis, sarees, lehengas, suits:
+   - "category": "UPPER_WEAR" | "TRADITIONAL" | "LOWER_WEAR" | "OUTERWEAR"
+   - "subCategory": "Gown" | "Evening Gown" | "Dress" | "Maxi Dress" | "Anarkali" | "Saree" | "Lehenga" | "Sherwani" | "Shirt" | "Kurta" | "Jeans"
+   - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0 to 1000 scale) covering ONLY this specific garment.
+
+For each distinct item found, return a JSON object with:
+- "name": Highly descriptive fashion title (e.g. "Royal Blue Beaded Ombre Tulle Gown", "Magenta Glossy Satin Sweetheart Flare Gown", "Midnight Navy Blue Linen Shirt")
 - "category": Broad category ("UPPER_WEAR", "LOWER_WEAR", "TRADITIONAL", "OUTERWEAR", "FOOTWEAR", "ACCESSORIES", "OTHER")
 - "subCategory": Specific garment type ("Evening Gown", "Gown", "Dress", "Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Saree", "Jacket", etc.)
-- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact full garment.
+- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact garment boundaries.
 - "attributes": Object with:
   - "primaryColor": Dominant color shade
   - "secondaryColors": Array of accent colors
-  - "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED" | "SEQUINED"
+  - "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBELLISHED" | "SEQUINED"
   - "fabric": "SATIN" | "SILK" | "NET_TULLE" | "VELVET" | "ORGANZA" | "GEORGETTE" | "CHIFFON" | "COTTON" | "LINEN" | "DENIM" | "BLEND" | "OTHER"
   - "fit": "FLARE" | "MERMAID" | "A_LINE" | "SLIM_FIT" | "REGULAR_FIT" | "LOOSE_FIT"
-  - "neckline": "Sweetheart" | "V-Neck" | "Collar" | "Round Neck" | "Mandarin" | "Other"
+  - "neckline": "Sweetheart" | "Deep V-Neck" | "V-Neck" | "Collar" | "Round Neck" | "Mandarin" | "Other"
   - "sleeveStyle": "SLEEVELESS" | "HALF_SLEEVE" | "FULL_SLEEVE"
 
 CRITICAL NEGATIVE FILTER:
@@ -338,7 +349,7 @@ CRITICAL NEGATIVE FILTER:
 
   // STRICT NON-GARMENT / FACE POST-FILTER
   const nonGarmentRegex = /\b(face|chin|beard|hair|human head|human face|bare skin|mannequin stand|dummy stand)\b/i;
-  return rawList.filter((item) => {
+  const filteredList = rawList.filter((item) => {
     const name = (item.name || '').toLowerCase();
     const sub = (item.subCategory || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
@@ -376,6 +387,39 @@ CRITICAL NEGATIVE FILTER:
 
     return true;
   });
+
+  // AUTOMATIC HORIZONTAL OVERLAP RESOLVER FOR SIDE-BY-SIDE SEPARATION
+  if (filteredList.length > 1 && normalizedFaceBoxes.length === 0) {
+    filteredList.sort((a, b) => {
+      const aCenter = ((a.box2d?.[1] ?? 0) + (a.box2d?.[3] ?? 0)) / 2;
+      const bCenter = ((b.box2d?.[1] ?? 0) + (b.box2d?.[3] ?? 0)) / 2;
+      return aCenter - bCenter;
+    });
+
+    for (let i = 0; i < filteredList.length - 1; i++) {
+      const leftItem = filteredList[i];
+      const rightItem = filteredList[i + 1];
+
+      if (leftItem.box2d && rightItem.box2d) {
+        const [lYmin, lXmin, lYmax, lXmax] = leftItem.box2d;
+        const [rYmin, rXmin, rYmax, rXmax] = rightItem.box2d;
+
+        const isBothTall = (lYmax - lYmin > 350) && (rYmax - rYmin > 350);
+        if (isBothTall && rXmin < lXmax - 50) {
+          const lCenter = (lXmin + lXmax) / 2;
+          const rCenter = (rXmin + rXmax) / 2;
+          if (rCenter > lCenter) {
+            const splitX = Math.round((lCenter + rCenter) / 2);
+            leftItem.box2d[3] = Math.min(lXmax, splitX);
+            rightItem.box2d[1] = Math.max(rXmin, splitX);
+            console.log(`[aiVision] Resolved horizontal overlap between "${leftItem.name}" and "${rightItem.name}" -> Left xmax=${leftItem.box2d[3]}, Right xmin=${rightItem.box2d[1]}`);
+          }
+        }
+      }
+    }
+  }
+
+  return filteredList;
 };
 
 /**
