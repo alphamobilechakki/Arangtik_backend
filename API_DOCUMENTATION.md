@@ -400,21 +400,30 @@
 - **Response:**
 ```json
 {
-  "statusCode": 201,
-  "success": true,
-  "message": "Wardrobe closet created successfully",
-  "data": {
-    "_id": "674f1b2c3d4e5f6a7b8c9d10",
-    "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-    "name": "Master Bedroom Almari",
-    "storeType": "WARDROBE",
-    "type": "PERSONAL",
-    "ownerName": "Rahul Sharma",
-    "isDefault": true,
-    "isActive": true,
-    "createdAt": "2026-10-05T14:00:00.000Z"
-  }
+    "statusCode": 201,
+    "data": {
+        "userId": "6ac34c5bfd79ed5569324cd1",
+        "name": "Master Bedroom Almari",
+        "storeType": "WARDROBE",
+        "type": "PERSONAL",
+        "ownerName": "Rahul Sharma",
+        "coverImage": "",
+        "ownerFaceImage": "",
+        "referenceFace": {
+            "embedding": []
+        },
+        "isDefault": true,
+        "isActive": true,
+        "_id": "6ac622afe824410c3e3221bf",
+        "createdAt": "2026-10-07T10:45:03.961Z",
+        "updatedAt": "2026-10-07T10:45:03.961Z",
+        "__v": 0,
+        "id": "6ac622afe824410c3e3221bf"
+    },
+    "message": "Wardrobe closet created successfully",
+    "success": true
 }
+
 ```
 
 ---
@@ -429,22 +438,30 @@
 - **Response:**
 ```json
 {
-  "statusCode": 200,
-  "success": true,
-  "message": "Wardrobe closets fetched successfully",
-  "data": [
-    {
-      "_id": "674f1b2c3d4e5f6a7b8c9d10",
-      "userId": "65f1a2b3c4d5e6f7a8b9c0d1",
-      "name": "Master Bedroom Almari",
-      "storeType": "WARDROBE",
-      "type": "PERSONAL",
-      "isDefault": true,
-      "isActive": true,
-      "createdAt": "2026-10-05T14:00:00.000Z"
-    }
-  ]
+    "statusCode": 200,
+    "data": [
+        {
+            "_id": "6ac622afe824410c3e3221bf",
+            "userId": "6ac34c5bfd79ed5569324cd1",
+            "name": "Master Bedroom Almari",
+            "storeType": "WARDROBE",
+            "type": "PERSONAL",
+            "ownerName": "Rahul Sharma",
+            "coverImage": "",
+            "ownerFaceImage": "",
+            "isDefault": true,
+            "isActive": true,
+            "createdAt": "2026-10-07T10:45:03.961Z",
+            "updatedAt": "2026-10-07T10:45:03.961Z",
+            "__v": 0,
+            "id": "6ac622afe824410c3e3221bf"
+        }
+    ],
+    "message": "Wardrobe closets fetched successfully",
+    "success": true
 }
+
+
 ```
 
 ---

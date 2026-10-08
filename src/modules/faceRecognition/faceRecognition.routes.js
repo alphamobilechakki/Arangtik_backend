@@ -72,6 +72,17 @@ router.post(
   faceRecognitionController.scanImage
 );
 
+router.post(
+  '/verify-user-face',
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+  ]),
+  validateScanUpload,
+  validateThresholdParam,
+  faceRecognitionController.scanImage
+);
+
 const wardrobeController = require('../wardrobe/wardrobe.controller');
 
 /**
