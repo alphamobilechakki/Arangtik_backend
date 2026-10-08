@@ -431,7 +431,8 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
 
       // 2. Fetch up-to-date closet items for this target Almari to prevent duplicate additions
       const existingItems = await WardrobeItem.find(wardrobeFilter);
-      const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
+      const inFlightItems = [...existingItems, ...results.newItemsCreated];
+      const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, inFlightItems);
 
       const fileCreatedItems = [];
       const fileMatchedItems = [];
@@ -487,6 +488,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
 
           fileCreatedItems.push(newItem);
           results.newItemsCreated.push(newItem);
+          inFlightItems.push(newItem);
         }
       }
 

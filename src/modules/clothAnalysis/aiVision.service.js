@@ -12,14 +12,49 @@ if (!fs.existsSync(cropsDir)) {
 }
 
 /**
- * Helper to safely extract attribute value from Mongoose Map or plain object
+ * Helper to safely extract attribute value from Mongoose Document or Map or plain object
  */
 const getAttr = (item, key) => {
   if (!item) return undefined;
+
+  // 1. Check direct top-level Mongoose model fields
+  if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
+    return item[key];
+  }
+  if (key === 'primaryColor' && (item.color || item.primaryColor)) {
+    return item.color || item.primaryColor;
+  }
+  if (key === 'pattern' && (item.pattern || item.designPattern)) {
+    return item.pattern || item.designPattern;
+  }
+  if (key === 'fabric' && item.fabric) {
+    return item.fabric;
+  }
+  if (key === 'fit' && item.fit) {
+    return item.fit;
+  }
+  if (key === 'neckline' && item.neckline) {
+    return item.neckline;
+  }
+
+  // 2. Check nested attributes Map or plain object
   const attrs = item.attributes;
   if (!attrs) return undefined;
-  if (typeof attrs.get === 'function') return attrs.get(key);
-  return attrs[key];
+  if (typeof attrs.get === 'function') {
+    const val = attrs.get(key);
+    if (val !== undefined && val !== null && val !== '') return val;
+  }
+  if (attrs[key] !== undefined && attrs[key] !== null && attrs[key] !== '') {
+    return attrs[key];
+  }
+  if (key === 'primaryColor' && (attrs.color || attrs.primaryColor)) {
+    return attrs.color || attrs.primaryColor;
+  }
+  if (key === 'pattern' && (attrs.pattern || attrs.designPattern)) {
+    return attrs.pattern || attrs.designPattern;
+  }
+
+  return undefined;
 };
 
 /**
