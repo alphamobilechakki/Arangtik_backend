@@ -1,10 +1,22 @@
 const path = require('path');
 const fs = require('fs');
-const sharp = require('sharp');
-const { removeBackground } = require('@imgly/background-removal-node');
 
-// Disable Sharp disk/memory cache to prevent file locking and native thread conflicts
-sharp.cache(false);
+let sharp = null;
+try {
+  sharp = require('sharp');
+  sharp.cache(false);
+} catch (err) {
+  console.warn('⚠️ Warning: sharp native module could not be loaded:', err.message);
+}
+
+// Safely require background removal module with fallback
+let removeBackground = null;
+try {
+  const bgRemoval = require('@imgly/background-removal-node');
+  removeBackground = bgRemoval.removeBackground;
+} catch (err) {
+  console.warn('⚠️ Warning: @imgly/background-removal-node native module could not be initialized at startup:', err.message);
+}
 
 // Ensure segmented crops storage directory exists
 const segmentedCropsDir = path.join(__dirname, '../../../uploads/crops/segmented');
@@ -98,6 +110,17 @@ class SegmentationService {
     const outputFilename = `${filenamePrefix}-${uniqueId}.${extension}`;
     const outputFilePath = path.join(segmentedCropsDir, outputFilename);
     const outputUrl = `/uploads/crops/segmented/${outputFilename}`;
+    if (!sharp || !removeBackground) {
+      fs.writeFileSync(outputFilePath, originalBuffer);
+      return {
+        success: true,
+        outputPath: outputFilePath,
+        outputUrl,
+        filename: outputFilename,
+        isTransparent: false,
+        fallback: true,
+      };
+    }
 
     try {
       // 1. Convert input to raw RGBA Buffer using Sharp (safe, fast, normalized)
