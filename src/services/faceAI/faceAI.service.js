@@ -62,16 +62,19 @@ class FaceAIService {
    * @param {Buffer|string} imageInput
    * @returns {Promise<Array<{ faceIndex: number, confidence: number, boundingBox: { x: number, y: number, width: number, height: number }, embedding: number[] }>>}
    */
-  async detectGalleryFaces(imageInput) {
+  async detectGalleryFaces(imageInput, options = {}) {
     if (!imageInput) {
       throw new ApiError(400, 'Gallery image is required', [
         { code: ERROR_CODES.INVALID_IMAGE, message: 'Image payload is missing' },
       ]);
     }
 
+    const minConfidence = options.minConfidence !== undefined ? options.minConfidence : 0.20;
+    const minFaceSize = options.minFaceSize !== undefined ? options.minFaceSize : 25;
+
     const faces = await faceAIClient.detectFacesAndEmbeddings(imageInput, {
-      minConfidence: FACE_MIN_CONFIDENCE,
-      minFaceSize: FACE_MIN_SIZE,
+      minConfidence,
+      minFaceSize,
     });
 
     return faces || [];

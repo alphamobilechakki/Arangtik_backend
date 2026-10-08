@@ -614,15 +614,17 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         const rawDetection = croppedDetections[gIdx];
         const matchRes = aiVisionService.matchAgainstWardrobe([rawDetection], inFlightItems);
         const item = matchRes[0];
-        matchedDetections.push(item);
 
         const matchedItem = item.matchResult?.existingItem || item.matchedItem;
 
         if (item.matchResult?.status === 'EXACT_MATCH' && matchedItem) {
           imageMatchedItemIds.push(matchedItem._id);
-        } else if (autoCreateNewItems && item.matchResult?.status !== 'EXACT_MATCH' && item.matchResult?.status !== 'AMBIGUOUS_MATCH') {
+          item.status = 'EXACT_MATCH';
+          item.garment = matchedItem;
+          matchedDetections.push(item);
+        } else if (autoCreateNewItems) {
           // Ingest new WardrobeItem
-          const primaryColor = item.attributes?.primaryColor || '';
+          const primaryColor = item.attributes?.primaryColor || rawDetection.color || '';
           const subCat = item.subCategory || item.category || 'Dress';
           const defaultName = primaryColor ? `${primaryColor} ${subCat}` : `${item.category || 'Garment'} Item`;
 
@@ -659,9 +661,15 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
             tags: ['Auto-Extracted', 'Gallery-Scan', primaryColor, item.category].filter(Boolean),
           });
 
+          item.status = 'CREATED';
+          item.garment = newItem;
+          matchedDetections.push(item);
+
           inFlightItems.push(newItem);
           imageNewItems.push(newItem);
           results.newWardrobeItemsCreated.push(newItem);
+        } else {
+          matchedDetections.push(item);
         }
       }
 
@@ -669,11 +677,20 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         filename: file.filename,
         originalImageUrl: `/uploads/${file.filename}`,
         isUserFound: true,
-        userFaceScore: scanResult.matchedFaces?.[0]?.similarityScore || 1.0,
+        userFaceScore: scanResult.matchedFaces?.[0]?.similarityScore || scanResult.matchedFaces?.[0]?.confidence || 1.0,
         garmentsDetected: croppedDetections.length,
         newItemsAdded: imageNewItems.length,
         existingItemsMatched: imageMatchedItemIds.length,
-        items: matchedDetections,
+        items: matchedDetections.map((m) => ({
+          name: m.name,
+          category: m.category,
+          subCategory: m.subCategory,
+          color: m.attributes?.primaryColor || m.color || '',
+          fabric: m.attributes?.fabric || m.fabric || '',
+          croppedImageUrl: m.croppedImageUrl || `/uploads/${file.filename}`,
+          status: m.status || 'CREATED',
+          matchStatus: m.matchResult?.status || 'NEW_ITEM',
+        })),
       });
     } catch (err) {
       console.error(`[ClothAnalysis] [GalleryIngest] Error processing file ${file.filename}:`, err);

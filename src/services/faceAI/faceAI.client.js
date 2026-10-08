@@ -110,14 +110,14 @@ class FaceAIClient {
   async detectFacesAndEmbeddings(imageInput, options = {}) {
     await this.initialize();
 
-    const minConfidence = options.minConfidence || FACE_MIN_CONFIDENCE;
-    const minFaceSize = options.minFaceSize || FACE_MIN_SIZE;
+    const minConfidence = options.minConfidence !== undefined ? options.minConfidence : FACE_MIN_CONFIDENCE;
+    const minFaceSize = options.minFaceSize !== undefined ? options.minFaceSize : FACE_MIN_SIZE;
 
     const { tensor, width: imgWidth, height: imgHeight } = await this.imageToTensor(imageInput);
 
     try {
       const detectionOptions = new faceapi.SsdMobilenetv1Options({
-        minConfidence: Math.max(0.40, minConfidence),
+        minConfidence: Math.max(0.15, minConfidence),
         maxResults: 100,
       });
 
@@ -140,10 +140,9 @@ class FaceAIClient {
           continue;
         }
 
-        // 2. Aspect Ratio Filter (Normal human faces range from 0.58 to 1.35)
-        // Slender vertical slices (like ear crops) or extreme horizontal slices are rejected
+        // 2. Aspect Ratio Filter (Normal human faces range from 0.45 to 1.55)
         const aspectRatio = width / height;
-        if (aspectRatio < 0.55 || aspectRatio > 1.40) {
+        if (aspectRatio < 0.45 || aspectRatio > 1.55) {
           continue;
         }
 
