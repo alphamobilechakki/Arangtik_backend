@@ -540,17 +540,21 @@
 
 ### 5.2 Gallery Photos Ingestion (Face Verification + Clothes Auto-Extraction Pipeline)
 - **Overview & Functionality:**
-  End-to-end automated ingestion pipeline designed specifically for personal camera roll / phone gallery photos.
-  1. **Smart Target Face Verification Filter:** 
+  End-to-end automated ingestion pipeline designed specifically for personal camera roll / phone gallery photos and group snapshots.
+  1. **Smart Target Face Verification & Multi-Person Group Photo Sensitivity:** 
      - If `wardrobeId` is provided, the API matches faces against that specific **Wardrobe Owner's Reference Face** (`wardrobe.ownerFaceImage` / `wardrobe.referenceFace`).
      - If `wardrobeId` is not provided, it falls back to matching the logged-in user's biometric reference profile face.
+     - **Multi-Person / Cafe Group Photo Support:** In group shots with multiple people, side angles, or ambient lighting, the AI uses high-sensitivity multi-face detection (`minConfidence: 0.20`, `FACE_MIN_SIZE: 25px`) with 128-dimensional Euclidean biometric distance matching. The Almari Owner is accurately isolated and verified (`distance <= 0.50`), while non-owner friends/family are automatically discarded.
      - Photos where the target person is NOT present are safely filtered out.
-  2. **Targeted Clothes Extraction:** For photos where the target person IS present, AI Vision extracts **only the clothes worn by that person** (spatial coordinates beneath their face), ignoring clothes worn by other people in group photos.
+  2. **Targeted Clothes Extraction:** For photos where the target person IS present, AI Vision extracts **only the clothes worn by that person** (spatial coordinates beneath their face bounding box), strictly ignoring clothes worn by other people in group photos.
   3. **Auto-Crop & Background Removal:** Crops clothing items with precision bounds and removes background noise into transparent WebP.
-  4. **Wardrobe Digitization & Duplicate Check:** Automatically persists new garments into the target wardrobe while updating wear counts for already registered outfits.
+  4. **Wardrobe-Scoped Duplicate Protection & Smart Handling:** 
+     - **Almari-Scoped:** Duplicate detection (`sourceImageHash` exact matches & visual similarity) is strictly scoped to the target `wardrobeId`. Adding a black shirt into Almari B will NOT be blocked if Almari A has a similar shirt.
+     - **Exact Match (≥72% / Same Hash):** Instantly recognized as duplicate in that Almari. Automatically reuses the item and increments `usageStats.wearCount` without confusing the user.
+     - **Ambiguous Match (52%–71%):** Provided with side-by-side comparison details (`candidateMatches`) for user verification.
 - **When to Use:**
   - When the user syncs or uploads personal gallery photos, family snapshots, or vacation albums for a specific wardrobe (e.g. Papa's Wardrobe, Mummy's Almari).
-  - When digitizing outfits directly from real-life portraits and group pictures.
+  - When digitizing outfits directly from real-life portraits and multi-person group pictures.
 - **How to Use (Step-by-Step):**
   1. Add `Authorization: Bearer <JWT_TOKEN>` header.
   2. Send a `POST` request with `multipart/form-data`.
@@ -566,7 +570,7 @@
     - `Content-Type: multipart/form-data`
   - Form-Data:
     - `photos` (or `photo`, `image`, `images`) *(file / array, required)*: Gallery photos (1 to 100 files)
-    - `wardrobeId` *(text, optional)*: Target closet ID (matches against wardrobe owner's face)
+    - `wardrobeId` *(text, optional)*: Target closet ID (matches against wardrobe owner's face and scopes duplicate checks)
     - `threshold` *(number, optional)*: Face matching distance threshold (Default: `0.50`)
     - `autoCreateNewItems` *(boolean, optional)*: Automatically persist new items (Default: `true`)
 - **Response Examples:**
