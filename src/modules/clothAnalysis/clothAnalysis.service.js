@@ -23,7 +23,7 @@ const calculateSourceImageHash = (filePathOrBuffer) => {
 /**
  * Analyze an uploaded photo from gallery or camera to detect garments, crop them, and match with wardrobe
  */
-const analyzePhoto = async (userId, file) => {
+const analyzePhoto = async (userId, file, options = {}) => {
   if (!file) {
     throw new ApiError(400, 'Please upload an image to analyze');
   }
@@ -31,15 +31,26 @@ const analyzePhoto = async (userId, file) => {
   const originalImageUrl = `/uploads/${file.filename}`;
   const sourceImageHash = calculateSourceImageHash(file.path);
 
-  // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+  let targetWardrobeId = options.wardrobeId || null;
+  if (!targetWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) targetWardrobeId = defaultW._id;
+  }
+
+  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  if (targetWardrobeId) {
+    wardrobeFilter.wardrobeId = targetWardrobeId;
+  }
+
+  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
   if (sourceImageHash) {
     const existingExactItems = await WardrobeItem.find({
-      userId,
+      ...wardrobeFilter,
       sourceImageHash,
     }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
     if (existingExactItems.length > 0) {
-      console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
+      console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
       return {
         originalImageUrl,
         sourceImageHash,
@@ -58,7 +69,7 @@ const analyzePhoto = async (userId, file) => {
             status: 'EXACT_MATCH',
             matchType: 'IMAGE_HASH',
             confidenceScore: 1.0,
-            message: `Exact duplicate photo detected. Reusing existing wardrobe item "${ex.name}".`,
+            message: `Exact duplicate photo detected in this Almari. Reusing existing wardrobe item "${ex.name}".`,
             existingItem: ex,
           },
         })),
@@ -69,7 +80,7 @@ const analyzePhoto = async (userId, file) => {
   let userFaceBoxes = [];
   try {
     const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-    const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, { filename: file.filename });
+    const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, { filename: file.filename }, null, targetWardrobeId);
     if (scanResult.matched && scanResult.matchedFaces?.length > 0) {
       userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
     }
@@ -83,8 +94,8 @@ const analyzePhoto = async (userId, file) => {
   // 2. Crop detected clothing pieces from the original image
   const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
-  // 3. Fetch existing wardrobe items for this user to check for duplicates/matches
-  const existingItems = await WardrobeItem.find({ userId });
+  // 3. Fetch existing wardrobe items for THIS specific Almari to check for duplicates/matches
+  const existingItems = await WardrobeItem.find(wardrobeFilter);
 
   // 4. Perform hybrid matching (Exact match, Ambiguous match, New item)
   const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
@@ -109,18 +120,28 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   const sourceImageHash = calculateSourceImageHash(file.path);
   const autoPersist = options.autoPersist !== false;
 
-  console.log(`[ClothAnalysis] Scan initiated for user: ${userId}, file: ${file.filename}, hash: ${sourceImageHash ? sourceImageHash.slice(0, 12) : 'null'}`);
+  let targetWardrobeId = options.wardrobeId || null;
+  if (!targetWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) targetWardrobeId = defaultW._id;
+  }
 
-  // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  if (targetWardrobeId) {
+    wardrobeFilter.wardrobeId = targetWardrobeId;
+  }
+
+  console.log(`[ClothAnalysis] Scan initiated for user: ${userId}, wardrobe: ${targetWardrobeId}, file: ${file.filename}, hash: ${sourceImageHash ? sourceImageHash.slice(0, 12) : 'null'}`);
+
+  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
   if (sourceImageHash) {
     const existingExactItems = await WardrobeItem.find({
-      userId,
-      storeType: 'WARDROBE',
+      ...wardrobeFilter,
       sourceImageHash,
     }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
     if (existingExactItems.length > 0) {
-      console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
+      console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
 
       const processedItems = [];
       for (const ex of existingExactItems) {
@@ -220,8 +241,8 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
   console.log(`[ClothAnalysis] Detected & segmented ${croppedDetections.length} garments for user ${userId}`);
 
-  // 4. Duplicate / Similarity matching against user's existing wardrobe items
-  const existingItems = await WardrobeItem.find({ userId, storeType: 'WARDROBE' });
+  // 4. Duplicate / Similarity matching against target Almari's existing items
+  const existingItems = await WardrobeItem.find(wardrobeFilter);
   const inFlightItems = [...existingItems];
 
   const processedItems = [];
@@ -351,6 +372,17 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     throw new ApiError(400, 'Please upload at least one clothing photo to digitize');
   }
 
+  let targetWardrobeId = options.wardrobeId || null;
+  if (!targetWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) targetWardrobeId = defaultW._id;
+  }
+
+  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  if (targetWardrobeId) {
+    wardrobeFilter.wardrobeId = targetWardrobeId;
+  }
+
   const results = {
     totalPhotosReceived: files.length,
     totalGarmentsExtracted: 0,
@@ -363,15 +395,15 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     const file = files[idx];
     const sourceImageHash = calculateSourceImageHash(file.path);
 
-    // LEVEL 1: Exact Source Image Duplicate Check (User-Scoped)
+    // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
     if (sourceImageHash) {
       const existingExactItems = await WardrobeItem.find({
-        userId,
+        ...wardrobeFilter,
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
       if (existingExactItems.length > 0) {
-        console.log(`[ClothAnalysis] [bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        console.log(`[ClothAnalysis] [bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
         for (const ex of existingExactItems) {
           await WardrobeItem.findByIdAndUpdate(ex._id, {
             $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
@@ -397,8 +429,8 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
-      // 2. Fetch up-to-date closet items to prevent duplicate additions across the batch
-      const existingItems = await WardrobeItem.find({ userId });
+      // 2. Fetch up-to-date closet items for this target Almari to prevent duplicate additions
+      const existingItems = await WardrobeItem.find(wardrobeFilter);
       const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
 
       const fileCreatedItems = [];
@@ -514,6 +546,17 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     details: [],
   };
 
+  let targetWardrobeId = options.wardrobeId || null;
+  if (!targetWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) targetWardrobeId = defaultW._id;
+  }
+
+  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  if (targetWardrobeId) {
+    wardrobeFilter.wardrobeId = targetWardrobeId;
+  }
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const fileMeta = {
@@ -525,15 +568,15 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
     const sourceImageHash = calculateSourceImageHash(file.path);
 
-    // Level 1: Exact Source Image Duplicate Check (User-Scoped)
+    // Level 1: Exact Source Image Duplicate Check (Scoped to target Almari)
     if (sourceImageHash) {
       const existingExactItems = await WardrobeItem.find({
-        userId,
+        ...wardrobeFilter,
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
       if (existingExactItems.length > 0) {
-        console.log(`[ClothAnalysis] [GalleryIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        console.log(`[ClothAnalysis] [GalleryIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
         results.matchedUserImagesCount++;
         for (const ex of existingExactItems) {
           await WardrobeItem.findByIdAndUpdate(ex._id, {
@@ -562,7 +605,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
               status: 'EXACT_MATCH',
               matchType: 'IMAGE_HASH',
               confidenceScore: 1.0,
-              message: 'Exact duplicate photo detected. Reusing existing wardrobe item.',
+              message: 'Exact duplicate photo detected in this Almari. Reusing existing wardrobe item.',
               existingItem: ex,
             },
           })),
@@ -579,7 +622,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         file.path,
         fileMeta,
         threshold,
-        options.wardrobeId || null
+        targetWardrobeId
       );
 
       if (!scanResult.matched) {
@@ -602,8 +645,8 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
 
-      // 3. Match against existing wardrobe
-      const existingItems = await WardrobeItem.find({ userId });
+      // 3. Match against target Almari's existing wardrobe items
+      const existingItems = await WardrobeItem.find(wardrobeFilter);
       const inFlightItems = [...existingItems];
 
       const imageNewItems = [];

@@ -31,8 +31,8 @@ const extractDirectDress = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
   const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
     storagePlace: req.body.storagePlace || 'Main Closet',
   };
 
@@ -46,7 +46,7 @@ const extractDirectDress = asyncHandler(async (req, res) => {
 
   // Single file preview analysis mode (if explicitly requested with autoPersist=false)
   if (files.length === 1 && req.body.autoPersist === 'false') {
-    const result = await clothAnalysisService.analyzePhoto(userId, files[0]);
+    const result = await clothAnalysisService.analyzePhoto(userId, files[0], options);
     return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
   }
 
@@ -68,8 +68,8 @@ const extractFromGallery = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
   const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
     autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
   };
@@ -100,7 +100,11 @@ const analyzePhoto = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
   const file = files[0] || req.file;
-  const result = await clothAnalysisService.analyzePhoto(userId, file);
+  const options = {
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
+  };
+  const result = await clothAnalysisService.analyzePhoto(userId, file, options);
 
   return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
 });
@@ -115,8 +119,8 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
   const files = extractFilesFromReq(req);
   const file = files[0] || req.file;
   const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
   };
 
@@ -138,8 +142,8 @@ const bulkAddPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
   const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
     storagePlace: req.body.storagePlace || 'Main Closet',
   };
 
@@ -161,8 +165,8 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
   const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
+    wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
+    collectionId: req.body.collectionId || req.query.collectionId || null,
     autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
     threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
   };
