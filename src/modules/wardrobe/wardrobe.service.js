@@ -7,7 +7,7 @@ const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
 /**
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
-const createWardrobe = async (userId, data, file = null) => {
+const createWardrobe = async (userId, data, files = null) => {
   const { name, storeType = 'WARDROBE', type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
@@ -16,17 +16,26 @@ const createWardrobe = async (userId, data, file = null) => {
   let coverImage = data.coverImage || '';
   let ownerFaceImage = data.ownerFaceImage || '';
 
-  if (file) {
-    coverImage = `/uploads/${file.filename}`;
-    ownerFaceImage = `/uploads/${file.filename}`;
+  if (files && typeof files === 'object') {
+    if (files.ownerFaceImage) {
+      ownerFaceImage = `/uploads/${files.ownerFaceImage.filename}`;
+    }
+    if (files.coverImage) {
+      coverImage = `/uploads/${files.coverImage.filename}`;
+    }
+    if (files.filename) {
+      coverImage = `/uploads/${files.filename}`;
+      ownerFaceImage = `/uploads/${files.filename}`;
+    }
   }
 
   let referenceFace = undefined;
-  if (ownerFaceImage || coverImage) {
+  const targetFaceImg = ownerFaceImage || coverImage;
+  if (targetFaceImg) {
     try {
       const faceAIService = require('../../services/faceAI/faceAI.service');
       const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-      const resolvedPath = faceRecognitionService.resolveImagePath(ownerFaceImage || coverImage);
+      const resolvedPath = faceRecognitionService.resolveImagePath(targetFaceImg);
       if (fs.existsSync(resolvedPath)) {
         const face = await faceAIService.extractReferenceFace(resolvedPath);
         referenceFace = {
@@ -34,7 +43,7 @@ const createWardrobe = async (userId, data, file = null) => {
           boundingBox: face.boundingBox,
           detectionConfidence: face.confidence,
           lastGeneratedAt: new Date(),
-          imagePath: ownerFaceImage || coverImage,
+          imagePath: targetFaceImg,
         };
         console.log(`[createWardrobe] Reference face generated successfully for wardrobe "${name}"`);
       }

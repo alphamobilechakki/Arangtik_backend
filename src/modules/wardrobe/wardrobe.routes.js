@@ -15,6 +15,7 @@ router.use(protect);
 router.post(
   '/create-wardrobe',
   upload.fields([
+    { name: 'ownerFaceImage', maxCount: 1 },
     { name: 'coverImage', maxCount: 1 },
     { name: 'photo', maxCount: 1 },
     { name: 'image', maxCount: 1 },
