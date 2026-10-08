@@ -27,7 +27,7 @@ module.exports = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
 
   // Face Recognition Configuration
-  FACE_MATCH_THRESHOLD: parseFloat(process.env.FACE_MATCH_THRESHOLD) || 0.50, // Euclidean distance threshold (<= 0.50 is optimal high-accuracy match)
+  FACE_MATCH_THRESHOLD: parseFloat(process.env.FACE_MATCH_THRESHOLD) || 0.55, // Euclidean distance threshold (<= 0.55 matches true faces in group photos/collages and rejects non-matching people)
   FACE_MIN_CONFIDENCE: parseFloat(process.env.FACE_MIN_CONFIDENCE) || 0.55,
   FACE_MIN_SIZE: parseInt(process.env.FACE_MIN_SIZE, 10) || 45, // Minimum face bounding box width/height in pixels
   FACE_AI_SERVICE_URL: process.env.FACE_AI_SERVICE_URL || '', // Optional external Python microservice

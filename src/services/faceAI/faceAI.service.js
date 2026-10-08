@@ -120,21 +120,8 @@ class FaceAIService {
       .filter((f) => f.isCandidateMatch)
       .sort((a, b) => a.distance - b.distance);
 
-    // In a single photo, the primary user match is the closest candidate
-    // If multiple faces pass the threshold, only mark the closest true face as matched
-    // (or allow multiple only if distance is exceptionally tight, e.g. < 0.35)
-    const primaryMatchedIndices = new Set();
-    if (matchingCandidates.length > 0) {
-      // Best match
-      primaryMatchedIndices.add(matchingCandidates[0].faceIndex);
-
-      // If there's another candidate with virtually identical tight distance (<0.35), allow it
-      for (let i = 1; i < matchingCandidates.length; i++) {
-        if (matchingCandidates[i].distance <= 0.35) {
-          primaryMatchedIndices.add(matchingCandidates[i].faceIndex);
-        }
-      }
-    }
+    // All candidates passing the threshold are true matches (supports collages & multi-instance photos)
+    const primaryMatchedIndices = new Set(matchingCandidates.map((c) => c.faceIndex));
 
     const matchedFaces = [];
     const allDetectedFaces = [];
