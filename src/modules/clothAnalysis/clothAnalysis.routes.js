@@ -23,18 +23,17 @@ const uploadClothMedia = upload.fields([
 // __________________________________________________________________________
 router.post('/extract-dress', uploadClothMedia, clothAnalysisController.extractDirectDress);
 router.post('/analyze-photo', uploadClothMedia, clothAnalysisController.analyzePhoto);
-router.post('/bulk-add-photos', uploadClothMedia, clothAnalysisController.bulkAddPhotos);
-router.post('/analyze', uploadClothMedia, clothAnalysisController.analyzePhoto);
-router.post('/bulk-add', uploadClothMedia, clothAnalysisController.bulkAddPhotos);
 
 // __________________________________________________________________________
-// 2. GALLERY SCANNING & INGESTION (With User Face Verification - Single or 1 to 100 Photos)
-//    (Photo me pehle user ka face check hoga, fir sirf user ke kapde extract honge)
+// 2. GALLERY SCANNING & INGESTION (With Target Face Matching - 1 to 100 Photos)
+//    (Target user ya wardrobe owner ka face match karke kapde extract & ingest karta hai)
 // __________________________________________________________________________
 router.post('/extract-from-gallery', uploadClothMedia, clothAnalysisController.extractFromGallery);
-router.post('/ingest-gallery', uploadClothMedia, clothAnalysisController.ingestGalleryPhotos);
 router.post('/scan-gallery-photo', uploadClothMedia, clothAnalysisController.scanGalleryPhoto);
-router.post('/ingest', uploadClothMedia, clothAnalysisController.ingestGalleryPhotos);
-router.post('/scan', uploadClothMedia, clothAnalysisController.scanGalleryPhoto);
+
+// Legacy backward-compatibility aliases
+router.post('/ingest-gallery', uploadClothMedia, clothAnalysisController.extractFromGallery);
+router.post('/bulk-add-photos', uploadClothMedia, clothAnalysisController.extractDirectDress);
 
 module.exports = router;
+

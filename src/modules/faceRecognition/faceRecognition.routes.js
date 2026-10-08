@@ -36,11 +36,11 @@ router.get('/reference', faceRecognitionController.getReferenceStatus);
 router.delete('/reference', faceRecognitionController.deleteReference);
 
 /**
- * @route   POST /api/face-recognition/scan-gallery-photo (Aliases: /scan-gallery, /scan)
- * @desc    Scan a single gallery photo against the logged-in user's reference face
+ * @route   POST /api/face-recognition/scan-photo
+ * @desc    Scan a single photo against user or wardrobe owner reference face
  */
 router.post(
-  '/scan-gallery-photo',
+  '/scan-photo',
   upload.fields([
     { name: 'photo', maxCount: 1 },
     { name: 'image', maxCount: 1 },
@@ -50,8 +50,9 @@ router.post(
   faceRecognitionController.scanImage
 );
 
+// Backward-compatibility aliases
 router.post(
-  '/scan-gallery',
+  ['/scan-gallery-photo', '/verify-user-face'],
   upload.fields([
     { name: 'photo', maxCount: 1 },
     { name: 'image', maxCount: 1 },
@@ -59,40 +60,7 @@ router.post(
   validateScanUpload,
   validateThresholdParam,
   faceRecognitionController.scanImage
-);
-
-router.post(
-  '/scan',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  validateScanUpload,
-  validateThresholdParam,
-  faceRecognitionController.scanImage
-);
-
-router.post(
-  '/verify-user-face',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  validateScanUpload,
-  validateThresholdParam,
-  faceRecognitionController.scanImage
-);
-
-const wardrobeController = require('../wardrobe/wardrobe.controller');
-
-/**
- * @route   POST /api/face-recognition/scan-and-ingest
- * @desc    Scan gallery photos, match user's face, extract clothing with AI vision and auto-ingest into digital wardrobe
- */
-router.post(
-  '/scan-and-ingest',
-  upload.array('photos', 20),
-  wardrobeController.ingestGalleryPhotos
 );
 
 module.exports = router;
+

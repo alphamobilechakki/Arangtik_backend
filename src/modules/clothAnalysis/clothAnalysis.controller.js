@@ -87,7 +87,7 @@ const extractFromGallery = asyncHandler(async (req, res) => {
   return ApiResponse.success(
     res,
     result,
-    `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
+    result.summaryMessage || `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
   );
 });
 
@@ -172,7 +172,7 @@ const ingestGalleryPhotos = asyncHandler(async (req, res) => {
   return ApiResponse.success(
     res,
     result,
-    `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
+    result.summaryMessage || `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
   );
 });
 

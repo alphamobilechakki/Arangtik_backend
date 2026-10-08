@@ -11,26 +11,25 @@
 > **Never modify, break, or change the request/response structure of these existing working APIs** in future tasks unless explicitly requested by the user.
 
 ```text
-[STEP 1: AUTH] ✅
+[STEP 1: AUTHENTICATION] ✅
   ├─► POST /api/auth/send-otp           [DONE ✅] (Send WhatsApp OTP)
   └─► POST /api/auth/verify-otp         [DONE ✅] (Verify OTP, Login/Register, Get JWT Token)
 
-[STEP 2: PROFILE & REFERENCE BIOMETRICS] ✅
-  ├─► GET    /api/auth/profile          [DONE ✅] (Get Profile Info)
-  ├─► PATCH  /api/auth/profile          [DONE ✅] (Unified Profile Update: Text Details + Photo Upload)
-  ├─► GET    /api/face-recognition/reference [DONE ✅] (Check Biometric Status)
-  └─► DELETE /api/face-recognition/reference [DONE ✅] (Delete Reference Face)
+[STEP 2: PROFILE & BIOMETRIC REFERENCE] ✅
+  ├─► GET    /api/auth/profile          [DONE ✅] (Get User Profile Info)
+  ├─► PATCH  /api/auth/profile          [DONE ✅] (Update Profile Details & Upload Profile Photo)
+  ├─► GET    /api/face-recognition/reference [DONE ✅] (Check Biometric Face Status)
+  └─► DELETE /api/face-recognition/reference [DONE ✅] (Delete Biometric Reference Face)
 
-[STEP 3: STORE CONTAINERS] ✅
-  ├─► POST /api/wardrobe/create-wardrobe [DONE ✅] (Create Almari / Store Container)
-  └─► GET  /api/wardrobe/get-wardrobes   [DONE ✅] (List User Almaris / Stores)
+[STEP 3: STORE CONTAINERS / ALMARI] ✅
+  ├─► POST /api/wardrobe/create-wardrobe [DONE ✅] (Create Almari with Name, Owner Name & Owner Face Photo)
+  └─► GET  /api/wardrobe/get-wardrobes   [DONE ✅] (List User Almaris / Store Containers)
 
-[STEP 4: AI CLOTH DIGITIZATION & GALLERY SCANNING] ✅
-  ├─► POST /api/cloth-analysis/extract-dress        [DONE ✅] (Direct Dress: Single / 1-100 Photos -> AI Auto-Crop & Store)
-  ├─► POST /api/cloth-analysis/extract-from-gallery [DONE ✅] (Gallery Photos: User Face Match + Auto Clothes Extract & Store)
-  └─► POST /api/face-recognition/verify-user-face   [DONE ✅] (Face Match Check: Verify if User Exists in Photo)
+[STEP 4: AI CLOTH DIGITIZATION & SMART GALLERY SCANNING] ✅
+  ├─► POST /api/cloth-analysis/extract-dress        [DONE ✅] (Direct Clothes: 1-100 Photos -> AI Segmentation & Store)
+  └─► POST /api/cloth-analysis/extract-from-gallery [DONE ✅] (Smart Gallery Scan: Target Owner Face Match -> Auto Clothes Store)
 
-[STEP 5: DRESS & STORE ITEMS] ✅
+[STEP 5: DRESS & STORE ITEMS CRUD] ✅
   ├─► POST   /api/wardrobe/add-item           [DONE ✅] (Directly Add Item to Almari)
   ├─► GET    /api/wardrobe/get-all-items      [DONE ✅] (Search, Filter & Paginate Items)
   ├─► GET    /api/wardrobe/get-item-details/:id [DONE ✅] (Get Full Item Details)
@@ -542,41 +541,49 @@
 ### 5.2 Gallery Photos Ingestion (Face Verification + Clothes Auto-Extraction Pipeline)
 - **Overview & Functionality:**
   End-to-end automated ingestion pipeline designed specifically for personal camera roll / phone gallery photos.
-  1. **Face Verification Filter:** Scans all uploaded photos and matches faces against the logged-in user's biometric reference face. Photos where the user is NOT present are safely filtered out.
-  2. **Targeted Clothes Extraction:** For photos where the user IS present, AI Vision extracts **only the clothes worn by the target user** (spatial coordinates beneath the user's face), ignoring clothes worn by other people in group photos.
-  3. **Auto-Crop & Background Removal:** Crops clothing items with precision bounds and removes background noise.
-  4. **Wardrobe Digitization & Duplicate Check:** Automatically persists new garments into the user's digital wardrobe while updating wear counts for already registered outfits.
+  1. **Smart Target Face Verification Filter:** 
+     - If `wardrobeId` is provided, the API matches faces against that specific **Wardrobe Owner's Reference Face** (`wardrobe.ownerFaceImage` / `wardrobe.referenceFace`).
+     - If `wardrobeId` is not provided, it falls back to matching the logged-in user's biometric reference profile face.
+     - Photos where the target person is NOT present are safely filtered out.
+  2. **Targeted Clothes Extraction:** For photos where the target person IS present, AI Vision extracts **only the clothes worn by that person** (spatial coordinates beneath their face), ignoring clothes worn by other people in group photos.
+  3. **Auto-Crop & Background Removal:** Crops clothing items with precision bounds and removes background noise into transparent WebP.
+  4. **Wardrobe Digitization & Duplicate Check:** Automatically persists new garments into the target wardrobe while updating wear counts for already registered outfits.
 - **When to Use:**
-  - When the user syncs or uploads personal gallery photos, event snapshots, or vacation albums.
+  - When the user syncs or uploads personal gallery photos, family snapshots, or vacation albums for a specific wardrobe (e.g. Papa's Wardrobe, Mummy's Almari).
   - When digitizing outfits directly from real-life portraits and group pictures.
 - **How to Use (Step-by-Step):**
   1. Add `Authorization: Bearer <JWT_TOKEN>` header.
   2. Send a `POST` request with `multipart/form-data`.
   3. Upload 1 to 100 gallery photos under key `photos` (or `photo`, `image`, `images`).
-  4. *(Optional)* Pass `wardrobeId` to store detected garments in a specific closet container.
+  4. *(Recommended)* Pass `wardrobeId` to match against that specific Wardrobe Owner's face and store detected garments in that closet.
   5. *(Optional)* Set `threshold` (default `0.50`) for facial recognition sensitivity.
-  6. The response reports how many photos matched the user's face, details of unmatched photos, and all newly created digital wardrobe items.
+  6. The response reports how many photos matched the target person, details of unmatched photos, newly created digital wardrobe items, and a clear contextual message.
 - **Method:** `POST`
-- **Endpoint:** `/api/cloth-analysis/extract-from-gallery` *(Aliases: `/api/cloth-analysis/ingest-gallery`, `/api/cloth-analysis/scan-gallery-photo`, `/api/cloth-analysis/ingest`, `/api/cloth-analysis/scan`)*
+- **Endpoint:** `/api/cloth-analysis/extract-from-gallery`
 - **Request:**
   - Headers: 
     - `Authorization: Bearer <JWT_TOKEN>`
     - `Content-Type: multipart/form-data`
   - Form-Data:
     - `photos` (or `photo`, `image`, `images`) *(file / array, required)*: Gallery photos (1 to 100 files)
-    - `wardrobeId` *(text, optional)*: Target closet ID
+    - `wardrobeId` *(text, optional)*: Target closet ID (matches against wardrobe owner's face)
     - `threshold` *(number, optional)*: Face matching distance threshold (Default: `0.50`)
     - `autoCreateNewItems` *(boolean, optional)*: Automatically persist new items (Default: `true`)
-- **Response:**
+- **Response Examples:**
+
+*Scenario A: Photos matched specific Wardrobe Owner ("Papa ki Almari") and created garments:*
 ```json
 {
   "statusCode": 200,
   "success": true,
-  "message": "Gallery scanned: 2 photos matched your face, 3 new items added to wardrobe",
+  "message": "Gallery scan completed: 2 photo(s) matched Rajesh Sharma (Papa ki Almari). 2 new garment(s) added to wardrobe.",
   "data": {
     "totalImagesReceived": 3,
     "matchedUserImagesCount": 2,
     "unmatchedImagesCount": 1,
+    "targetOwnerName": "Rajesh Sharma",
+    "targetWardrobeName": "Papa ki Almari",
+    "summaryMessage": "Gallery scan completed: 2 photo(s) matched Rajesh Sharma (Papa ki Almari). 2 new garment(s) added to wardrobe.",
     "newWardrobeItemsCreated": [
       {
         "_id": "6aba317270f26b72d852616f",
@@ -608,6 +615,61 @@
         "isUserFound": false,
         "facesDetected": 2,
         "message": "User face not detected in this photo. Skipped wardrobe extraction."
+      }
+    ]
+  }
+}
+```
+
+*Scenario B: Target person matched but garments already exist in wardrobe:*
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Gallery scan completed: 1 photo(s) matched Rajesh Sharma (Papa ki Almari). Garments were already indexed in the wardrobe (no new items created).",
+  "data": {
+    "totalImagesReceived": 1,
+    "matchedUserImagesCount": 1,
+    "unmatchedImagesCount": 0,
+    "targetOwnerName": "Rajesh Sharma",
+    "targetWardrobeName": "Papa ki Almari",
+    "summaryMessage": "Gallery scan completed: 1 photo(s) matched Rajesh Sharma (Papa ki Almari). Garments were already indexed in the wardrobe (no new items created).",
+    "newWardrobeItemsCreated": [],
+    "details": [...]
+  }
+}
+```
+
+---
+
+### 5.3 (Optional Utility Tool) Single Photo Face Verification Check
+- **Description:** Sirf test/diagnostic ke liye: Check karta hai ki kisi single photo me target person ka face detect ho raha hai ya nahi (bina kapde extract kiye aur bina database me item create kiye).
+- **Method:** `POST`
+- **Endpoint:** `/api/face-recognition/scan-photo` *(Alias: `/api/face-recognition/verify-user-face`)*
+- **Request:**
+  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
+  - Form-Data:
+    - `photo` *(file, required)*: Single image file to test
+    - `threshold` *(number, optional)*: Match threshold (Default: `0.50`)
+- **Response:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Face recognition scan completed successfully",
+  "data": {
+    "isUserMatched": true,
+    "facesDetected": 1,
+    "matchedFacesCount": 1,
+    "bestMatchDistance": 0.38,
+    "similarityPercentage": 92.4,
+    "matchedFaces": [
+      {
+        "faceIndex": 0,
+        "detectionConfidence": 0.98,
+        "distance": 0.38,
+        "similarity": 92.4,
+        "boundingBox": { "x": 120, "y": 85, "width": 140, "height": 140 }
       }
     ]
   }

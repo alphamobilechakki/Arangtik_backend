@@ -490,10 +490,26 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
   const autoCreateNewItems = options.autoCreateNewItems !== false;
   const threshold = options.threshold || null;
 
+  let targetOwnerName = '';
+  let targetWardrobeName = '';
+  if (options.wardrobeId) {
+    try {
+      const targetWardrobe = await Wardrobe.findOne({ _id: options.wardrobeId, userId });
+      if (targetWardrobe) {
+        targetWardrobeName = targetWardrobe.name;
+        targetOwnerName = targetWardrobe.ownerName || targetWardrobe.name;
+      }
+    } catch (wErr) {
+      console.warn(`[ClothAnalysis] Failed to fetch wardrobe for id ${options.wardrobeId}:`, wErr.message);
+    }
+  }
+
   const results = {
     totalImagesReceived: files.length,
     matchedUserImagesCount: 0,
     unmatchedImagesCount: 0,
+    targetOwnerName: targetOwnerName || null,
+    targetWardrobeName: targetWardrobeName || null,
     newWardrobeItemsCreated: [],
     details: [],
   };
@@ -667,6 +683,27 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       });
     }
   }
+
+  let summaryMessage = '';
+  const personLabel = targetOwnerName
+    ? (targetWardrobeName ? `${targetOwnerName} (${targetWardrobeName})` : targetOwnerName)
+    : 'your face';
+
+  if (results.totalImagesReceived === 0) {
+    summaryMessage = 'No gallery photos were uploaded to scan.';
+  } else if (results.matchedUserImagesCount === 0) {
+    summaryMessage = targetOwnerName
+      ? `Gallery scan completed: 0 out of ${results.totalImagesReceived} photo(s) matched ${personLabel}.`
+      : `Gallery scan completed: Your face was not detected in any of the ${results.totalImagesReceived} photo(s).`;
+  } else {
+    if (results.newWardrobeItemsCreated.length > 0) {
+      summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. ${results.newWardrobeItemsCreated.length} new garment(s) added to wardrobe.`;
+    } else {
+      summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. Garments were already indexed in the wardrobe (no new items created).`;
+    }
+  }
+
+  results.summaryMessage = summaryMessage;
 
   return results;
 };
