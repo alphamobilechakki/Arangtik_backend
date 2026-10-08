@@ -145,21 +145,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
 
       const processedItems = [];
       for (const ex of existingExactItems) {
-        let persistedGarment = ex;
-        if (autoPersist) {
-          try {
-            persistedGarment = await WardrobeItem.findByIdAndUpdate(
-              ex._id,
-              {
-                $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-                $set: { 'usageStats.lastWornDate': new Date() },
-              },
-              { new: true }
-            );
-          } catch (updateErr) {
-            console.warn(`[ClothAnalysis] Failed to update usageStats for exact match item ${ex._id}:`, updateErr.message);
-          }
-        }
+        const persistedGarment = ex;
 
         processedItems.push({
           tempDetectionId: `det_exact_${ex._id}`,
@@ -178,8 +164,8 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
             status: 'EXACT_MATCH',
             matchType: 'IMAGE_HASH',
             confidenceScore: 1.0,
-            message: `Exact duplicate photo detected. Reusing existing wardrobe item "${ex.name}".`,
-            existingItem: persistedGarment,
+            message: `Exact duplicate photo detected in this Almari. Reusing existing wardrobe item "${ex.name}".`,
+            existingItem: ex,
           },
         });
       }
@@ -264,23 +250,8 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     if (matchStatus === 'EXACT_MATCH' && existingMatchedItem) {
       finalStatus = 'EXACT_MATCH';
       wardrobeItemId = existingMatchedItem._id;
-      console.log(`[ClothAnalysis] Garment "${itemMatch.name}": EXACT_MATCH with "${existingMatchedItem.name}" (ID: ${wardrobeItemId}, score: ${confidenceScore}). Reusing item.`);
-
-      if (autoPersist) {
-        try {
-          const updated = await WardrobeItem.findByIdAndUpdate(
-            existingMatchedItem._id,
-            {
-              $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-              $set: { 'usageStats.lastWornDate': new Date() },
-            },
-            { new: true }
-          );
-          persistedGarment = updated;
-        } catch (updateErr) {
-          console.warn(`[ClothAnalysis] Failed to update usageStats for exact match item ${wardrobeItemId}:`, updateErr.message);
-        }
-      }
+      persistedGarment = existingMatchedItem;
+      console.log(`[ClothAnalysis] Garment "${itemMatch.name}": EXACT_MATCH with "${existingMatchedItem.name}" (ID: ${wardrobeItemId}, score: ${confidenceScore}). Duplicate skipped.`);
     } else if (matchStatus === 'AMBIGUOUS_MATCH') {
       finalStatus = 'AMBIGUOUS_MATCH';
       console.log(`[ClothAnalysis] Garment "${itemMatch.name}": AMBIGUOUS_MATCH (score: ${confidenceScore}). Preserving ambiguity for user confirmation.`);
@@ -373,9 +344,23 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
   }
 
   let targetWardrobeId = options.wardrobeId || null;
+  let targetWardrobeName = '';
+  if (targetWardrobeId) {
+    try {
+      const targetWardrobe = await Wardrobe.findOne({ _id: targetWardrobeId, userId });
+      if (targetWardrobe) {
+        targetWardrobeName = targetWardrobe.name;
+      }
+    } catch (wErr) {
+      console.warn(`[ClothAnalysis] Failed to fetch wardrobe for id ${targetWardrobeId}:`, wErr.message);
+    }
+  }
   if (!targetWardrobeId) {
     const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
-    if (defaultW) targetWardrobeId = defaultW._id;
+    if (defaultW) {
+      targetWardrobeId = defaultW._id;
+      targetWardrobeName = defaultW.name;
+    }
   }
 
   const wardrobeFilter = { userId, storeType: 'WARDROBE' };
@@ -386,6 +371,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
   const results = {
     totalPhotosReceived: files.length,
     totalGarmentsExtracted: 0,
+    targetWardrobeName: targetWardrobeName || null,
     newItemsCreated: [],
     existingMatches: [],
     details: [],
@@ -403,12 +389,8 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
       if (existingExactItems.length > 0) {
-        console.log(`[ClothAnalysis] [bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        console.log(`[ClothAnalysis] [bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items (skipped duplicate addition).`);
         for (const ex of existingExactItems) {
-          await WardrobeItem.findByIdAndUpdate(ex._id, {
-            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-            $set: { 'usageStats.lastWornDate': new Date() },
-          });
           results.existingMatches.push(ex);
         }
         results.totalGarmentsExtracted += existingExactItems.length;
@@ -440,11 +422,6 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       for (let itemIdx = 0; itemIdx < matchedDetections.length; itemIdx++) {
         const item = matchedDetections[itemIdx];
         if (item.matchResult?.status === 'EXACT_MATCH' && item.matchResult?.existingItem) {
-          // Increment wear count on existing item
-          await WardrobeItem.findByIdAndUpdate(item.matchResult.existingItem._id, {
-            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-            $set: { 'usageStats.lastWornDate': new Date() },
-          });
           fileMatchedItems.push(item.matchResult.existingItem);
           results.existingMatches.push(item.matchResult.existingItem);
         } else {
@@ -508,6 +485,21 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       });
     }
   }
+
+  let summaryMessage = '';
+  const almariLabel = targetWardrobeName ? `"${targetWardrobeName}"` : 'Almari';
+  if (results.totalPhotosReceived === 0) {
+    summaryMessage = 'No photos were uploaded to process.';
+  } else if (results.totalGarmentsExtracted === 0) {
+    summaryMessage = 'No garments could be detected from the uploaded photo(s).';
+  } else if (results.newItemsCreated.length > 0 && results.existingMatches.length > 0) {
+    summaryMessage = `Extracted ${results.totalGarmentsExtracted} garment(s): ${results.newItemsCreated.length} added to ${almariLabel}, ${results.existingMatches.length} duplicate(s) already exist (skipped duplicate additions).`;
+  } else if (results.newItemsCreated.length > 0) {
+    summaryMessage = `Successfully extracted and added ${results.newItemsCreated.length} garment(s) to ${almariLabel}.`;
+  } else {
+    summaryMessage = `Extracted ${results.totalGarmentsExtracted} garment(s), but all ${results.existingMatches.length} already exist in ${almariLabel} (skipped duplicate additions).`;
+  }
+  results.summaryMessage = summaryMessage;
 
   return results;
 };
@@ -578,14 +570,8 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
 
       if (existingExactItems.length > 0) {
-        console.log(`[ClothAnalysis] [GalleryIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items.`);
+        console.log(`[ClothAnalysis] [GalleryIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items (skipped duplicate addition).`);
         results.matchedUserImagesCount++;
-        for (const ex of existingExactItems) {
-          await WardrobeItem.findByIdAndUpdate(ex._id, {
-            $inc: { 'usageStats.wearCount': 1, 'usageStats.useCount': 1 },
-            $set: { 'usageStats.lastWornDate': new Date() },
-          });
-        }
 
         results.details.push({
           filename: file.filename,
@@ -603,11 +589,12 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
             croppedImageUrl: ex.images?.[0]?.url || `/uploads/${file.filename}`,
             matchType: 'EXISTING_ITEM',
             matchedItem: ex,
+            status: 'EXACT_MATCH',
             matchResult: {
               status: 'EXACT_MATCH',
               matchType: 'IMAGE_HASH',
               confidenceScore: 1.0,
-              message: 'Exact duplicate photo detected in this Almari. Reusing existing wardrobe item.',
+              message: 'Exact duplicate photo detected in this Almari (skipped duplicate addition).',
               existingItem: ex,
             },
           })),
@@ -750,6 +737,10 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
   const personLabel = targetOwnerName
     ? (targetWardrobeName ? `${targetOwnerName} (${targetWardrobeName})` : targetOwnerName)
     : 'your face';
+  const almariLabel = targetWardrobeName ? `"${targetWardrobeName}"` : 'wardrobe';
+
+  const totalGarmentsDetected = results.details.reduce((acc, d) => acc + (d.garmentsDetected || 0), 0);
+  const totalDuplicatesSkipped = results.details.reduce((acc, d) => acc + (d.existingItemsMatched || 0), 0);
 
   if (results.totalImagesReceived === 0) {
     summaryMessage = 'No gallery photos were uploaded to scan.';
@@ -757,12 +748,12 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     summaryMessage = targetOwnerName
       ? `Gallery scan completed: 0 out of ${results.totalImagesReceived} photo(s) matched ${personLabel}.`
       : `Gallery scan completed: Your face was not detected in any of the ${results.totalImagesReceived} photo(s).`;
+  } else if (results.newWardrobeItemsCreated.length > 0 && totalDuplicatesSkipped > 0) {
+    summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. Extracted ${totalGarmentsDetected} garment(s): ${results.newWardrobeItemsCreated.length} added to ${almariLabel}, ${totalDuplicatesSkipped} duplicate(s) already exist (skipped duplicate additions).`;
+  } else if (results.newWardrobeItemsCreated.length > 0) {
+    summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. Extracted and added ${results.newWardrobeItemsCreated.length} new garment(s) to ${almariLabel}.`;
   } else {
-    if (results.newWardrobeItemsCreated.length > 0) {
-      summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. ${results.newWardrobeItemsCreated.length} new garment(s) added to wardrobe.`;
-    } else {
-      summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. Garments were already indexed in the wardrobe (no new items created).`;
-    }
+    summaryMessage = `Gallery scan completed: ${results.matchedUserImagesCount} photo(s) matched ${personLabel}. Extracted ${totalGarmentsDetected || totalDuplicatesSkipped} garment(s), but all already exist in ${almariLabel} (skipped duplicate additions).`;
   }
 
   results.summaryMessage = summaryMessage;

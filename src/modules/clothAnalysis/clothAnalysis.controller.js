@@ -55,7 +55,7 @@ const extractDirectDress = asyncHandler(async (req, res) => {
   return ApiResponse.success(
     res,
     result,
-    `Clothing processed: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing items matched`
+    result.summaryMessage || `Clothing processed: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing duplicate items skipped`
   );
 });
 
@@ -152,7 +152,7 @@ const bulkAddPhotos = asyncHandler(async (req, res) => {
   return ApiResponse.success(
     res,
     result,
-    `Bulk processing complete: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing items matched`
+    result.summaryMessage || `Bulk processing complete: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing duplicate items skipped`
   );
 });
 
