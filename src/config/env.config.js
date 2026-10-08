@@ -8,6 +8,7 @@ module.exports = {
   JWT_SECRET: process.env.JWT_SECRET || 'arangtik_super_secret_jwt_key_2026',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
+  ADMIN_SYNC_API_KEY: process.env.ADMIN_SYNC_API_KEY || '',
 
   // OTP Configuration
   OTP_EXPIRY: parseInt(process.env.OTP_EXPIRY, 10) || 10, // minutes

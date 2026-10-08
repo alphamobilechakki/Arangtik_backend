@@ -3,7 +3,7 @@ const connectDB = require('./src/config/db.config');
 const { PORT, NODE_ENV } = require('./src/config/env.config');
 
 /**
- * Initialize and start Arangtik Express Backend Server
+ * Initialize and start Arangtik Express Backend Server (Live & Local)
  */
 const startServer = async () => {
   try {

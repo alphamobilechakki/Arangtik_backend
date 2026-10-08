@@ -32,4 +32,9 @@ router.use('/v1/wardrobe', wardrobeRoutes);
 router.use('/face-recognition', faceRecognitionRoutes);
 router.use('/v1/face-recognition', faceRecognitionRoutes);
 
+// Integration & External Admin Sync Routes (Protected by x-api-key)
+const integrationRoutes = require('../modules/integration/integration.routes');
+router.use('/integration', integrationRoutes);
+router.use('/v1/integration', integrationRoutes);
+
 module.exports = router;
