@@ -198,10 +198,10 @@ const getFallbackAnalysis = (imageMeta) => {
 const configuredModel = process.env.GEMINI_VISION_MODEL;
 const VISION_MODELS = [
   ...(configuredModel ? [configuredModel] : []),
-  'gemini-3.6-flash',
+  'gemini-3.5-flash',
   'gemini-3.1-flash-lite',
-  'gemini-3.7-flash',
   'gemini-3.8-flash',
+  'gemini-2.5-pro',
 ].filter((model, idx, arr) => arr.indexOf(model) === idx);
 
 /**
@@ -222,7 +222,7 @@ const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
     ? 'image/webp'
     : 'image/jpeg';
 
-  // Normalize face boxes to 0-1000 scale
+  // Normalize face boxes to 0-1000 scale [ymin, xmin, ymax, xmax]
   const normalizedFaceBoxes = (userFaceBoxes || [])
     .map((box) => {
       if (!box) return null;
@@ -240,64 +240,61 @@ const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
     })
     .filter(Boolean);
 
-  let userFaceContext = '';
+  let prompt = '';
   if (normalizedFaceBoxes.length > 0) {
-    userFaceContext = `
-TARGET PERSON IDENTIFICATION:
-The authenticated user's face has been verified at the following normalized bounding box coordinates [ymin, xmin, ymax, xmax] (0-1000 scale):
-${JSON.stringify(normalizedFaceBoxes)}
+    prompt = `
+You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
+We have identified the TARGET PERSON in this photo whose face is located at bounding box [ymin, xmin, ymax, xmax]: ${JSON.stringify(normalizedFaceBoxes)}.
 
-CRITICAL MULTI-PERSON / GROUP PHOTO INSTRUCTION:
-- ONLY detect and extract the clothing articles worn by the target user identified above (located directly below their face coordinates).
-- STRICTLY IGNORE and DO NOT return clothes worn by other people, friends, or strangers standing next to or around the target user!
+CRITICAL MULTI-PERSON ISOLATION INSTRUCTIONS:
+1. ONLY detect and return the clothing articles worn by THIS TARGET PERSON (the person whose face is at ${JSON.stringify(normalizedFaceBoxes)}).
+2. Look directly below their chin/face bounding box to find their torso, shoulders, chest, and lower body.
+3. STRICTLY IGNORE and DO NOT return garments worn by other people, companions, or strangers standing/sitting next to them!
+4. For each distinct garment found on the TARGET PERSON, return a JSON array containing objects with:
+   - "name": Highly descriptive fashion title (e.g. "Black Long Sleeve Button-Up Overshirt", "White Crewneck Undershirt", "Navy Blue Linen Kurta", "Light Blue Denim Jeans")
+   - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
+   - "subCategory": "Shirt" | "T-Shirt" | "Jeans" | "Trousers" | "Jacket" | "Dress" | "Gown" | "Kurta" | "Saree" | "Blazer"
+   - "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact garment boundaries on THIS target person.
+   - "attributes": {
+       "primaryColor": dominant color name (e.g. "Black", "White", "Navy Blue", "Olive Green"),
+       "secondaryColors": array of secondary colors,
+       "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED",
+       "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET",
+       "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT",
+       "neckline": "Collar" | "Round Neck" | "V-Neck" | "Mandarin" | "Other",
+       "sleeveStyle": "FULL_SLEEVE" | "HALF_SLEEVE" | "SLEEVELESS"
+     }
+
+CRITICAL NEGATIVE FILTER:
+- NEVER detect or crop human faces, bare skin, necks, or background furniture as items!
+- Return ONLY raw JSON array without markdown backticks or commentary.
 `;
-  }
-
-  const prompt = `
-You are an expert World-Class Haute Couture & Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction & Garment Re-identification.
+  } else {
+    prompt = `
+You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
 Analyze the uploaded image (which may contain multiple dresses on mannequins/hangers, single garments, showroom displays, or people wearing clothes).
 Identify EVERY distinct wearable clothing item, gown, dress, ethnic wear, footwear, or accessory present.
-${userFaceContext}
-CRITICAL INSTRUCTIONS FOR MULTIPLE DRESSES / MANNEQUINS / RACKS:
-- If there are multiple garments/gowns side-by-side (e.g. 2, 3 or more dresses on mannequins or showroom display), extract EACH individual dress as a separate item in the JSON array!
-- For full-length dresses, gowns, anarkalis, frocks, sarees, lehengas, sherwanis, suits:
-  * Category: "TRADITIONAL" or "UPPER_WEAR"
-  * SubCategory: "Gown", "Evening Gown", "Dress", "Maxi Dress", "Anarkali", "Saree", "Lehenga", "Sherwani", "Kurta", "Shirt", "Jeans", "Blazer", etc.
-  * Bounding box [ymin, xmin, ymax, xmax] (0 to 1000 scale):
-    - ymin: Top straps/shoulders/collar neckline of that specific dress (do NOT include mannequin neck/head/cap).
-    - ymax: Complete bottom hemline, skirt flare, or train reaching down to the floor.
-    - xmin & xmax: Exact horizontal fabric boundaries of that dress (including flared skirts/trains), without cutting into neighboring garments.
-
-CRITICAL NEGATIVE FILTER (STRICT):
-- NEVER detect or crop human faces, bare skin, necks, mannequin heads/stands, or background furniture as items!
-- ONLY detect physical wearable fabric clothing.
 
 For each distinct item found, return a JSON array containing objects with:
-- "name": Highly descriptive, elegant fashion title (e.g. "Royal Blue Beaded Deep-Plunge Tulle Gown", "Magenta Glossy Satin Sweetheart Flare Gown", "Rose Gold Sequin Mermaid Trumpet Gown", "Midnight Navy Blue Slim Fit Linen Shirt")
+- "name": Highly descriptive fashion title (e.g. "Royal Blue Beaded Deep-Plunge Tulle Gown", "Midnight Navy Blue Slim Fit Linen Shirt", "Light Blue Denim Jeans")
 - "category": Broad category ("UPPER_WEAR", "LOWER_WEAR", "TRADITIONAL", "OUTERWEAR", "FOOTWEAR", "ACCESSORIES", "OTHER")
 - "subCategory": Specific garment type ("Evening Gown", "Gown", "Dress", "Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Saree", "Jacket", etc.)
 - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact full garment.
 - "attributes": Object with:
-  - "primaryColor": Dominant color shade (e.g. "Royal Blue", "Magenta", "Rose Gold", "Emerald Green", "Midnight Navy", "Ruby Red", "Ivory White", "Champagne Gold")
-  - "secondaryColors": Array of accent/contrast shades (e.g. ["Ice Blue", "Navy Blue"], ["Silver", "Blush Pink"])
-  - "colorTheme": "MONOCHROMATIC" | "DUAL_TONE" | "PASTEL" | "JEWEL_TONE" | "METALLIC" | "OMBRE" | "EARTHY" | "MULTICOLOR"
-  - "designPattern": "SOLID" | "EMBELLISHED_BEADED" | "SEQUINED" | "ZARI_WORK" | "EMBROIDERED" | "CHIKANKARI" | "MIRROR_WORK" | "FLORAL_PRINT" | "GEOMETRIC_PRINT" | "STRIPED" | "CHECKED" | "TEXTURED"
-  - "pattern": "EMBELLISHED" | "SEQUINED" | "SOLID" | "EMBROIDERED" | "PRINTED"
-  - "fabric": "SATIN" | "SILK" | "NET_TULLE" | "VELVET" | "ORGANZA" | "GEORGETTE" | "CHIFFON" | "COTTON" | "LINEN" | "DENIM" | "CREPE" | "BROCADE" | "BLEND" | "OTHER"
-  - "fabricTexture": "GLOSSY_SHEEN" | "MATTE" | "GLITTER_SPARKLE" | "EMBOSSED" | "CRINKLED" | "SMOOTH"
-  - "silhouette": "A_LINE" | "MERMAID_TRUMPET" | "BALL_GOWN" | "STRAIGHT_SHEATH" | "FIT_AND_FLARE" | "BODYCON" | "ANARKALI" | "EMPIRE_WAIST" | "SLIM_FIT" | "REGULAR_FIT"
+  - "primaryColor": Dominant color shade
+  - "secondaryColors": Array of accent colors
+  - "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED" | "SEQUINED"
+  - "fabric": "SATIN" | "SILK" | "NET_TULLE" | "VELVET" | "ORGANZA" | "GEORGETTE" | "CHIFFON" | "COTTON" | "LINEN" | "DENIM" | "BLEND" | "OTHER"
   - "fit": "FLARE" | "MERMAID" | "A_LINE" | "SLIM_FIT" | "REGULAR_FIT" | "LOOSE_FIT"
-  - "dressLength": "FLOOR_LENGTH" | "MAXI" | "TRAIN_EXTENDED" | "MIDI" | "KNEE_LENGTH" | "MINI" | "STANDARD"
-  - "neckline": "Sweetheart" | "Deep V-Neck" | "V-Neck" | "Sleeveless" | "Strapless" | "Off-Shoulder" | "Square" | "Halter" | "Boat Neck" | "Mandarin" | "Collar" | "Round Neck" | "Other"
-  - "sleeveStyle": "SLEEVELESS" | "SPAGHETTI_STRAPS" | "CAP_SLEEVE" | "HALF_SLEEVE" | "FULL_SLEEVE" | "OFF_SHOULDER" | "THREE_QUARTER"
-  - "workPlacement": "BODICE_AND_FLARE" | "BODICE_ONLY" | "ALL_OVER" | "BORDER_HEM_ONLY" | "MINIMAL_CLEAN"
-  - "styleAesthetic": "ROYAL_BRIDAL" | "EVENING_COCKTAIL" | "RED_CARPET" | "TRADITIONAL_FESTIVE" | "MODERN_CHIC" | "MINIMALIST_FORMAL" | "CASUAL_CHIC"
-  - "gender": "WOMEN" | "MEN" | "UNISEX" | "KIDS"
-  - "occasions": Array from ["WEDDING", "RECEPTION", "PARTY", "RED_CARPET", "FESTIVE", "FORMAL", "CASUAL", "OFFICE", "DAILY"]
-  - "seasons": Array from ["ALL_SEASON", "SUMMER", "WINTER", "MONSOON"]
+  - "neckline": "Sweetheart" | "V-Neck" | "Collar" | "Round Neck" | "Mandarin" | "Other"
+  - "sleeveStyle": "SLEEVELESS" | "HALF_SLEEVE" | "FULL_SLEEVE"
 
-Return ONLY raw JSON without markdown backticks or commentary.
+CRITICAL NEGATIVE FILTER:
+- NEVER detect or crop human faces, bare skin, necks, mannequin heads/stands, or background furniture as items!
+- ONLY detect physical wearable fabric clothing.
+- Return ONLY raw JSON array without markdown backticks or commentary.
 `;
+  }
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   let rawList = [];
@@ -361,12 +358,13 @@ Return ONLY raw JSON without markdown backticks or commentary.
       const width = xmax - xmin;
       if (height < 50 || width < 40) return false;
 
-      // If target user face coordinates are known, ensure garment is horizontally aligned with the user
+      // If target user face coordinates are known, ensure garment is horizontally aligned with the target person
       if (normalizedFaceBoxes.length > 0) {
         const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
           const faceCenterX = (fXmin + fXmax) / 2;
           const garmentCenterX = (xmin + xmax) / 2;
-          const maxHorizontalOffset = Math.max(350, (fXmax - fXmin) * 3.0);
+          const faceWidth = fXmax - fXmin;
+          const maxHorizontalOffset = Math.max(120, faceWidth * 1.6);
           return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
         });
         if (!isAlignedWithAnyUser) {
