@@ -51,11 +51,32 @@ const analyzePhoto = async (userId, file, options = {}) => {
 
     if (existingExactItems.length > 0) {
       console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
+      const primaryEx = existingExactItems[0];
+      const exAttrs = primaryEx.attributes ? (typeof primaryEx.attributes.toJSON === 'function' ? primaryEx.attributes.toJSON() : primaryEx.attributes) : {};
+      const autoFilledFields = {
+        name: primaryEx.name || '',
+        category: primaryEx.category || '',
+        subCategory: primaryEx.subCategory || '',
+        color: primaryEx.color || exAttrs.primaryColor || '',
+        fabric: primaryEx.fabric || exAttrs.fabric || '',
+        pattern: primaryEx.pattern || exAttrs.pattern || '',
+        fit: primaryEx.fit || exAttrs.fit || '',
+        neckline: primaryEx.neckline || exAttrs.neckline || '',
+        sleeveLength: primaryEx.sleeveLength || exAttrs.sleeveLength || '',
+        occasion: primaryEx.occasion || exAttrs.occasions || [],
+        season: primaryEx.season || exAttrs.seasons || [],
+        style: primaryEx.style || exAttrs.styleAesthetic || '',
+        croppedImageUrl: primaryEx.images?.[0]?.url || originalImageUrl,
+        originalImageUrl,
+        attributes: exAttrs,
+        tags: primaryEx.tags || [],
+      };
       return {
         originalImageUrl,
         sourceImageHash,
         isExactDuplicateImage: true,
         detectedItemsCount: existingExactItems.length,
+        autoFilledFields,
         analysis: existingExactItems.map((ex) => ({
           tempDetectionId: `det_exact_${ex._id}`,
           name: ex.name,
@@ -77,15 +98,25 @@ const analyzePhoto = async (userId, file, options = {}) => {
     }
   }
 
-  let userFaceBoxes = [];
-  try {
-    const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-    const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, { filename: file.filename }, null, targetWardrobeId);
-    if (scanResult.matched && scanResult.matchedFaces?.length > 0) {
-      userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
+  // Support either pre-detected faceBoxes (from Step 1) or on-demand face verification
+  let userFaceBoxes = options.faceBoxes || [];
+  if (typeof userFaceBoxes === 'string') {
+    try {
+      userFaceBoxes = JSON.parse(userFaceBoxes);
+    } catch (e) {
+      userFaceBoxes = [];
     }
-  } catch (err) {
-    // Optional face scan error ignored
+  }
+  if (userFaceBoxes.length === 0 && (options.verifyFace === true || options.verifyFace === 'true')) {
+    try {
+      const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
+      const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, { filename: file.filename }, null, targetWardrobeId);
+      if (scanResult.matched && scanResult.matchedFaces?.length > 0) {
+        userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
+      }
+    } catch (err) {
+      // Optional face scan error ignored
+    }
   }
 
   // 1. Detect garments and extract attributes using AI (filtering for matched user if available)
@@ -100,10 +131,39 @@ const analyzePhoto = async (userId, file, options = {}) => {
   // 4. Perform hybrid matching (Exact match, Ambiguous match, New item)
   const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
 
+  // Extract clean, structured autoFilledFields from the primary detected garment
+  const primaryItem = matchedDetections[0] || {};
+  const attrs = primaryItem.attributes || {};
+  const autoFilledFields = {
+    name: primaryItem.name || '',
+    category: primaryItem.category || '',
+    subCategory: primaryItem.subCategory || '',
+    color: attrs.primaryColor || '',
+    fabric: attrs.fabric || '',
+    pattern: attrs.pattern || attrs.designPattern || '',
+    fit: attrs.fit || '',
+    neckline: attrs.neckline || '',
+    sleeveLength: attrs.sleeveLength || attrs.sleeveStyle || '',
+    sleeveStyle: attrs.sleeveStyle || '',
+    occasion: attrs.occasions || attrs.occasion || [],
+    season: attrs.seasons || attrs.season || [],
+    style: attrs.styleAesthetic || attrs.style || '',
+    croppedImageUrl: primaryItem.croppedImageUrl || originalImageUrl,
+    originalImageUrl,
+    attributes: attrs,
+    tags: [
+      attrs.primaryColor,
+      primaryItem.subCategory,
+      primaryItem.category,
+      ...(attrs.occasions || []),
+    ].filter(Boolean),
+  };
+
   return {
     originalImageUrl,
     sourceImageHash,
     detectedItemsCount: matchedDetections.length,
+    autoFilledFields,
     analysis: matchedDetections,
   };
 };

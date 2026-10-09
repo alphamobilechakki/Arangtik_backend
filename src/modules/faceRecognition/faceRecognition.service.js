@@ -237,6 +237,8 @@ class FaceRecognitionService {
     );
 
     return {
+      targetPersonName,
+      wardrobeId: wardrobeId || null,
       imageId: fileMeta.filename || null,
       matched: comparison.matched,
       facesDetected: comparison.facesDetected,

@@ -377,8 +377,12 @@ CRITICAL NEGATIVE FILTER:
     }
   }
 
-  if (lastError && rawList.length === 0) {
-    console.error('[aiVision] All Gemini Vision models failed or quota exceeded:', lastError.message);
+  if (rawList.length === 0) {
+    if (lastError) {
+      console.error('[aiVision] All Gemini Vision models failed or quota exceeded:', lastError.message);
+    } else {
+      console.log('[aiVision] No garments identified by Gemini Vision in uploaded image. Engaging smart default fallback...');
+    }
     return getFallbackAnalysis(metadata);
   }
 
@@ -422,6 +426,11 @@ CRITICAL NEGATIVE FILTER:
 
     return true;
   });
+
+  if (filteredList.length === 0) {
+    console.log('[aiVision] Filtered list resulted in 0 garments. Engaging smart default fallback...');
+    return getFallbackAnalysis(metadata);
+  }
 
   // AUTOMATIC HORIZONTAL OVERLAP RESOLVER FOR SIDE-BY-SIDE SEPARATION
   if (filteredList.length > 1 && normalizedFaceBoxes.length === 0) {

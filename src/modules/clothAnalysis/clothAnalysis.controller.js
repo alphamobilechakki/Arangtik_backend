@@ -103,6 +103,8 @@ const analyzePhoto = asyncHandler(async (req, res) => {
   const options = {
     wardrobeId: req.body.wardrobeId || req.query.wardrobeId || null,
     collectionId: req.body.collectionId || req.query.collectionId || null,
+    verifyFace: req.body.verifyFace === 'true' || req.body.verifyFace === true,
+    faceBoxes: req.body.faceBoxes || null,
   };
   const result = await clothAnalysisService.analyzePhoto(userId, file, options);
 

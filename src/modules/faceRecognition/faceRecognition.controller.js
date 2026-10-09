@@ -58,7 +58,11 @@ class FaceRecognitionController {
     let imageInput;
     let fileMeta = {};
 
-    const file = req.file || (req.files?.image?.[0] || req.files?.photo?.[0]);
+    const file =
+      req.file ||
+      req.files?.photo?.[0] ||
+      req.files?.image?.[0] ||
+      req.files?.file?.[0];
     if (file) {
       imageInput = file.path || file.buffer;
       fileMeta = {
@@ -73,15 +77,25 @@ class FaceRecognitionController {
       };
     }
 
-    const customThreshold = req.customThreshold || null;
+    const customThreshold =
+      req.customThreshold ||
+      (req.body.threshold ? parseFloat(req.body.threshold) : null);
+    const wardrobeId = req.body.wardrobeId || req.query.wardrobeId || null;
+
     const result = await faceRecognitionService.scanGalleryImage(
       req.user.id,
       imageInput,
       fileMeta,
-      customThreshold
+      customThreshold,
+      wardrobeId
     );
 
-    return ApiResponse.success(res, result, 'Gallery image scan completed');
+    const targetLabel = result.targetPersonName ? `(${result.targetPersonName})` : '';
+    const message = result.matched
+      ? `Face matched successfully ${targetLabel} - ${result.matchedFaces?.length || 1} face(s) verified`
+      : `Target face ${targetLabel} not detected in this photo`;
+
+    return ApiResponse.success(res, result, message);
   });
 }
 

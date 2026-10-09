@@ -27,13 +27,23 @@ router.post(
 router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
 
+// Unified media upload handler for item photo / camera capture
+const uploadItemMedia = upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+  { name: 'file', maxCount: 1 },
+  { name: 'photos', maxCount: 10 },
+  { name: 'images', maxCount: 10 },
+  { name: 'files', maxCount: 10 },
+]);
+
 // __________________________________________________________________________
 // 2. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
 // __________________________________________________________________________
 
-// Add Item (Kapda add karein)
-router.post('/add-item', wardrobeController.addItem);
-router.post('/items', wardrobeController.addItem);
+// Add Item (Kapda add karein - supports JSON or direct Photo Upload with AI auto-fill)
+router.post('/add-item', uploadItemMedia, wardrobeController.addItem);
+router.post('/items', uploadItemMedia, wardrobeController.addItem);
 
 // Get All Items (Sabhi kapde dekhein - with search, filter, pagination)
 router.get('/get-items', wardrobeController.getAllItems);
@@ -57,9 +67,9 @@ router.delete('/items/:id', wardrobeController.deleteItem);
 // 3. AI SCAN & UPLOAD APIs (Photo se automatic kapde add karna)
 // __________________________________________________________________________
 
-// Analyze Single Photo (AI se photo scan karein)
-router.post('/analyze-photo', upload.single('photo'), wardrobeController.analyzePhoto);
-router.post('/analyze', upload.single('photo'), wardrobeController.analyzePhoto);
+// Analyze Single Photo (AI se photo scan karein aur fields prefill karein)
+router.post('/analyze-photo', uploadItemMedia, wardrobeController.analyzePhoto);
+router.post('/analyze', uploadItemMedia, wardrobeController.analyzePhoto);
 
 // Scan Single Gallery Photo (Face verify + clothing extract)
 router.post(

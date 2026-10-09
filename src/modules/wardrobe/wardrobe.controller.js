@@ -9,19 +9,41 @@ const wardrobeService = require('./wardrobe.service');
  */
 const analyzePhoto = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const result = await wardrobeService.analyzePhoto(userId, req.file);
+  const file =
+    req.file ||
+    req.files?.photo?.[0] ||
+    req.files?.image?.[0] ||
+    req.files?.file?.[0] ||
+    req.files?.photos?.[0] ||
+    req.files?.images?.[0] ||
+    (Array.isArray(req.files) ? req.files[0] : null);
+
+  const result = await wardrobeService.analyzePhoto(userId, file, {
+    wardrobeId: req.body?.wardrobeId || req.query?.wardrobeId || null,
+    verifyFace: req.body?.verifyFace === 'true' || req.body?.verifyFace === true,
+    faceBoxes: req.body?.faceBoxes || null,
+  });
 
   return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
 });
 
 /**
- * @desc    Add a new item to wardrobe store
+ * @desc    Add a new item to wardrobe store (supports JSON or Photo upload with AI auto-fill)
  * @route   POST /api/wardrobe/add-item
  * @access  Private
  */
 const addItem = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const item = await wardrobeService.addItem(userId, req.body);
+  const file =
+    req.file ||
+    req.files?.photo?.[0] ||
+    req.files?.image?.[0] ||
+    req.files?.file?.[0] ||
+    req.files?.photos?.[0] ||
+    req.files?.images?.[0] ||
+    (Array.isArray(req.files) ? req.files[0] : null);
+
+  const item = await wardrobeService.addItem(userId, req.body, file);
 
   return ApiResponse.created(res, item, 'Item added successfully to wardrobe store');
 });

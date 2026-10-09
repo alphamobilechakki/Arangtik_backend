@@ -83,61 +83,164 @@ const getWardrobes = async (userId, query = {}) => {
   return await Wardrobe.find(filter).sort({ isDefault: -1, createdAt: -1 });
 };
 
+const parseArrayField = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      return val.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [val];
+  }
+  return [];
+};
+
+const parseObjectField = (val) => {
+  if (!val) return {};
+  if (typeof val === 'object' && !Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      return {};
+    }
+  }
+  return {};
+};
+
 /**
  * Add a new item to the user's Wardrobe / Store
+ * Supports both JSON body and multipart photo upload (with automatic AI dress analysis & auto-filling)
  */
-const addItem = async (userId, itemData) => {
+const addItem = async (userId, itemData, file = null) => {
+  let autoFilledFields = {};
+  let detectedItem = null;
+  let sourceImageHash = itemData.sourceImageHash || null;
+  let sourcePhotoUrl = itemData.sourcePhotoUrl || (file ? `/uploads/${file.filename}` : '');
+
+  // If a dress photo is uploaded (e.g. from camera click or gallery upload), run AI dress analysis
+  if (file) {
+    try {
+      const analysisResult = await clothAnalysisService.analyzePhoto(userId, file, {
+        wardrobeId: itemData.wardrobeId,
+      });
+      autoFilledFields = analysisResult.autoFilledFields || {};
+      sourceImageHash = analysisResult.sourceImageHash || sourceImageHash;
+      if (analysisResult.analysis && analysisResult.analysis.length > 0) {
+        detectedItem = analysisResult.analysis[0];
+      }
+    } catch (analysisErr) {
+      console.warn(`[wardrobeService.addItem] AI dress analysis fallback: ${analysisErr.message}`);
+    }
+  }
+
   const {
     wardrobeId = null,
-    name,
-    category,
-    subCategory,
     type,
-    color,
-    pattern,
-    fabric,
     texture,
     silhouette,
-    fit,
-    neckline,
     sleeveStyle,
-    sleeveLength,
     length,
-    occasion,
-    season,
-    style,
     gender,
     brand,
     size,
     isFavorite,
     wearCount,
     lastWornAt,
-    aiAnalysis,
-    sourceType = 'MANUAL_UPLOAD',
-    sourcePhotoUrl,
-    sourceImageHash,
     sourceImageIndex = 0,
-    images = [],
-    attributes = {},
-    tags = [],
   } = itemData;
 
+  const rawAttributes = parseObjectField(itemData.attributes);
+
+  // Auto-fill core required fields if missing
+  const name = itemData.name || autoFilledFields.name || (file ? 'Dress Item' : '');
+  const category = itemData.category || autoFilledFields.category || (file ? 'UPPER_WEAR' : '');
+
   if (!name || !category) {
-    throw new ApiError(400, 'Item name and category are required');
+    throw new ApiError(
+      400,
+      'Item name and category are required. Upload a clear dress photo to auto-fill or enter manually.'
+    );
   }
 
-  let processedImages = images;
-  if (Array.isArray(images) && images.length > 0) {
-    const hasPrimary = images.some((img) => img.isPrimary);
-    processedImages = images.map((img, idx) => ({
+  const subCategory = itemData.subCategory || autoFilledFields.subCategory || '';
+  const color = itemData.color || rawAttributes.primaryColor || autoFilledFields.color || '';
+  const pattern = itemData.pattern || rawAttributes.pattern || autoFilledFields.pattern || '';
+  const fabric = itemData.fabric || rawAttributes.fabric || autoFilledFields.fabric || '';
+  const fit = itemData.fit || rawAttributes.fit || autoFilledFields.fit || '';
+  const neckline = itemData.neckline || rawAttributes.neckline || autoFilledFields.neckline || '';
+  const sleeveLength =
+    itemData.sleeveLength || rawAttributes.sleeveLength || autoFilledFields.sleeveLength || '';
+
+  const parsedOccasion = parseArrayField(itemData.occasion);
+  const occasion =
+    parsedOccasion.length > 0 ? parsedOccasion : autoFilledFields.occasion || [];
+
+  const parsedSeason = parseArrayField(itemData.season);
+  const season =
+    parsedSeason.length > 0 ? parsedSeason : autoFilledFields.season || [];
+
+  const style = itemData.style || autoFilledFields.style || '';
+
+  const parsedTags = parseArrayField(itemData.tags);
+  const tags =
+    parsedTags.length > 0 ? parsedTags : autoFilledFields.tags || [];
+
+  // Handle Images: Client-provided images OR AI cropped dress image OR uploaded photo
+  let processedImages = [];
+  let rawImages = itemData.images;
+  if (typeof rawImages === 'string') {
+    try {
+      rawImages = JSON.parse(rawImages);
+    } catch (e) {
+      rawImages = [];
+    }
+  }
+
+  if (Array.isArray(rawImages) && rawImages.length > 0) {
+    const hasPrimary = rawImages.some((img) => img.isPrimary);
+    processedImages = rawImages.map((img, idx) => ({
       ...img,
       isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
     }));
+  } else if (file) {
+    const primaryCropUrl = autoFilledFields.croppedImageUrl || `/uploads/${file.filename}`;
+    processedImages = [
+      {
+        url: primaryCropUrl,
+        filename: detectedItem?.croppedFilename || file.filename,
+        isPrimary: true,
+      },
+    ];
   }
+
+  const attributes = {
+    ...(autoFilledFields.attributes || {}),
+    ...rawAttributes,
+  };
+
+  const sourceType =
+    itemData.sourceType || (file ? 'CAMERA_CAPTURE' : 'MANUAL_UPLOAD');
+
+  const aiAnalysis =
+    itemData.aiAnalysis ||
+    (detectedItem
+      ? {
+          model: 'Gemini-Vision',
+          detectedAt: new Date(),
+          raw: detectedItem,
+        }
+      : null);
 
   let finalWardrobeId = wardrobeId;
   if (!finalWardrobeId) {
-    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    const defaultW =
+      (await Wardrobe.findOne({ userId, isDefault: true })) ||
+      (await Wardrobe.findOne({ userId }));
     if (defaultW) {
       finalWardrobeId = defaultW._id;
     }
@@ -150,30 +253,30 @@ const addItem = async (userId, itemData) => {
     category,
     subCategory,
     type,
-    color: color || attributes.primaryColor || '',
-    pattern: pattern || attributes.pattern || '',
-    fabric: fabric || attributes.fabric || '',
+    color,
+    pattern,
+    fabric,
     texture,
     silhouette,
-    fit: fit || attributes.fit || '',
-    neckline: neckline || attributes.neckline || '',
-    sleeveStyle,
-    sleeveLength: sleeveLength || attributes.sleeveLength || '',
+    fit,
+    neckline,
+    sleeveStyle: sleeveStyle || autoFilledFields.sleeveStyle || '',
+    sleeveLength,
     length,
-    occasion: occasion || attributes.occasions || [],
-    season: season || attributes.seasons || [],
+    occasion,
+    season,
     style,
-    gender: gender || attributes.gender || '',
-    brand: brand || attributes.brand || '',
-    size: size || attributes.size || '',
+    gender: gender || autoFilledFields.gender || '',
+    brand: brand || '',
+    size: size || '',
     isFavorite: isFavorite !== undefined ? isFavorite : false,
     wearCount: wearCount || 0,
     lastWornAt: lastWornAt || null,
-    aiAnalysis: aiAnalysis || null,
+    aiAnalysis,
     sourceType,
-    sourcePhotoUrl: sourcePhotoUrl || '',
-    sourceImageHash: sourceImageHash || null,
-    sourceImageIndex: sourceImageIndex || 0,
+    sourcePhotoUrl,
+    sourceImageHash,
+    sourceImageIndex,
     images: processedImages,
     attributes,
     tags,
