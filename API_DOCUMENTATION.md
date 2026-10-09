@@ -26,23 +26,23 @@ FLOW 1: GALLERY PHOTO FLOW (3-STEP MODULAR PIPELINE WITH WARDROBE OWNER FACE)
     └─► POST /api/face-recognition/verify-user-face 
         (Checks photo against target Wardrobe Owner Face -> returns matched: true/false & face boundingBox)
 
-  [STEP 2: DRESS SCAN & ANALYSIS]
+  [STEP 2: DRESS SCAN & ANALYSIS (Single or Bulk 1-100 Photos)]
     └─► POST /api/wardrobe/analyze-photo             
-        (Isolates matched owner's clothing, removes background, auto-detects name, category, color, fabric, etc.)
+        (Isolates clothing, removes background, auto-detects name, category, color, fabric, etc.)
 
-  [STEP 3: STORE TO WARDROBE]
+  [STEP 3: STORE TO WARDROBE (Single or Bulk 1-100 Photos)]
     └─► POST /api/wardrobe/add-item                 
         (Persists verified dress item into Almari)
 
 =============================================================================
 FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 =============================================================================
-  [DIRECT DRESS FLOW - NO FACE REQUIRED]
+  [DIRECT DRESS FLOW - NO FACE REQUIRED (Single or Bulk 1-100 Photos)]
     ├─► Option A (Preview First): 
-    │     1. POST /api/wardrobe/analyze-photo        [DONE ✅] (AI scans dress & returns pre-fill fields for UI)
+    │     1. POST /api/wardrobe/analyze-photo        [DONE ✅] (AI scans dress & returns pre-fill fields for UI preview)
     │     2. POST /api/wardrobe/add-item             [DONE ✅] (Review/edit fields and save to Almari)
     └─► Option B (1-Click Fast Save):
-          └─► POST /api/wardrobe/add-item            [DONE ✅] (Directly upload photo -> AI auto-fills & stores in 1-shot)
+          └─► POST /api/wardrobe/add-item            [DONE ✅] (Upload 1 or bulk 1-100 photos -> AI auto-fills & stores in 1-shot)
 
 [WARDROBE ITEMS CRUD] ✅
   ├─► GET    /api/wardrobe/get-all-items             [DONE ✅] (Search, Filter & Paginate Items)
@@ -484,243 +484,28 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-# SECTION 5: AI CLOTH DIGITIZATION & ANALYSIS (`/api/cloth-analysis`)
+# SECTION 5: DRESS & STORE ITEMS MANAGEMENT (`/api/wardrobe`)
 
-### 5.1 Direct Dress Extraction & Auto-Digitization (Single or Bulk 1 to 100 Photos)
-- **Overview & Functionality:**
-  Processes standalone clothing photos (flat lays, hanger displays, showroom mannequins, or online shopping screenshots) using Gemini Vision AI and Sharp segmentation. 
-  - Automatically identifies clothing items, fabric types, color schemes, silhouettes, patterns, and suitable occasions.
-  - Crops the garment and removes background clutter to generate a clean, transparent WebP image.
-  - Checks for duplicate items against the user's existing wardrobe to prevent accidental double entries.
-  - Automatically persists newly detected garments as `WardrobeItem` records in the user's wardrobe.
-  > ℹ️ **No Face Verification Required:** This endpoint skips facial recognition since it processes clothing-only photos.
-- **When to Use:**
-  - When the user photographs their clothes laid on a bed/table or hanging in a closet.
-  - When digitizing a physical wardrobe in bulk (e.g., uploading 10 to 50 dress photos at once).
-  - When importing catalog, boutique, or online shopping product photos.
-- **How to Use (Step-by-Step):**
-  1. Add `Authorization: Bearer <JWT_TOKEN>` header.
-  2. Send a `POST` request with `multipart/form-data`.
-  3. Attach 1 to 100 images under field key `photos` (or `photo`, `image`, `images`).
-  4. *(Optional)* Provide `wardrobeId` to deposit garments into a specific closet container (defaults to the user's primary/default wardrobe).
-  5. *(Optional)* Provide `storagePlace` (e.g. `"Top Shelf"`, `"Hanger Section 2"`).
-  6. The response returns the total garments detected, newly created `WardrobeItem` IDs, and existing duplicate matches.
-- **Method:** `POST`
-- **Endpoint:** `/api/cloth-analysis/extract-dress` *(Aliases: `/api/cloth-analysis/analyze-photo`, `/api/cloth-analysis/bulk-add-photos`, `/api/cloth-analysis/bulk-add`, `/api/cloth-analysis/analyze`)*
-- **Request:**
-  - Headers: 
-    - `Authorization: Bearer <JWT_TOKEN>`
-    - `Content-Type: multipart/form-data`
-  - Form-Data:
-    - `photos` (or `photo`, `image`, `images`) *(file / array, required)*: 1 to 100 clothing photo files (JPEG, PNG, WEBP)
-    - `wardrobeId` *(text, optional)*: Target wardrobe closet ID (Defaults to user's default wardrobe)
-    - `storagePlace` *(text, optional)*: Physical storage tag (Default: `"Main Closet"`)
-- **Response:**
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Clothing processed: 2 items added to wardrobe, 0 existing items matched",
-  "data": {
-    "totalPhotosReceived": 2,
-    "totalGarmentsExtracted": 2,
-    "newItemsCreated": [
-      {
-        "_id": "6aba317270f26b72d852616f",
-        "name": "Navy Blue Slim Fit Linen Shirt",
-        "category": "UPPER_WEAR",
-        "subCategory": "Shirt",
-        "color": "Navy Blue",
-        "fabric": "LINEN",
-        "pattern": "SOLID",
-        "images": [
-          {
-            "url": "/uploads/crops/crop-1790589292535-0.webp",
-            "isPrimary": true
-          }
-        ],
-        "attributes": {
-          "primaryColor": "Navy Blue",
-          "pattern": "SOLID",
-          "fabric": "LINEN",
-          "fit": "SLIM_FIT",
-          "sleeveLength": "FULL_SLEEVE",
-          "occasions": ["OFFICE", "FORMAL", "PARTY"],
-          "seasons": ["SUMMER", "ALL_SEASON"]
-        }
-      }
-    ],
-    "existingMatches": []
-  }
-}
-```
-
----
-
-### 5.2 Gallery Photos Ingestion (Face Verification + Clothes Auto-Extraction Pipeline)
-- **Overview & Functionality:**
-  End-to-end automated ingestion pipeline designed specifically for personal camera roll / phone gallery photos and group snapshots.
-  1. **Smart Target Face Verification & Multi-Person Group Photo Sensitivity:** 
-     - If `wardrobeId` is provided, the API matches faces against that specific **Wardrobe Owner's Reference Face** (`wardrobe.ownerFaceImage` / `wardrobe.referenceFace`).
-     - If `wardrobeId` is not provided, it falls back to matching the logged-in user's biometric reference profile face.
-     - **Multi-Person / Cafe Group Photo Support:** In group shots with multiple people, side angles, or ambient lighting, the AI uses high-sensitivity multi-face detection (`minConfidence: 0.20`, `FACE_MIN_SIZE: 25px`) with 128-dimensional Euclidean biometric distance matching. The Almari Owner is accurately isolated and verified (`distance <= 0.50`), while non-owner friends/family are automatically discarded.
-     - Photos where the target person is NOT present are safely filtered out.
-  2. **Targeted Clothes Extraction:** For photos where the target person IS present, AI Vision extracts **only the clothes worn by that person** (spatial coordinates beneath their face bounding box), strictly ignoring clothes worn by other people in group photos.
-  3. **Auto-Crop & Background Removal:** Crops clothing items with precision bounds and removes background noise into transparent WebP.
-  4. **Wardrobe-Scoped Duplicate Protection & Smart Handling:** 
-     - **Almari-Scoped:** Duplicate detection (`sourceImageHash` exact matches & visual similarity) is strictly scoped to the target `wardrobeId`. Adding a black shirt into Almari B will NOT be blocked if Almari A has a similar shirt.
-     - **Exact Match (≥72% / Same Hash):** Instantly recognized as duplicate in that Almari. Automatically reuses the item and increments `usageStats.wearCount` without confusing the user.
-     - **Ambiguous Match (52%–71%):** Provided with side-by-side comparison details (`candidateMatches`) for user verification.
-- **When to Use:**
-  - When the user syncs or uploads personal gallery photos, family snapshots, or vacation albums for a specific wardrobe (e.g. Papa's Wardrobe, Mummy's Almari).
-  - When digitizing outfits directly from real-life portraits and multi-person group pictures.
-- **How to Use (Step-by-Step):**
-  1. Add `Authorization: Bearer <JWT_TOKEN>` header.
-  2. Send a `POST` request with `multipart/form-data`.
-  3. Upload 1 to 100 gallery photos under key `photos` (or `photo`, `image`, `images`).
-  4. *(Recommended)* Pass `wardrobeId` to match against that specific Wardrobe Owner's face and store detected garments in that closet.
-  5. *(Optional)* Set `threshold` (default `0.50`) for facial recognition sensitivity.
-  6. The response reports how many photos matched the target person, details of unmatched photos, newly created digital wardrobe items, and a clear contextual message.
-- **Method:** `POST`
-- **Endpoint:** `/api/cloth-analysis/extract-from-gallery`
-- **Request:**
-  - Headers: 
-    - `Authorization: Bearer <JWT_TOKEN>`
-    - `Content-Type: multipart/form-data`
-  - Form-Data:
-    - `photos` (or `photo`, `image`, `images`) *(file / array, required)*: Gallery photos (1 to 100 files)
-    - `wardrobeId` *(text, optional)*: Target closet ID (matches against wardrobe owner's face and scopes duplicate checks)
-    - `threshold` *(number, optional)*: Face matching distance threshold (Default: `0.50`)
-    - `autoCreateNewItems` *(boolean, optional)*: Automatically persist new items (Default: `true`)
-- **Response Examples:**
-
-*Scenario A: Photos matched specific Wardrobe Owner ("Papa ki Almari") and created garments:*
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Gallery scan completed: 2 photo(s) matched Rajesh Sharma (Papa ki Almari). 2 new garment(s) added to wardrobe.",
-  "data": {
-    "totalImagesReceived": 3,
-    "matchedUserImagesCount": 2,
-    "unmatchedImagesCount": 1,
-    "targetOwnerName": "Rajesh Sharma",
-    "targetWardrobeName": "Papa ki Almari",
-    "summaryMessage": "Gallery scan completed: 2 photo(s) matched Rajesh Sharma (Papa ki Almari). 2 new garment(s) added to wardrobe.",
-    "newWardrobeItemsCreated": [
-      {
-        "_id": "6aba317270f26b72d852616f",
-        "name": "Navy Blue Linen Shirt",
-        "category": "UPPER_WEAR",
-        "subCategory": "Shirt",
-        "color": "Navy Blue",
-        "images": [
-          {
-            "url": "/uploads/crops/seg-0-1790943556926.webp",
-            "isPrimary": true
-          }
-        ]
-      }
-    ],
-    "details": [
-      {
-        "filename": "photo-1790938133930.png",
-        "originalImageUrl": "/uploads/photo-1790938133930.png",
-        "isUserFound": true,
-        "userFaceScore": 0.88,
-        "garmentsDetected": 1,
-        "newItemsAdded": 1,
-        "existingItemsMatched": 0
-      },
-      {
-        "filename": "photo-1790938133931.png",
-        "originalImageUrl": "/uploads/photo-1790938133931.png",
-        "isUserFound": false,
-        "facesDetected": 2,
-        "message": "User face not detected in this photo. Skipped wardrobe extraction."
-      }
-    ]
-  }
-}
-```
-
-*Scenario B: Target person matched but garments already exist in wardrobe:*
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Gallery scan completed: 1 photo(s) matched Rajesh Sharma (Papa ki Almari). Garments were already indexed in the wardrobe (no new items created).",
-  "data": {
-    "totalImagesReceived": 1,
-    "matchedUserImagesCount": 1,
-    "unmatchedImagesCount": 0,
-    "targetOwnerName": "Rajesh Sharma",
-    "targetWardrobeName": "Papa ki Almari",
-    "summaryMessage": "Gallery scan completed: 1 photo(s) matched Rajesh Sharma (Papa ki Almari). Garments were already indexed in the wardrobe (no new items created).",
-    "newWardrobeItemsCreated": [],
-    "details": [...]
-  }
-}
-```
-
----
-
-### 5.3 (Optional Utility Tool) Single Photo Face Verification Check
-- **Description:** Sirf test/diagnostic ke liye: Check karta hai ki kisi single photo me target person ka face detect ho raha hai ya nahi (bina kapde extract kiye aur bina database me item create kiye).
-- **Method:** `POST`
-- **Endpoint:** `/api/face-recognition/scan-photo` *(Alias: `/api/face-recognition/verify-user-face`)*
-- **Request:**
-  - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
-  - Form-Data:
-    - `photo` *(file, required)*: Single image file to test
-    - `threshold` *(number, optional)*: Match threshold (Default: `0.50`)
-- **Response:**
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Face recognition scan completed successfully",
-  "data": {
-    "isUserMatched": true,
-    "facesDetected": 1,
-    "matchedFacesCount": 1,
-    "bestMatchDistance": 0.38,
-    "similarityPercentage": 92.4,
-    "matchedFaces": [
-      {
-        "faceIndex": 0,
-        "detectionConfidence": 0.98,
-        "distance": 0.38,
-        "similarity": 92.4,
-        "boundingBox": { "x": 120, "y": 85, "width": 140, "height": 140 }
-      }
-    ]
-  }
-}
-```
-
----
-
-# SECTION 6: DRESS & STORE ITEMS MANAGEMENT (`/api/wardrobe`)
-
-### 6.1 Add Item to Almari (Direct Photo Click with AI Auto-Fill OR Manual JSON)
-- **Description:** Naya dress item Almari me add karta hai. Do (2) tareeqo se use kiya ja sakta hai:
-  1. **Option A (Camera Click / Photo Select - Multipart Form-Data):** Sirf kapde ki photo bhejein (`photo` ya `image`). AI dress ko analyze karega, background remove karke transparent WebP crop generate karega, aur saare fields (`name`, `category`, `subCategory`, `color`, `fabric`, `pattern`, `fit`, `neckline`, `sleeveLength`, `occasions`, `seasons`, `tags`) backend me **AUTOMATICALLY AUTO-FILL** karke database me save kar dega! User chahe to sath me custom fields (`name`, `brand`, `size`, `wardrobeId`) bhej kar override bhi kar sakta hai.
+### 5.1 Add Item to Almari (Single or 1-100 Bulk Photos with AI Auto-Fill OR Manual JSON)
+- **Description:** Naya dress item Almari me add karta hai. Single photo ya ek sath bulk photos (1 se 100 tak) add kar sakte hain:
+  1. **Option A (Camera Click / Photo Upload - Single ya 1-100 Bulk Photos):** Kapde ki photo bhejein (`photo` ya `photos` / `image` / `images`). AI dress ko analyze karega, background remove karke transparent WebP crop generate karega, aur saare fields (`name`, `category`, `subCategory`, `color`, `fabric`, `pattern`, `fit`, `neckline`, `sleeveLength`, `occasions`, `seasons`, `tags`) backend me **AUTOMATICALLY AUTO-FILL** karke database me save kar dega! User chahe to sath me custom fields (`name`, `brand`, `size`, `wardrobeId`) bhej kar override bhi kar sakta hai.
+     - **Single Photo:** Returns single created `WardrobeItem` object.
+     - **Multiple Photos (Bulk 1 to 100):** Ek sath sabhi photos ko process karke items create karta hai aur `{ totalPhotosReceived, totalItemsCreated, items: [...] }` return karta hai.
   2. **Option B (Manual JSON Entry - Application/JSON):** Custom fields manually enter karke add karein.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/add-item` *(Alias: `/api/wardrobe/items`)*
 
-#### Option A: Camera Click / Photo Upload with AI Auto-Fill (Recommended)
+#### Option A: Camera Click / Photo Upload with AI Auto-Fill (Single or Bulk 1 to 100)
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
-    - `photo` (or `image`) *(file, required)*: Clicked photo or gallery photo file of the dress
+    - `photo` (or `photos`, `image`, `images`) *(file / array of files, required)*: Single photo or 1 to 100 photo files of clothes
     - `wardrobeId` *(text, optional)*: Almari container ID (defaults to user's default wardrobe)
     - `name` *(text, optional)*: Custom name (agar pass nahi kiya toh AI auto-generate karega)
     - `brand` *(text, optional)*: e.g. `"Zara"`
     - `size` *(text, optional)*: e.g. `"M"`
     - `isFavorite` *(boolean, optional)*: `true` / `false`
-- **Response:**
+- **Response (Single Photo):**
 ```json
 {
   "statusCode": 201,
@@ -754,6 +539,49 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
     "sourcePhotoUrl": "/uploads/img_camera_photo.jpg",
     "isFavorite": false,
     "createdAt": "2026-10-09T11:35:00.000Z"
+  }
+}
+```
+
+- **Response (Bulk Photos Upload - e.g. 2+ Photos):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Processed 2 photo(s): 2 new item(s) created",
+  "data": {
+    "totalPhotosReceived": 2,
+    "totalItemsCreated": 2,
+    "items": [
+      {
+        "_id": "6ac8d17cdaae1c044a53c0e6",
+        "name": "Navy Blue Linen Shirt",
+        "category": "UPPER_WEAR",
+        "subCategory": "Shirt",
+        "color": "Navy Blue",
+        "fabric": "LINEN",
+        "images": [
+          {
+            "url": "/uploads/crops/segmented/seg-0-1791545718711.webp",
+            "isPrimary": true
+          }
+        ]
+      },
+      {
+        "_id": "6ac8d17cdaae1c044a53c0e7",
+        "name": "Beige Chino Trousers",
+        "category": "BOTTOM_WEAR",
+        "subCategory": "Trousers",
+        "color": "Beige",
+        "fabric": "COTTON",
+        "images": [
+          {
+            "url": "/uploads/crops/segmented/seg-0-1791545718712.webp",
+            "isPrimary": true
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -817,16 +645,18 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 6.2 Analyze Dress Photo Preview (AI Pre-Fill Preview Endpoint)
-- **Description:** Agar frontend me photo click karne ke baad UI form me pehle fields prefill karke dikhana ho (user ko verify ya edit karne dene ke liye), toh is endpoint par photo bhejein. AI dress photo ko scan karke clean `autoFilledFields` return karta hai bina database me item create kiye.
+### 5.2 Analyze Dress Photo Preview (AI Pre-Fill Preview Endpoint - Single or 1-100 Bulk Photos)
+- **Description:** Agar frontend me photo upload karne ke baad UI form me pehle fields prefill karke dikhana ho (user ko verify ya edit karne dene ke liye), toh is endpoint par photo bhejein. AI dress photo ko scan karke clean `autoFilledFields` return karta hai bina database me item create kiye.
+  - **Single Photo:** Returns single photo analysis with pre-filled form fields (`autoFilledFields`).
+  - **Bulk Photos (1 to 100):** Ek sath sabhi photos analyze karta hai aur `{ totalPhotosAnalyzed, totalGarmentsDetected, items: [...] }` return karta hai.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/analyze-photo` *(Alias: `/api/cloth-analysis/analyze-photo`)*
 - **Request:**
   - Headers: `Authorization: Bearer <JWT_TOKEN>`, `Content-Type: multipart/form-data`
   - Form-Data:
-    - `photo` (or `image`, `file`) *(file, required)*: Photo of the dress
+    - `photo` (or `photos`, `image`, `images`) *(file / array of files, required)*: Single dress photo or up to 100 clothing photo files
     - `wardrobeId` *(text, optional)*: Target wardrobe ID
-- **Response:**
+- **Response (Single Photo):**
 ```json
 {
   "statusCode": 200,
@@ -866,9 +696,50 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 }
 ```
 
+- **Response (Bulk Photos Preview - e.g. 2+ Photos):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Analyzed 2 photo(s): detected 2 garment(s)",
+  "data": {
+    "totalPhotosAnalyzed": 2,
+    "totalGarmentsDetected": 2,
+    "items": [
+      {
+        "photoIndex": 0,
+        "originalImageUrl": "/uploads/photo-1.jpg",
+        "detectedItemsCount": 1,
+        "autoFilledFields": {
+          "name": "Navy Blue Formal Linen Shirt",
+          "category": "UPPER_WEAR",
+          "subCategory": "Shirt",
+          "color": "Navy Blue",
+          "fabric": "LINEN",
+          "croppedImageUrl": "/uploads/crops/segmented/seg-0-1791545708048.webp"
+        }
+      },
+      {
+        "photoIndex": 1,
+        "originalImageUrl": "/uploads/photo-2.jpg",
+        "detectedItemsCount": 1,
+        "autoFilledFields": {
+          "name": "Beige Chino Trousers",
+          "category": "BOTTOM_WEAR",
+          "subCategory": "Trousers",
+          "color": "Beige",
+          "fabric": "COTTON",
+          "croppedImageUrl": "/uploads/crops/segmented/seg-1-1791545708049.webp"
+        }
+      }
+    ]
+  }
+}
+```
+
 ---
 
-### 6.3 Get All Items (Search, Filter & Pagination)
+### 5.3 Get All Items (Search, Filter & Pagination)
 - **Description:** Almari items ko category, color, occasion, season, favorite, aur search keyword ke hisaab se filter aur paginate karke fetch karta hai.
 - **Method:** `GET`
 - **Endpoint:** `/api/wardrobe/get-all-items`
@@ -926,7 +797,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 6.4 Get Item Details by ID
+### 5.4 Get Item Details by ID
 - **Description:** Item ID ke zariye kapde ki complete details, attributes, aur images fetch karta hai.
 - **Method:** `GET`
 - **Endpoint:** `/api/wardrobe/get-item-details/:id`
@@ -973,7 +844,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 6.5 Update Wardrobe Item
+### 5.5 Update Wardrobe Item
 - **Description:** Item ke attributes, name, fabric, favorite status, tags update karta hai.
 - **Method:** `PATCH`
 - **Endpoint:** `/api/wardrobe/update-item/:id`
@@ -1013,7 +884,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 6.6 Delete Item from Wardrobe
+### 5.6 Delete Item from Wardrobe
 - **Description:** Almari se kapde ko delete karta hai.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/wardrobe/delete-item/:id`
@@ -1035,9 +906,9 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-# SECTION 7: MEDIA UPLOAD & STORAGE APIS
+# SECTION 6: MEDIA UPLOAD & STORAGE APIS
 
-### 7.1 Single Image Upload (Multipart File or Base64)
+### 6.1 Single Image Upload (Multipart File or Base64)
 - **Description:** Single image ko store karta hai (Pravisti style: `/uploads` directory me short unique filename ke sath).
 - **Method:** `POST`
 - **Endpoint:** `/api/upload/single` (or `/api/v1/upload/single`)
@@ -1073,7 +944,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 7.2 Multiple Images Upload
+### 6.2 Multiple Images Upload
 - **Description:** Ek sath multiple images upload karta hai (up to 20 files).
 - **Method:** `POST`
 - **Endpoint:** `/api/upload/multiple` (or `/api/v1/upload/multiple`)
@@ -1108,7 +979,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-### 7.3 Delete Stored Image
+### 6.3 Delete Stored Image
 - **Description:** Server ke local storage (`uploads/`) se image file delete karta hai.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/upload/:filename`
@@ -1124,7 +995,7 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 ---
 
-# SECTION 8: SUMMARY OF ALL ACTIVE API ENDPOINTS
+# SECTION 7: SUMMARY OF ALL ACTIVE API ENDPOINTS
 
 | # | Description | Method | Endpoint | Auth |
 |---|---|---|---|---|
@@ -1141,14 +1012,12 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 | 11 | Validate Reference Face | `POST` | `/api/face-recognition/reference/validate` | Yes |
 | 12 | Get Reference Biometric Status | `GET` | `/api/face-recognition/reference` | Yes |
 | 13 | Delete Reference Biometric | `DELETE` | `/api/face-recognition/reference` | Yes |
-| 14 | Match Face in Gallery Photo | `POST` | `/api/face-recognition/scan-gallery-photo` | Yes |
+| 14 | Verify User / Owner Face in Photo (Step 1) | `POST` | `/api/face-recognition/verify-user-face` | Yes |
 | 15 | Create Wardrobe Almari | `POST` | `/api/wardrobe/create-wardrobe` | Yes |
 | 16 | Get All Wardrobes / Stores | `GET` | `/api/wardrobe/get-wardrobes` | Yes |
-| 17 | Direct Dress Digitize (Single / 1-100 Photos) | `POST` | `/api/cloth-analysis/extract-dress` | Yes |
-| 18 | Gallery Photos Ingest (Face Match + Auto-Store) | `POST` | `/api/cloth-analysis/extract-from-gallery` | Yes |
-| 19 | Add Item to Almari | `POST` | `/api/wardrobe/add-item` | Yes |
-| 20 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
-| 21 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
-| 22 | Update Wardrobe Item | `PATCH` | `/api/wardrobe/update-item/:id` | Yes |
-| 23 | Delete Wardrobe Item | `DELETE` | `/api/wardrobe/delete-item/:id` | Yes |
-
+| 17 | Analyze Dress Photo Preview (Single / 1-100 Bulk) | `POST` | `/api/wardrobe/analyze-photo` | Yes |
+| 18 | Add Item to Almari (Single / 1-100 Bulk Photo Auto-Fill OR JSON) | `POST` | `/api/wardrobe/add-item` | Yes |
+| 19 | Get All Items (Filter & Search) | `GET` | `/api/wardrobe/get-all-items` | Yes |
+| 20 | Get Item Details by ID | `GET` | `/api/wardrobe/get-item-details/:id` | Yes |
+| 21 | Update Wardrobe Item | `PATCH` | `/api/wardrobe/update-item/:id` | Yes |
+| 22 | Delete Wardrobe Item | `DELETE` | `/api/wardrobe/delete-item/:id` | Yes |
