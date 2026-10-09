@@ -49,10 +49,6 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
   ├─► GET    /api/wardrobe/get-item-details/:id      [DONE ✅] (Get Full Item Details)
   ├─► PATCH  /api/wardrobe/update-item/:id           [DONE ✅] (Update Item Details)
   └─► DELETE /api/wardrobe/delete-item/:id           [DONE ✅] (Delete Item from Almari)
-
-[BULK AUTOMATED INGESTION APIS] ✅
-  ├─► POST /api/cloth-analysis/extract-dress         [DONE ✅] (Direct Clothes: 1-100 Photos Batch Ingestion)
-  └─► POST /api/cloth-analysis/extract-from-gallery  [DONE ✅] (Gallery Photos: Auto Face Match + Clothes Extraction)
 ```
 
 ---
