@@ -306,6 +306,8 @@ CRITICAL MULTI-ITEM EXTRACTION INSTRUCTIONS:
      }
 
 CRITICAL RULES:
+- TRADITIONAL ENSEMBLE RULE: For Ethnic Wear (Anarkali, Kurti with Dupatta, Salwar Kameez, Lehenga, Saree), keep the matching dress and draped dupatta TOGETHER as ONE complete ensemble (e.g. "Anarkali Suit with Dupatta Set"). DO NOT separate or cut off the draped dupatta.
+- Stop cleanly at sleeve cuff hems to exclude bare wrists/hands.
 - NEVER detect bare skin, human face, or bare neck as a clothing item!
 - Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
@@ -325,7 +327,7 @@ For EACH distinct wearable item found, return a JSON object with:
 - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
 - "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
 - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering ONLY this specific item.
-- "polygon": Array of 16 to 36 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment, cutting cleanly across the collar/neckline to exclude human neck/head, across sleeve openings to exclude bare arms/hands, and bottom hem/waist to exclude legs/skin. For accessories (e.g. sunglasses, watch), polygon covers the accessory boundary.
+- "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the garment's outer fabric boundary contour. For upper garments (shirts/t-shirts/tops): stop cleanly right at collar seam (NEVER include neck skin), cut cleanly across sleeve cuff openings (NEVER include bare wrists/hands), and cut at bottom hem. For traditional dresses with draped dupatta, enclose the complete outfit ensemble together. For accessories, trace accessory boundary.
 - "attributes": {
     "primaryColor": Dominant color shade (e.g. "White", "Black", "Navy Blue"),
     "secondaryColors": Array of accent colors,
@@ -337,7 +339,9 @@ For EACH distinct wearable item found, return a JSON object with:
   }
 
 CRITICAL RULES:
-- Separate multi-piece outfits into distinct items (e.g. separate T-shirt and Jeans into 2 items).
+- Separate multi-piece outfits (e.g. separate T-shirt and Jeans into 2 items).
+- TRADITIONAL ENSEMBLE RULE: For Ethnic Wear (Anarkali, Kurti with Dupatta, Salwar Kameez, Lehenga, Saree), keep the matching dress and draped dupatta TOGETHER as ONE complete ensemble (e.g. "Powder Blue Anarkali Suit with Dupatta Set"). DO NOT split or cut away the draped dupatta into a separate narrow strip.
+- Cut cleanly right at sleeve cuff hems to exclude bare wrists and hands.
 - NEVER detect bare skin, human face, or bare neck as a clothing item!
 - Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
@@ -433,37 +437,6 @@ CRITICAL RULES:
   if (filteredList.length === 0) {
     console.log('[aiVision] Filtered list resulted in 0 garments. Engaging smart default fallback...');
     return getFallbackAnalysis(metadata);
-  }
-
-  // AUTOMATIC HORIZONTAL OVERLAP RESOLVER FOR SIDE-BY-SIDE SEPARATION
-  if (filteredList.length > 1 && normalizedFaceBoxes.length === 0) {
-    filteredList.sort((a, b) => {
-      const aCenter = ((a.box2d?.[1] ?? 0) + (a.box2d?.[3] ?? 0)) / 2;
-      const bCenter = ((b.box2d?.[1] ?? 0) + (b.box2d?.[3] ?? 0)) / 2;
-      return aCenter - bCenter;
-    });
-
-    for (let i = 0; i < filteredList.length - 1; i++) {
-      const leftItem = filteredList[i];
-      const rightItem = filteredList[i + 1];
-
-      if (leftItem.box2d && rightItem.box2d) {
-        const [lYmin, lXmin, lYmax, lXmax] = leftItem.box2d;
-        const [rYmin, rXmin, rYmax, rXmax] = rightItem.box2d;
-
-        const isBothTall = (lYmax - lYmin > 350) && (rYmax - rYmin > 350);
-        if (isBothTall && rXmin < lXmax - 50) {
-          const lCenter = (lXmin + lXmax) / 2;
-          const rCenter = (rXmin + rXmax) / 2;
-          if (rCenter > lCenter) {
-            const splitX = Math.round((lCenter + rCenter) / 2);
-            leftItem.box2d[3] = Math.min(lXmax, splitX);
-            rightItem.box2d[1] = Math.max(rXmin, splitX);
-            console.log(`[aiVision] Resolved horizontal overlap between "${leftItem.name}" and "${rightItem.name}" -> Left xmax=${leftItem.box2d[3]}, Right xmin=${rightItem.box2d[1]}`);
-          }
-        }
-      }
-    }
   }
 
   return filteredList;

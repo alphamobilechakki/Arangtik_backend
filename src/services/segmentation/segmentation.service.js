@@ -24,6 +24,8 @@ if (!fs.existsSync(segmentedCropsDir)) {
   fs.mkdirSync(segmentedCropsDir, { recursive: true });
 }
 
+const inpaintingService = require('../inpainting/inpainting.service');
+
 /**
  * Isolated Clothing & Garment Background Removal / Segmentation Service
  * Separates foreground clothing pixels from background and produces transparent WebP/PNG cutouts.
@@ -192,31 +194,6 @@ class SegmentationService {
         }
       }
 
-      // 4b. Smart Human Skin & Flesh Exclusion (eliminates bare neck inside collar, arms, and hands)
-      try {
-        for (let i = 0; i < finalBuffer.length; i += 4) {
-          const a = finalBuffer[i + 3];
-          if (a < 32) continue;
-
-          const r = finalBuffer[i];
-          const g = finalBuffer[i + 1];
-          const b = finalBuffer[i + 2];
-
-          // YCbCr skin tone detection:
-          const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-          const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-
-          const isSkinYCbCr = (Cb >= 75 && Cb <= 135 && Cr >= 130 && Cr <= 178);
-          const isSkinRGB = (r > 60 && g > 30 && b > 20 && r > g && g >= b && (r - g) >= 8);
-
-          if (isSkinYCbCr || (isSkinRGB && Cr > 130)) {
-            finalBuffer[i + 3] = 0; // Transparent
-          }
-        }
-      } catch (skinErr) {
-        console.warn('[Segmentation] Skin filter warning:', skinErr.message);
-      }
-
       for (let i = 0; i < finalBuffer.length; i += 4) {
         const alpha = finalBuffer[i + 3];
         if (alpha < 64) {
@@ -255,19 +232,46 @@ class SegmentationService {
         };
       }
 
-      // 5. Encode clean transparent cutout using Sharp to WebP or PNG
-      if (outputFormat === 'image/png') {
-        await sharp(finalBuffer, {
-          raw: { width, height, channels: 4 },
-        })
-          .png()
-          .toFile(outputFilePath);
-      } else {
-        await sharp(finalBuffer, {
-          raw: { width, height, channels: 4 },
-        })
-          .webp({ quality: Math.round(quality * 100), alphaQuality: 100 })
-          .toFile(outputFilePath);
+      // 5. Intelligent Inpainting: Auto-fill notches, holes, and hand occlusion gaps
+      let hasInpaintedBuffer = false;
+      if (options.autoInpaint !== false) {
+        try {
+          const rawPng = await sharp(finalBuffer, {
+            raw: { width, height, channels: 4 },
+          })
+            .png()
+            .toBuffer();
+
+          const inpaintResult = await inpaintingService.inpaintGarment(rawPng, {
+            radius: options.inpaintRadius || 22,
+            protectCollar: options.protectCollar !== false,
+            outputFormat: outputFormat === 'image/png' ? 'png' : 'webp',
+          });
+
+          if (inpaintResult.hasInpainted && inpaintResult.buffer) {
+            fs.writeFileSync(outputFilePath, inpaintResult.buffer);
+            hasInpaintedBuffer = true;
+          }
+        } catch (inpaintErr) {
+          console.warn('[Segmentation] Inpainting fallback, keeping raw cutout:', inpaintErr.message);
+        }
+      }
+
+      // 6. Encode clean transparent cutout if not already saved by inpainting
+      if (!hasInpaintedBuffer) {
+        if (outputFormat === 'image/png') {
+          await sharp(finalBuffer, {
+            raw: { width, height, channels: 4 },
+          })
+            .png()
+            .toFile(outputFilePath);
+        } else {
+          await sharp(finalBuffer, {
+            raw: { width, height, channels: 4 },
+          })
+            .webp({ quality: Math.round(quality * 100), alphaQuality: 100 })
+            .toFile(outputFilePath);
+        }
       }
 
       return {
