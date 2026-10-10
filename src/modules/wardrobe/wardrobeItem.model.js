@@ -26,7 +26,15 @@ const WardrobeItemSchema = new mongoose.Schema(
         url: { type: String, required: true },
         type: {
           type: String,
-          enum: ['ORIGINAL', 'SEGMENTED', 'THUMBNAIL', 'CROPPED', 'OTHER'],
+          enum: [
+            'ORIGINAL',
+            'SEGMENTED',
+            'GHOST_MANNEQUIN',
+            'RECONSTRUCTED',
+            'THUMBNAIL',
+            'CROPPED',
+            'OTHER',
+          ],
           default: 'ORIGINAL',
         },
         isPrimary: { type: Boolean, default: false },

@@ -339,6 +339,58 @@ const getWardrobes = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
 });
 
+/**
+ * @desc    Trigger AI Human-to-Garment & Ghost Mannequin extraction pipeline
+ * @route   POST /api/wardrobe/items/:id/garment-processing
+ * @access  Private
+ */
+const triggerGarmentProcessing = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const itemId = req.params.id || req.params.itemId;
+  const options = req.body || {};
+
+  const job = await wardrobeService.triggerGarmentProcessing(userId, itemId, options);
+
+  return ApiResponse.success(
+    res,
+    job,
+    'Garment extraction and ghost mannequin processing initiated'
+  );
+});
+
+/**
+ * @desc    Get Garment Processing Job status and output URLs
+ * @route   GET /api/wardrobe/items/:id/garment-processing/status
+ * @access  Private
+ */
+const getGarmentProcessingStatus = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const identifier = req.params.id || req.params.itemId || req.params.jobId;
+
+  const job = await wardrobeService.getGarmentProcessingStatus(userId, identifier);
+
+  return ApiResponse.success(res, job, 'Garment processing job status fetched');
+});
+
+/**
+ * @desc    Retry Garment Processing Job
+ * @route   POST /api/wardrobe/items/:id/garment-processing/retry
+ * @access  Private
+ */
+const retryGarmentProcessing = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const itemId = req.params.id || req.params.itemId;
+  const options = req.body || {};
+
+  const job = await wardrobeService.retryGarmentProcessing(userId, itemId, options);
+
+  return ApiResponse.success(
+    res,
+    job,
+    'Garment processing job retried successfully'
+  );
+});
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -351,4 +403,8 @@ module.exports = {
   scanGalleryPhoto,
   bulkAddPhotos,
   ingestGalleryPhotos,
+  // Garment processing handlers
+  triggerGarmentProcessing,
+  getGarmentProcessingStatus,
+  retryGarmentProcessing,
 };

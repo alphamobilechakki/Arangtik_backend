@@ -1,6 +1,10 @@
 const fs = require('fs');
+const path = require('path');
+const mongoose = require('mongoose');
 const Wardrobe = require('./wardrobe.model');
 const WardrobeItem = require('./wardrobeItem.model');
+const GarmentProcessingJob = require('./garmentProcessingJob.model');
+const garmentProcessingWorker = require('../../services/garment/garmentProcessing.worker');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
 
@@ -512,6 +516,146 @@ const addItemFromDetection = async (userId, detection, extraData = {}) => {
   return await addItem(userId, itemPayload);
 };
 
+/**
+ * Helper to resolve image disk path
+ */
+const resolveDiskImagePath = (imagePath) => {
+  if (!imagePath) return '';
+  const cleaned = imagePath.replace(/^[\\/]+/, '');
+  const absolutePath = path.resolve(__dirname, '../../../', cleaned);
+  if (fs.existsSync(absolutePath)) return absolutePath;
+  const uploadsPath = path.resolve(__dirname, '../../../uploads', path.basename(imagePath));
+  if (fs.existsSync(uploadsPath)) return uploadsPath;
+  return absolutePath;
+};
+
+/**
+ * Trigger AI Human-to-Garment & Ghost Mannequin extraction pipeline for a wardrobe item
+ */
+const triggerGarmentProcessing = async (userId, itemId, options = {}) => {
+  const item = await WardrobeItem.findOne({ _id: itemId, userId });
+  if (!item) {
+    throw new ApiError(404, 'Wardrobe item not found');
+  }
+
+  // Prevent duplicate concurrent jobs if one is already PENDING or PROCESSING
+  const existingJob = await GarmentProcessingJob.findOne({
+    itemId,
+    userId,
+    status: { $in: ['PENDING', 'PROCESSING'] },
+  });
+  if (existingJob && !options.force) {
+    return existingJob;
+  }
+
+  // Determine source image to process
+  // Priority: sourcePhotoUrl, original image in item.images, or primary image
+  let targetImageUrl = item.sourcePhotoUrl;
+  if (!targetImageUrl && Array.isArray(item.images) && item.images.length > 0) {
+    const originalImg = item.images.find((img) => img.type === 'ORIGINAL');
+    const primaryImg = item.images.find((img) => img.isPrimary);
+    targetImageUrl = (originalImg || primaryImg || item.images[0])?.url;
+  }
+
+  if (!targetImageUrl) {
+    throw new ApiError(400, 'Wardrobe item has no image to process');
+  }
+
+  const diskPath = resolveDiskImagePath(targetImageUrl);
+  if (!fs.existsSync(diskPath)) {
+    throw new ApiError(404, `Source image file not found on server at: ${targetImageUrl}`);
+  }
+
+  const jobId = `gp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+  const job = await garmentProcessingWorker.createAndStartJob(
+    jobId,
+    userId,
+    itemId,
+    diskPath,
+    {
+      originalImageUrl: targetImageUrl,
+      garmentName: item.name,
+      ...options,
+    }
+  );
+
+  return job;
+};
+
+/**
+ * Get the status and output of a garment processing job
+ */
+const getGarmentProcessingStatus = async (userId, identifier) => {
+  let job = null;
+  if (mongoose.Types.ObjectId.isValid(identifier)) {
+    // Check by itemId first (latest job), then by _id
+    job = await GarmentProcessingJob.findOne({ itemId: identifier, userId }).sort({ createdAt: -1 });
+    if (!job) {
+      job = await GarmentProcessingJob.findOne({ _id: identifier, userId });
+    }
+  } else {
+    // Check by custom jobId string
+    job = await GarmentProcessingJob.findOne({ jobId: identifier, userId });
+  }
+
+  if (!job) {
+    throw new ApiError(404, 'Garment processing job not found');
+  }
+
+  return job;
+};
+
+/**
+ * Retry a failed or incomplete garment processing job
+ */
+const retryGarmentProcessing = async (userId, itemId, options = {}) => {
+  const item = await WardrobeItem.findOne({ _id: itemId, userId });
+  if (!item) {
+    throw new ApiError(404, 'Wardrobe item not found');
+  }
+
+  // Find latest existing job
+  const existingJob = await GarmentProcessingJob.findOne({ itemId, userId }).sort({ createdAt: -1 });
+  if (existingJob && ['PENDING', 'PROCESSING'].includes(existingJob.status)) {
+    return existingJob;
+  }
+
+  let targetImageUrl = item.sourcePhotoUrl;
+  if (!targetImageUrl && Array.isArray(item.images) && item.images.length > 0) {
+    const originalImg = item.images.find((img) => img.type === 'ORIGINAL');
+    const primaryImg = item.images.find((img) => img.isPrimary);
+    targetImageUrl = (originalImg || primaryImg || item.images[0])?.url;
+  }
+
+  if (!targetImageUrl) {
+    throw new ApiError(400, 'Wardrobe item has no image to process');
+  }
+
+  const diskPath = resolveDiskImagePath(targetImageUrl);
+  if (!fs.existsSync(diskPath)) {
+    throw new ApiError(404, `Source image file not found on server at: ${targetImageUrl}`);
+  }
+
+  const newJobId = `gp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const retryCount = (existingJob?.retryCount || 0) + 1;
+
+  const job = await garmentProcessingWorker.createAndStartJob(
+    newJobId,
+    userId,
+    itemId,
+    diskPath,
+    {
+      originalImageUrl: targetImageUrl,
+      garmentName: item.name,
+      retryCount,
+      ...options,
+    }
+  );
+
+  return job;
+};
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -526,4 +670,8 @@ module.exports = {
   scanGalleryPhoto: clothAnalysisService.scanGalleryPhoto,
   bulkAddDressPhotos: clothAnalysisService.bulkAddDressPhotos,
   ingestGalleryPhotos: clothAnalysisService.ingestGalleryPhotos,
+  // Human-to-Garment & Ghost Mannequin Pipeline methods
+  triggerGarmentProcessing,
+  getGarmentProcessingStatus,
+  retryGarmentProcessing,
 };
