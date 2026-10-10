@@ -233,10 +233,11 @@ const getFallbackAnalysis = (imageMeta) => {
 const configuredModel = process.env.GEMINI_VISION_MODEL;
 const VISION_MODELS = [
   ...(configuredModel ? [configuredModel] : []),
+  'gemini-3.8-flash',
+  'gemini-3.1-pro-preview',
+  'gemini-3.7-flash',
   'gemini-3.5-flash',
   'gemini-3.1-flash-lite',
-  'gemini-3.8-flash',
-  'gemini-2.5-pro',
 ].filter((model, idx, arr) => arr.indexOf(model) === idx);
 
 /**
@@ -281,64 +282,64 @@ const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
 You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
 We have identified the TARGET PERSON in this photo whose face is located at bounding box [ymin, xmin, ymax, xmax]: ${JSON.stringify(normalizedFaceBoxes)}.
 
-CRITICAL MULTI-PERSON ISOLATION INSTRUCTIONS:
-1. ONLY detect and return the clothing articles worn by THIS TARGET PERSON (the person whose face is at ${JSON.stringify(normalizedFaceBoxes)}).
-2. Look directly below their chin/face bounding box to find their torso, shoulders, chest, and lower body.
-3. STRICTLY IGNORE and DO NOT return garments worn by other people, companions, or strangers standing/sitting next to them!
-4. For each distinct garment found on the TARGET PERSON, return a JSON array containing objects with:
-   - "name": Highly descriptive fashion title (e.g. "Black Long Sleeve Button-Up Overshirt", "White Crewneck Undershirt", "Navy Blue Linen Kurta", "Light Blue Denim Jeans")
+CRITICAL MULTI-ITEM EXTRACTION INSTRUCTIONS:
+1. Detect and return ALL distinct wearable items worn by THIS TARGET PERSON:
+   - Upper wear (T-Shirt, Shirt, Polo, Kurta, Hoodie, Jacket, Blazer, etc.)
+   - Lower wear (Jeans, Pants, Trousers, Shorts, Trackpants, etc.)
+   - Footwear (Shoes, Sneakers, Loafers, Sandals, etc.)
+   - Accessories (Sunglasses, Watch, Belt, Cap, Hat, etc.)
+2. STRICTLY IGNORE garments worn by other people/companions in group photos.
+3. For EACH distinct item found on the TARGET PERSON, return:
+   - "name": Highly descriptive fashion title (e.g. "Black Mock-Neck Quarter-Zip Short-Sleeve T-Shirt", "Black Slim-Fit Denim Jeans", "Black Wayfarer Sunglasses", "Black Leather Strap Wristwatch")
    - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
-   - "subCategory": "Shirt" | "T-Shirt" | "Jeans" | "Trousers" | "Jacket" | "Dress" | "Gown" | "Kurta" | "Saree" | "Blazer"
-   - "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact garment boundaries on THIS target person.
+   - "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
+   - "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact item boundaries.
+   - "polygon": Array of 16 to 36 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment, cutting cleanly across the collar/neckline to exclude human neck/head, across sleeve openings to exclude bare arms/hands, and bottom hem/waist to exclude legs/skin. For accessories (e.g. sunglasses, watch), polygon covers the accessory.
    - "attributes": {
        "primaryColor": dominant color name (e.g. "Black", "White", "Navy Blue", "Olive Green"),
        "secondaryColors": array of secondary colors,
        "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED",
-       "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET",
+       "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "LEATHER" | "PLASTIC" | "OTHER",
        "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT",
-       "neckline": "Collar" | "Round Neck" | "V-Neck" | "Mandarin" | "Other",
+       "neckline": "Collar" | "Round Neck" | "V-Neck" | "Mandarin" | "Mock Neck" | "Other",
        "sleeveStyle": "FULL_SLEEVE" | "HALF_SLEEVE" | "SLEEVELESS"
      }
 
-CRITICAL NEGATIVE FILTER:
-- NEVER detect or crop human faces, bare skin, necks, or background furniture as items!
-- Return ONLY raw JSON array without markdown backticks or commentary.
+CRITICAL RULES:
+- NEVER detect bare skin, human face, or bare neck as a clothing item!
+- Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
   } else {
     prompt = `
-You are an expert World-Class Haute Couture & Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
-Analyze the uploaded image (which may contain multiple dresses on mannequins/hangers, single garments, showroom displays, or people wearing clothes).
-Identify EVERY distinct wearable clothing item, gown, dress, ethnic wear, footwear, or accessory present.
+You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
+Analyze the uploaded image (which may contain a person wearing an outfit, clothes on hangers/mannequins, flat-lays, or showroom displays).
+Identify EVERY distinct wearable item, garment, footwear, or fashion accessory present:
+- Upper wear (T-Shirt, Shirt, Polo, Kurta, Hoodie, Jacket, Blazer, Top, etc.)
+- Lower wear (Jeans, Pants, Trousers, Shorts, Skirt, etc.)
+- Footwear (Shoes, Sneakers, Loafers, Heels, Sandals, etc.)
+- Accessories (Sunglasses, Watch, Belt, Cap, Hat, Jewellery, etc.)
+- Traditional / Gowns / Ethnic wear (Saree, Kurta, Sherwani, Lehenga, Gown, etc.)
 
-CRITICAL MULTI-DRESS / SIDE-BY-SIDE SEPARATION RULES:
-1. Detect EACH distinct dress or outfit as a separate, isolated item in the JSON array.
-2. For SIDE-BY-SIDE dresses or mannequins (e.g. 2, 3 or more dresses next to each other):
-   - The bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for EACH dress must STRICTLY cover ONLY THAT DRESS's primary mannequin and vertical column!
-   - DO NOT let one dress's bounding box overlap or swallow the neighboring mannequin/dress!
-   - Each dress box must split cleanly at the vertical dividing boundary between the two garments.
-3. For full-length dresses, gowns, anarkalis, sarees, lehengas, suits:
-   - "category": "UPPER_WEAR" | "TRADITIONAL" | "LOWER_WEAR" | "OUTERWEAR"
-   - "subCategory": "Gown" | "Evening Gown" | "Dress" | "Maxi Dress" | "Anarkali" | "Saree" | "Lehenga" | "Sherwani" | "Shirt" | "Kurta" | "Jeans"
-   - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0 to 1000 scale) covering ONLY this specific garment.
+For EACH distinct wearable item found, return a JSON object with:
+- "name": Highly descriptive fashion title (e.g. "White Ribbed Crewneck Short-Sleeve T-Shirt", "Black Quarter-Zip Polo T-Shirt", "Black Slim-Fit Denim Jeans", "Black Square Sunglasses", "Brown Leather Strap Watch")
+- "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
+- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
+- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering ONLY this specific item.
+- "polygon": Array of 16 to 36 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment, cutting cleanly across the collar/neckline to exclude human neck/head, across sleeve openings to exclude bare arms/hands, and bottom hem/waist to exclude legs/skin. For accessories (e.g. sunglasses, watch), polygon covers the accessory boundary.
+- "attributes": {
+    "primaryColor": Dominant color shade (e.g. "White", "Black", "Navy Blue"),
+    "secondaryColors": Array of accent colors,
+    "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBELLISHED" | "OTHER",
+    "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "LEATHER" | "PLASTIC" | "OTHER",
+    "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT" | "A_LINE" | "FLARE",
+    "neckline": "Round Neck" | "Collar" | "V-Neck" | "Mock Neck" | "Mandarin" | "Other",
+    "sleeveStyle": "HALF_SLEEVE" | "FULL_SLEEVE" | "SLEEVELESS"
+  }
 
-For each distinct item found, return a JSON object with:
-- "name": Highly descriptive fashion title (e.g. "Royal Blue Beaded Ombre Tulle Gown", "Magenta Glossy Satin Sweetheart Flare Gown", "Midnight Navy Blue Linen Shirt")
-- "category": Broad category ("UPPER_WEAR", "LOWER_WEAR", "TRADITIONAL", "OUTERWEAR", "FOOTWEAR", "ACCESSORIES", "OTHER")
-- "subCategory": Specific garment type ("Evening Gown", "Gown", "Dress", "Shirt", "T-Shirt", "Kurta", "Jeans", "Trousers", "Sherwani", "Sneakers", "Saree", "Jacket", etc.)
-- "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact garment boundaries.
-- "attributes": Object with:
-  - "primaryColor": Dominant color shade
-  - "secondaryColors": Array of accent colors
-  - "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBELLISHED" | "SEQUINED"
-  - "fabric": "SATIN" | "SILK" | "NET_TULLE" | "VELVET" | "ORGANZA" | "GEORGETTE" | "CHIFFON" | "COTTON" | "LINEN" | "DENIM" | "BLEND" | "OTHER"
-  - "fit": "FLARE" | "MERMAID" | "A_LINE" | "SLIM_FIT" | "REGULAR_FIT" | "LOOSE_FIT"
-  - "neckline": "Sweetheart" | "Deep V-Neck" | "V-Neck" | "Collar" | "Round Neck" | "Mandarin" | "Other"
-  - "sleeveStyle": "SLEEVELESS" | "HALF_SLEEVE" | "FULL_SLEEVE"
-
-CRITICAL NEGATIVE FILTER:
-- NEVER detect or crop human faces, bare skin, necks, mannequin heads/stands, or background furniture as items!
-- ONLY detect physical wearable fabric clothing.
-- Return ONLY raw JSON array without markdown backticks or commentary.
+CRITICAL RULES:
+- Separate multi-piece outfits into distinct items (e.g. separate T-shirt and Jeans into 2 items).
+- NEVER detect bare skin, human face, or bare neck as a clothing item!
+- Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
   }
 
@@ -393,23 +394,25 @@ CRITICAL NEGATIVE FILTER:
     const sub = (item.subCategory || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
 
-    // Filter out non-garment body parts
-    if (nonGarmentRegex.test(name) || nonGarmentRegex.test(sub)) {
+    // Filter out non-garment body parts (except accessories like sunglasses, hats, watches)
+    const isAccessory = cat === 'accessories' || sub === 'sunglasses' || sub === 'watch' || sub === 'belt' || cat === 'footwear';
+    if (!isAccessory && (nonGarmentRegex.test(name) || nonGarmentRegex.test(sub))) {
       return false;
     }
     if (cat === 'other' && !item.attributes?.primaryColor) {
       return false;
     }
 
-    // Check minimum dimensions (skip tiny false crops)
+    // Check minimum dimensions (allow smaller bounds for accessories like sunglasses, watch)
     if (item.box2d && item.box2d.length === 4) {
       const [ymin, xmin, ymax, xmax] = item.box2d;
       const height = ymax - ymin;
       const width = xmax - xmin;
-      if (height < 50 || width < 40) return false;
+      const minDim = isAccessory ? 15 : 30;
+      if (height < minDim || width < minDim) return false;
 
       // If target user face coordinates are known, ensure garment is horizontally aligned with the target person
-      if (normalizedFaceBoxes.length > 0) {
+      if (normalizedFaceBoxes.length > 0 && !isAccessory) {
         const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
           const faceCenterX = (fXmin + fXmax) / 2;
           const garmentCenterX = (xmin + xmax) / 2;
@@ -526,10 +529,23 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
           cropFilename = uniqueCropName;
           cropUrl = `/uploads/crops/${uniqueCropName}`;
 
-          // Perform Clothing Segmentation / Background Removal
+          // Map polygon coordinates to crop area for ghost mannequin body exclusion
+          let relativePolygon = null;
+          if (Array.isArray(item.polygon) && item.polygon.length >= 3 && imgWidth && imgHeight) {
+            relativePolygon = item.polygon.map(([py, px]) => {
+              const origX = (px / 1000) * imgWidth;
+              const origY = (py / 1000) * imgHeight;
+              const cropX = Math.max(0, Math.min(width, Math.round(origX - left)));
+              const cropY = Math.max(0, Math.min(height, Math.round(origY - top)));
+              return [cropY, cropX];
+            });
+          }
+
+          // Perform Clothing Segmentation / Background Removal + Ghost Mannequin Isolation
           try {
             const segResult = await segmentationService.segmentClothing(cropFilePath, {
               filenamePrefix: `seg-${index}`,
+              polygon: relativePolygon,
             });
             if (segResult && segResult.outputUrl) {
               cropFilename = segResult.filename;
@@ -632,6 +648,8 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
       subCategory: detected.subCategory,
       croppedImageUrl: detected.croppedImageUrl,
       croppedFilename: detected.croppedFilename,
+      box2d: detected.box2d,
+      polygon: detected.polygon,
       attributes: detected.attributes,
       matchType: matchStatus === 'EXACT_MATCH' ? 'EXISTING_ITEM' : 'NEW_ITEM',
       matchedItem: matchedItem,

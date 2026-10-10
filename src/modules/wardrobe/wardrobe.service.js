@@ -476,10 +476,47 @@ const deleteItem = async (userId, itemId) => {
   return { deleted: true, itemId };
 };
 
+/**
+ * Add a wardrobe item directly from a detected item object
+ */
+const addItemFromDetection = async (userId, detection, extraData = {}) => {
+  const attrs = detection.attributes || {};
+  const autoFields = detection.autoFilledFields || {};
+
+  const itemPayload = {
+    wardrobeId: extraData.wardrobeId || detection.wardrobeId || null,
+    name: extraData.name || detection.name || autoFields.name || 'Dress Item',
+    category: extraData.category || detection.category || autoFields.category || 'UPPER_WEAR',
+    subCategory: extraData.subCategory || detection.subCategory || autoFields.subCategory || '',
+    color: extraData.color || attrs.primaryColor || autoFields.color || '',
+    fabric: extraData.fabric || attrs.fabric || autoFields.fabric || '',
+    pattern: extraData.pattern || attrs.pattern || autoFields.pattern || '',
+    fit: extraData.fit || attrs.fit || autoFields.fit || '',
+    neckline: extraData.neckline || attrs.neckline || autoFields.neckline || '',
+    sleeveLength: extraData.sleeveLength || attrs.sleeveStyle || attrs.sleeveLength || autoFields.sleeveLength || '',
+    occasion: extraData.occasion || attrs.occasions || autoFields.occasion || [],
+    season: extraData.season || attrs.seasons || autoFields.season || [],
+    style: extraData.style || attrs.styleAesthetic || autoFields.style || '',
+    brand: extraData.brand || detection.brand || '',
+    size: extraData.size || detection.size || '',
+    isFavorite: extraData.isFavorite !== undefined ? extraData.isFavorite : (detection.isFavorite || false),
+    images: detection.croppedImageUrl
+      ? [{ url: detection.croppedImageUrl, isPrimary: true, filename: detection.croppedFilename || '' }]
+      : (detection.images || []),
+    sourcePhotoUrl: extraData.sourcePhotoUrl || detection.originalImageUrl || '',
+    sourceImageHash: extraData.sourceImageHash || detection.sourceImageHash || null,
+    attributes: attrs,
+    tags: extraData.tags || detection.tags || autoFields.tags || [attrs.primaryColor, detection.subCategory, detection.category].filter(Boolean),
+  };
+
+  return await addItem(userId, itemPayload);
+};
+
 module.exports = {
   createWardrobe,
   getWardrobes,
   addItem,
+  addItemFromDetection,
   getAllItems,
   getItemById,
   updateItem,

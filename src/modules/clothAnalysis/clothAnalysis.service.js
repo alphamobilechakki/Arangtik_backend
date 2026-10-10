@@ -131,10 +131,44 @@ const analyzePhoto = async (userId, file, options = {}) => {
   // 4. Perform hybrid matching (Exact match, Ambiguous match, New item)
   const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
 
-  // Extract clean, structured autoFilledFields from the primary detected garment
-  const primaryItem = matchedDetections[0] || {};
+  // Enrich each detected garment with its own structured autoFilledFields for multi-item selection in UI
+  const formattedDetections = matchedDetections.map((item, idx) => {
+    const itemAttrs = item.attributes || {};
+    return {
+      ...item,
+      detectionIndex: idx,
+      selected: true,
+      autoFilledFields: {
+        name: item.name || '',
+        category: item.category || '',
+        subCategory: item.subCategory || '',
+        color: itemAttrs.primaryColor || '',
+        fabric: itemAttrs.fabric || '',
+        pattern: itemAttrs.pattern || itemAttrs.designPattern || '',
+        fit: itemAttrs.fit || '',
+        neckline: itemAttrs.neckline || '',
+        sleeveLength: itemAttrs.sleeveLength || itemAttrs.sleeveStyle || '',
+        sleeveStyle: itemAttrs.sleeveStyle || '',
+        occasion: itemAttrs.occasions || itemAttrs.occasion || [],
+        season: itemAttrs.seasons || itemAttrs.season || [],
+        style: itemAttrs.styleAesthetic || itemAttrs.style || '',
+        croppedImageUrl: item.croppedImageUrl || originalImageUrl,
+        originalImageUrl,
+        attributes: itemAttrs,
+        tags: [
+          itemAttrs.primaryColor,
+          item.subCategory,
+          item.category,
+          ...(itemAttrs.occasions || []),
+        ].filter(Boolean),
+      },
+    };
+  });
+
+  // Extract clean, structured autoFilledFields from the primary detected garment for backward compatibility
+  const primaryItem = formattedDetections[0] || {};
   const attrs = primaryItem.attributes || {};
-  const autoFilledFields = {
+  const autoFilledFields = primaryItem.autoFilledFields || {
     name: primaryItem.name || '',
     category: primaryItem.category || '',
     subCategory: primaryItem.subCategory || '',
@@ -162,9 +196,10 @@ const analyzePhoto = async (userId, file, options = {}) => {
   return {
     originalImageUrl,
     sourceImageHash,
-    detectedItemsCount: matchedDetections.length,
+    detectedItemsCount: formattedDetections.length,
     autoFilledFields,
-    analysis: matchedDetections,
+    analysis: formattedDetections,
+    items: formattedDetections,
   };
 };
 

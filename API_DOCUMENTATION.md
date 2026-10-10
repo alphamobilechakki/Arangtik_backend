@@ -483,12 +483,12 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 
 # SECTION 5: DRESS & STORE ITEMS MANAGEMENT (`/api/wardrobe`)
 
-### 5.1 Add Item to Wardrobe (Single or 1-100 Bulk Photos with AI Auto-Fill OR Manual JSON)
-- **Description:** Adds a new clothing item to the wardrobe. Supports single photo upload or bulk uploads (1 to 100 photos):
-  1. **Option A (Camera Capture / Photo Upload - Single or Bulk 1-100 Photos):** Upload clothing photos (`photo` or `photos` / `image` / `images`). AI analyzes the garment, removes the background, generates a transparent WebP cropped image, and **AUTOMATICALLY AUTO-FILLS** all attributes (`name`, `category`, `subCategory`, `color`, `fabric`, `pattern`, `fit`, `neckline`, `sleeveLength`, `occasions`, `seasons`, `tags`) before saving the item to the database. Users can optionally provide custom override fields (`name`, `brand`, `size`, `wardrobeId`).
-     - **Single Photo:** Returns a single created `WardrobeItem` object.
-     - **Multiple Photos (Bulk 1 to 100):** Processes all photos in batch, creates individual wardrobe items, and returns `{ totalPhotosReceived, totalItemsCreated, items: [...] }`.
-  2. **Option B (Manual JSON Entry - Application/JSON):** Adds an item by manually specifying attributes in JSON format.
+### 5.1 Add Item to Wardrobe (Single, Selected Multi-Items Array, Bulk Photos, or 1-Click Auto-Add-All)
+- **Description:** Adds clothing item(s) to the wardrobe. Supports four modes:
+  1. **Option A (Camera Capture / Photo Upload - Single Photo):** Upload a single clothing photo (`photo` or `image`). AI analyzes the garment, removes background, generates a transparent WebP cutout (with 3D ghost mannequin contouring excluding human neck/arms), auto-fills attributes, and persists to the database. If multiple garments are present in the photo (e.g. T-Shirt + Jeans + Sunglasses), pass `autoAddAll: true` to automatically extract and save all detected items!
+  2. **Option B (Selected Multi-Items Batch Save - Application/JSON):** After reviewing items from `POST /api/wardrobe/analyze-photo`, the client passes an array of selected items `{ items: [selectedItem1, selectedItem2, ...] }` to persist all selected garments into the wardrobe in a single call.
+  3. **Option C (Bulk Photos Upload - 2 to 100 Photos):** Processes all uploaded photos in batch (`photos` / `images`).
+  4. **Option D (Manual Single Item Entry - Application/JSON):** Adds a single item by manually specifying attributes.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/add-item` *(Alias: `/api/wardrobe/items`)*
 
@@ -643,8 +643,8 @@ FLOW 2: DIRECT DRESS / CAMERA CLICK FLOW (HANGING / FLAT LAY / MANNEQUIN)
 ---
 
 ### 5.2 Analyze Dress Photo Preview (AI Pre-Fill Preview Endpoint - Single or 1-100 Bulk Photos)
-- **Description:** Used when the frontend needs to pre-fill form fields in the UI after a user selects a photo (allowing the user to inspect or edit attributes prior to saving). AI scans the clothing photo and returns clean `autoFilledFields` without persisting the item to the database.
-  - **Single Photo:** Returns single photo analysis with pre-filled form fields (`autoFilledFields`).
+- **Description:** Scans the uploaded photo, detects ALL distinct wearable articles (Upper wear, Lower wear, Footwear, Accessories like Sunglasses, Watch, Belt), generates clean 3D ghost mannequin cutouts (excluding human neck, head, skin, and arms), and returns individual `autoFilledFields` and `selected: true` for every detected item so the user can easily select or deselect items in the UI.
+  - **Single Photo:** Returns all detected items in `items: [...]` (and `analysis: [...]`), with top-level `autoFilledFields` representing the primary detected garment for backward compatibility.
   - **Bulk Photos (1 to 100):** Analyzes all photos in batch and returns `{ totalPhotosAnalyzed, totalGarmentsDetected, items: [...] }`.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/analyze-photo` *(Alias: `/api/cloth-analysis/analyze-photo`)*

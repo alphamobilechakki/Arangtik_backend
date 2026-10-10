@@ -106,7 +106,79 @@ const addItem = asyncHandler(async (req, res) => {
     );
   }
 
+  // Batch Add mode from UI selection array (e.g. items selected by user after analyze-photo)
+  let itemsList = req.body?.items;
+  if (typeof itemsList === 'string') {
+    try {
+      itemsList = JSON.parse(itemsList);
+    } catch (e) {
+      itemsList = null;
+    }
+  }
+
+  if (Array.isArray(itemsList) && itemsList.length > 0) {
+    const createdItems = [];
+    for (const singleItem of itemsList) {
+      try {
+        const item = await wardrobeService.addItemFromDetection(userId, singleItem, {
+          wardrobeId: req.body.wardrobeId || singleItem.wardrobeId,
+          sourcePhotoUrl: singleItem.sourcePhotoUrl || singleItem.originalImageUrl || '',
+          sourceImageHash: singleItem.sourceImageHash || null,
+        });
+        createdItems.push(item);
+      } catch (err) {
+        console.warn(`[addItem multi-select] Error adding item "${singleItem.name}":`, err.message);
+      }
+    }
+    return ApiResponse.created(
+      res,
+      {
+        totalItemsCreated: createdItems.length,
+        items: createdItems,
+      },
+      `Successfully added ${createdItems.length} selected item(s) to wardrobe`
+    );
+  }
+
+  // Auto-Add All mode for single outfit photo containing multiple garments
   const singleFile = files[0] || null;
+  if (
+    singleFile &&
+    (req.body.autoAddAll === true ||
+      req.body.autoAddAll === 'true' ||
+      req.body.addAll === true ||
+      req.body.addAll === 'true')
+  ) {
+    const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
+    const analysisResult = await clothAnalysisService.analyzePhoto(userId, singleFile, {
+      wardrobeId: req.body.wardrobeId,
+    });
+    const detectedItems = analysisResult.analysis || [];
+    if (detectedItems.length > 1) {
+      const createdItems = [];
+      for (const det of detectedItems) {
+        try {
+          const item = await wardrobeService.addItemFromDetection(userId, det, {
+            wardrobeId: req.body.wardrobeId,
+            sourcePhotoUrl: `/uploads/${singleFile.filename}`,
+            sourceImageHash: analysisResult.sourceImageHash,
+          });
+          createdItems.push(item);
+        } catch (err) {
+          console.warn(`[addItem autoAddAll] Error adding item "${det.name}":`, err.message);
+        }
+      }
+      return ApiResponse.created(
+        res,
+        {
+          totalItemsCreated: createdItems.length,
+          items: createdItems,
+        },
+        `Detected and added all ${createdItems.length} items from photo to wardrobe`
+      );
+    }
+  }
+
   const item = await wardrobeService.addItem(userId, req.body, singleFile);
 
   return ApiResponse.created(res, item, 'Item added successfully to wardrobe store');

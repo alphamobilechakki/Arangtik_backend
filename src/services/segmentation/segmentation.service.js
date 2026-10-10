@@ -90,6 +90,7 @@ class SegmentationService {
       outputFormat = 'image/webp',
       quality = 0.9,
       filenamePrefix = 'seg',
+      polygon = null,
     } = options;
 
     let originalBuffer;
@@ -146,13 +147,48 @@ class SegmentationService {
 
       const rawOutputBuffer = Buffer.from(await outputBlob.arrayBuffer());
 
-      // 4. Quality Control: Inspect Alpha Channel on raw output
+      // 4. Quality Control & Body / Skin Exclusion via Polygon Mask
+      let finalBuffer = rawOutputBuffer;
       let transparentPixels = 0;
       let opaquePixels = 0;
       const totalPixels = width * height;
 
-      for (let i = 0; i < rawOutputBuffer.length; i += 4) {
-        const alpha = rawOutputBuffer[i + 3];
+      // If a precise garment boundary polygon is provided, composite it to eliminate bare skin, neck & arms
+      if (Array.isArray(polygon) && polygon.length >= 3 && sharp) {
+        try {
+          const points = polygon
+            .map(([y, x]) => `${Math.round(x)},${Math.round(y)}`)
+            .join(' ');
+          const svgMask = Buffer.from(
+            `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">` +
+            `<polygon points="${points}" fill="#ffffff" />` +
+            `</svg>`
+          );
+          const maskPng = await sharp(svgMask).resize(width, height).png().toBuffer();
+
+          const maskedRaw = await sharp(rawOutputBuffer, {
+            raw: { width, height, channels: 4 },
+          })
+            .composite([{ input: maskPng, blend: 'dest-in' }])
+            .raw()
+            .toBuffer();
+
+          // Measure remaining opaque pixels after polygon cutout
+          let maskedOpaque = 0;
+          for (let i = 0; i < maskedRaw.length; i += 4) {
+            if (maskedRaw[i + 3] >= 64) maskedOpaque++;
+          }
+          const maskedOpaquePercent = Math.round((maskedOpaque / totalPixels) * 100);
+          if (maskedOpaquePercent >= this.minOpaquePercent) {
+            finalBuffer = maskedRaw;
+          }
+        } catch (polyErr) {
+          console.warn('[Segmentation] Polygon mask compositing failed, keeping standard bg removal:', polyErr.message);
+        }
+      }
+
+      for (let i = 0; i < finalBuffer.length; i += 4) {
+        const alpha = finalBuffer[i + 3];
         if (alpha < 64) {
           transparentPixels++;
         } else {
@@ -191,13 +227,13 @@ class SegmentationService {
 
       // 5. Encode clean transparent cutout using Sharp to WebP or PNG
       if (outputFormat === 'image/png') {
-        await sharp(rawOutputBuffer, {
+        await sharp(finalBuffer, {
           raw: { width, height, channels: 4 },
         })
           .png()
           .toFile(outputFilePath);
       } else {
-        await sharp(rawOutputBuffer, {
+        await sharp(finalBuffer, {
           raw: { width, height, channels: 4 },
         })
           .webp({ quality: Math.round(quality * 100), alphaQuality: 100 })
