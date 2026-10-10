@@ -1,0 +1,15 @@
+{
+  "watch": ["src", "server.js"],
+  "ext": "js,json",
+  "ignore": [
+    "uploads/**",
+    "tests/**",
+    "node_modules/**",
+    "*.log",
+    "*.webp",
+    "*.png",
+    "*.jpg",
+    "*.jpeg"
+  ],
+  "delay": "1000"
+}
