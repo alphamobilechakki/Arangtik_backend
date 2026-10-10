@@ -93,6 +93,8 @@ class SegmentationService {
       quality = 0.9,
       filenamePrefix = 'seg',
       polygon = null,
+      usePolygonMask = false,
+      autoInpaint = false,
     } = options;
 
     let originalBuffer;
@@ -155,8 +157,8 @@ class SegmentationService {
       let opaquePixels = 0;
       const totalPixels = width * height;
 
-      // If a precise garment boundary polygon is provided, composite it to eliminate bare skin, neck & arms
-      if (Array.isArray(polygon) && polygon.length >= 3 && sharp) {
+      // If a precise garment boundary polygon is provided AND explicitly requested, composite it
+      if (usePolygonMask && Array.isArray(polygon) && polygon.length >= 3 && sharp) {
         try {
           const points = polygon
             .map(([y, x]) => `${Math.round(x)},${Math.round(y)}`)
@@ -232,9 +234,9 @@ class SegmentationService {
         };
       }
 
-      // 5. Intelligent Inpainting: Auto-fill notches, holes, and hand occlusion gaps
+      // 5. Intelligent Inpainting: Auto-fill notches, holes, and hand occlusion gaps (if enabled)
       let hasInpaintedBuffer = false;
-      if (options.autoInpaint !== false) {
+      if (autoInpaint) {
         try {
           const rawPng = await sharp(finalBuffer, {
             raw: { width, height, channels: 4 },

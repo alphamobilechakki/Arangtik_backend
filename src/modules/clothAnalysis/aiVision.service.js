@@ -514,11 +514,13 @@ const cropDetectedItems = async (originalImagePath, detectedItems) => {
             });
           }
 
-          // Perform Clothing Segmentation / Background Removal + Ghost Mannequin Isolation
+          // Perform Clothing Segmentation / Background Removal
           try {
             const segResult = await segmentationService.segmentClothing(cropFilePath, {
               filenamePrefix: `seg-${index}`,
               polygon: relativePolygon,
+              usePolygonMask: false,
+              autoInpaint: false,
             });
             if (segResult && segResult.outputUrl) {
               cropFilename = segResult.filename;
