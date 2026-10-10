@@ -95,31 +95,4 @@ router.post('/bulk-add-photos', upload.array('photos', 100), wardrobeController.
 // Gallery Batch Ingestion (Puri gallery scan karein)
 router.post('/ingest-gallery', upload.array('photos', 100), wardrobeController.ingestGalleryPhotos);
 
-// __________________________________________________________________________
-// 4. AI HUMAN-TO-GARMENT & GHOST MANNEQUIN PIPELINE APIs
-// __________________________________________________________________________
-
-// Pose Validation API (Check body coordinates & avoid occlusions before processing)
-router.post(
-  '/pose-validation',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-    { name: 'file', maxCount: 1 },
-  ]),
-  wardrobeController.validatePose
-);
-
-// Trigger Pipeline (Initiate extraction & ghost mannequin creation)
-router.post('/items/:id/garment-processing', wardrobeController.triggerGarmentProcessing);
-router.post('/garment-processing/:id', wardrobeController.triggerGarmentProcessing);
-
-// Poll Pipeline Status & Results
-router.get('/items/:id/garment-processing/status', wardrobeController.getGarmentProcessingStatus);
-router.get('/garment-processing/:id/status', wardrobeController.getGarmentProcessingStatus);
-
-// Retry Failed Pipeline Job
-router.post('/items/:id/garment-processing/retry', wardrobeController.retryGarmentProcessing);
-router.post('/garment-processing/:id/retry', wardrobeController.retryGarmentProcessing);
-
 module.exports = router;

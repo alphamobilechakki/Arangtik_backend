@@ -339,76 +339,6 @@ const getWardrobes = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
 });
 
-/**
- * @desc    Trigger AI Human-to-Garment & Ghost Mannequin extraction pipeline
- * @route   POST /api/wardrobe/items/:id/garment-processing
- * @access  Private
- */
-const triggerGarmentProcessing = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const itemId = req.params.id || req.params.itemId;
-  const options = req.body || {};
-
-  const job = await wardrobeService.triggerGarmentProcessing(userId, itemId, options);
-
-  return ApiResponse.success(
-    res,
-    job,
-    'Garment extraction and ghost mannequin processing initiated'
-  );
-});
-
-/**
- * @desc    Get Garment Processing Job status and output URLs
- * @route   GET /api/wardrobe/items/:id/garment-processing/status
- * @access  Private
- */
-const getGarmentProcessingStatus = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const identifier = req.params.id || req.params.itemId || req.params.jobId;
-
-  const job = await wardrobeService.getGarmentProcessingStatus(userId, identifier);
-
-  return ApiResponse.success(res, job, 'Garment processing job status fetched');
-});
-
-/**
- * @desc    Retry Garment Processing Job
- * @route   POST /api/wardrobe/items/:id/garment-processing/retry
- * @access  Private
- */
-const retryGarmentProcessing = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const itemId = req.params.id || req.params.itemId;
-  const options = req.body || {};
-
-  const job = await wardrobeService.retryGarmentProcessing(userId, itemId, options);
-
-  return ApiResponse.success(
-    res,
-    job,
-    'Garment processing job retried successfully'
-  );
-});
-
-/**
- * @desc    Validate body pose and garment occlusion coordinates against avatar guide
- * @route   POST /api/wardrobe/pose-validation
- * @access  Private
- */
-const validatePose = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const file = req.file || req.files?.photo?.[0] || req.files?.image?.[0] || req.files?.file?.[0] || null;
-
-  const result = await wardrobeService.validatePose(userId, file, req.body || {});
-
-  const message = result.poseStatus === 'POSE_VALID'
-    ? 'Pose is perfectly aligned with avatar guide'
-    : `Pose status: ${result.poseStatus}`;
-
-  return ApiResponse.success(res, result, message);
-});
-
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -421,9 +351,4 @@ module.exports = {
   scanGalleryPhoto,
   bulkAddPhotos,
   ingestGalleryPhotos,
-  // Garment processing handlers
-  triggerGarmentProcessing,
-  getGarmentProcessingStatus,
-  retryGarmentProcessing,
-  validatePose,
 };
