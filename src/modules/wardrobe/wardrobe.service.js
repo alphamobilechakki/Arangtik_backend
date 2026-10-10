@@ -5,6 +5,7 @@ const Wardrobe = require('./wardrobe.model');
 const WardrobeItem = require('./wardrobeItem.model');
 const GarmentProcessingJob = require('./garmentProcessingJob.model');
 const garmentProcessingWorker = require('../../services/garment/garmentProcessing.worker');
+const poseValidationService = require('../../services/garment/poseValidation.service');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
 
@@ -656,6 +657,42 @@ const retryGarmentProcessing = async (userId, itemId, options = {}) => {
   return job;
 };
 
+/**
+ * Validate human pose and garment occlusion for an uploaded photo or existing wardrobe item
+ */
+const validatePose = async (userId, file, data = {}) => {
+  let diskPath = null;
+
+  if (file && file.path) {
+    diskPath = file.path;
+  } else if (file && file.filename) {
+    diskPath = resolveDiskImagePath(`/uploads/${file.filename}`);
+  } else if (data.itemId) {
+    const item = await WardrobeItem.findOne({ _id: data.itemId, userId });
+    if (!item) {
+      throw new ApiError(404, 'Wardrobe item not found');
+    }
+    const targetUrl = item.sourcePhotoUrl || (item.images && item.images[0]?.url);
+    if (!targetUrl) {
+      throw new ApiError(400, 'Wardrobe item has no image to validate');
+    }
+    diskPath = resolveDiskImagePath(targetUrl);
+  } else if (data.imageUrl) {
+    diskPath = resolveDiskImagePath(data.imageUrl);
+  }
+
+  if (!diskPath || !fs.existsSync(diskPath)) {
+    throw new ApiError(400, 'No valid image file found to perform pose validation');
+  }
+
+  const result = await poseValidationService.validatePose(diskPath, {
+    category: data.category || 'ETHNIC_WEAR',
+    minConfidence: data.minConfidence ? parseFloat(data.minConfidence) : 0.25,
+  });
+
+  return result;
+};
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -674,4 +711,5 @@ module.exports = {
   triggerGarmentProcessing,
   getGarmentProcessingStatus,
   retryGarmentProcessing,
+  validatePose,
 };

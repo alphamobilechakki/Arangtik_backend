@@ -68,6 +68,16 @@ const GarmentProcessingJobSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Pose Alignment & Occlusion Check
+    poseValidation: {
+      poseStatus: { type: String, default: null },
+      poseConfidence: { type: Number, default: 0 },
+      personCount: { type: Number, default: 0 },
+      handsOverlapGarment: { type: String, default: 'UNKNOWN' },
+      canProceed: { type: Boolean, default: true },
+      warnings: [{ type: String }],
+      recommendedActions: [{ type: String }],
+    },
     // Quality Control Metrics
     qualityValidation: {
       passed: { type: Boolean, default: false },

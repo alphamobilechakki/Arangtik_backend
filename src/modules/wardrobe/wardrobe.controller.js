@@ -391,6 +391,24 @@ const retryGarmentProcessing = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * @desc    Validate body pose and garment occlusion coordinates against avatar guide
+ * @route   POST /api/wardrobe/pose-validation
+ * @access  Private
+ */
+const validatePose = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const file = req.file || req.files?.photo?.[0] || req.files?.image?.[0] || req.files?.file?.[0] || null;
+
+  const result = await wardrobeService.validatePose(userId, file, req.body || {});
+
+  const message = result.poseStatus === 'POSE_VALID'
+    ? 'Pose is perfectly aligned with avatar guide'
+    : `Pose status: ${result.poseStatus}`;
+
+  return ApiResponse.success(res, result, message);
+});
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -407,4 +425,5 @@ module.exports = {
   triggerGarmentProcessing,
   getGarmentProcessingStatus,
   retryGarmentProcessing,
+  validatePose,
 };

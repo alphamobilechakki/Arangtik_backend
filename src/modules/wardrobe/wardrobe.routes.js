@@ -99,6 +99,17 @@ router.post('/ingest-gallery', upload.array('photos', 100), wardrobeController.i
 // 4. AI HUMAN-TO-GARMENT & GHOST MANNEQUIN PIPELINE APIs
 // __________________________________________________________________________
 
+// Pose Validation API (Check body coordinates & avoid occlusions before processing)
+router.post(
+  '/pose-validation',
+  upload.fields([
+    { name: 'photo', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+    { name: 'file', maxCount: 1 },
+  ]),
+  wardrobeController.validatePose
+);
+
 // Trigger Pipeline (Initiate extraction & ghost mannequin creation)
 router.post('/items/:id/garment-processing', wardrobeController.triggerGarmentProcessing);
 router.post('/garment-processing/:id', wardrobeController.triggerGarmentProcessing);

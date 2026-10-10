@@ -7,6 +7,7 @@ const garmentMaskService = require('./garmentMask.service');
 const garmentReconstructionService = require('./garmentReconstruction.service');
 const ghostMannequinService = require('./ghostMannequin.service');
 const garmentQualityService = require('./garmentQuality.service');
+const poseValidationService = require('./poseValidation.service');
 
 /**
  * Garment Processing Orchestrator & Worker
@@ -76,6 +77,27 @@ class GarmentProcessingWorker {
         throw new Error('Invalid image dimensions or corrupted file.');
       }
 
+      // Stage A.2 — Pose Validation & Alignment Check
+      let poseWarnings = [];
+      try {
+        const poseResult = await poseValidationService.validatePose(originalImagePath, {
+          category: options.category || options.garmentCategory || options.garmentName,
+        });
+        job.poseValidation = {
+          poseStatus: poseResult.poseStatus,
+          poseConfidence: poseResult.poseConfidence,
+          personCount: poseResult.personCount,
+          handsOverlapGarment: poseResult.handsOverlapGarment,
+          canProceed: poseResult.canProceed,
+          warnings: poseResult.warnings || [],
+          recommendedActions: poseResult.recommendedActions || [],
+        };
+        poseWarnings = poseResult.warnings || [];
+        await job.save();
+      } catch (pErr) {
+        console.warn(`[GarmentWorker] Pose validation warning for job ${jobId}:`, pErr.message);
+      }
+
       // Stage B & C — Garment Mask & Segmentation Extraction
       const maskResult = await garmentMaskService.extractGarmentMask(originalImagePath, {
         polygon: options.polygon || null,
@@ -92,9 +114,13 @@ class GarmentProcessingWorker {
       // Stage D — Human Removal & Occlusion Reconstruction
       let reconstructionStatus = 'NOT_ATTEMPTED';
       let isReconstructed = false;
-      let warnings = [];
+      let warnings = [...poseWarnings];
 
-      if (options.reconstructOcclusions !== false) {
+      // Reconstruct only if hands actually occlude the garment or explicitly requested
+      const handsOccluding = job.poseValidation?.handsOverlapGarment === 'YES';
+      const shouldReconstruct = options.reconstructOcclusions === true || (options.reconstructOcclusions !== false && handsOccluding);
+
+      if (shouldReconstruct) {
         const recResult = await garmentReconstructionService.reconstructGarment(currentGarmentBuffer, {
           referenceImage: originalImagePath,
           garmentName: options.garmentName || 'Garment',
