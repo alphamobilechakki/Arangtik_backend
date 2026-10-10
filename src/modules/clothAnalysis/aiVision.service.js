@@ -294,7 +294,7 @@ CRITICAL MULTI-ITEM EXTRACTION INSTRUCTIONS:
    - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
    - "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
    - "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact item boundaries.
-   - "polygon": Array of 16 to 36 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment, cutting cleanly across the collar/neckline to exclude human neck/head, across sleeve openings to exclude bare arms/hands, and bottom hem/waist to exclude legs/skin. For accessories (e.g. sunglasses, watch), polygon covers the accessory.
+   - "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment. For Upper Wear (shirts/t-shirts/tops): stop cleanly right at the collar ribbing seam (NEVER include neck skin or throat), cut cleanly across sleeve cuff openings (NEVER include bare arms or hands), and cut at bottom waist hem (NEVER include pants/belt). For accessories, trace the accessory boundary.
    - "attributes": {
        "primaryColor": dominant color name (e.g. "Black", "White", "Navy Blue", "Olive Green"),
        "secondaryColors": array of secondary colors,

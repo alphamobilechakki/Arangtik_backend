@@ -164,7 +164,12 @@ class SegmentationService {
             `<polygon points="${points}" fill="#ffffff" />` +
             `</svg>`
           );
-          const maskPng = await sharp(svgMask).resize(width, height).png().toBuffer();
+          // Apply soft feathered blur to avoid razor-sharp polygonal cuts
+          const maskPng = await sharp(svgMask)
+            .resize(width, height)
+            .blur(2.5)
+            .png()
+            .toBuffer();
 
           const maskedRaw = await sharp(rawOutputBuffer, {
             raw: { width, height, channels: 4 },
@@ -185,6 +190,31 @@ class SegmentationService {
         } catch (polyErr) {
           console.warn('[Segmentation] Polygon mask compositing failed, keeping standard bg removal:', polyErr.message);
         }
+      }
+
+      // 4b. Smart Human Skin & Flesh Exclusion (eliminates bare neck inside collar, arms, and hands)
+      try {
+        for (let i = 0; i < finalBuffer.length; i += 4) {
+          const a = finalBuffer[i + 3];
+          if (a < 32) continue;
+
+          const r = finalBuffer[i];
+          const g = finalBuffer[i + 1];
+          const b = finalBuffer[i + 2];
+
+          // YCbCr skin tone detection:
+          const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+          const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+          const isSkinYCbCr = (Cb >= 75 && Cb <= 135 && Cr >= 130 && Cr <= 178);
+          const isSkinRGB = (r > 60 && g > 30 && b > 20 && r > g && g >= b && (r - g) >= 8);
+
+          if (isSkinYCbCr || (isSkinRGB && Cr > 130)) {
+            finalBuffer[i + 3] = 0; // Transparent
+          }
+        }
+      } catch (skinErr) {
+        console.warn('[Segmentation] Skin filter warning:', skinErr.message);
       }
 
       for (let i = 0; i < finalBuffer.length; i += 4) {
