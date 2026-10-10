@@ -500,8 +500,8 @@ const addItemFromDetection = async (userId, detection, extraData = {}) => {
     brand: extraData.brand || detection.brand || '',
     size: extraData.size || detection.size || '',
     isFavorite: extraData.isFavorite !== undefined ? extraData.isFavorite : (detection.isFavorite || false),
-    images: detection.croppedImageUrl
-      ? [{ url: detection.croppedImageUrl, isPrimary: true, filename: detection.croppedFilename || '' }]
+    images: (detection.croppedImageUrl || autoFields.croppedImageUrl || detection.imageUrl)
+      ? [{ url: detection.croppedImageUrl || autoFields.croppedImageUrl || detection.imageUrl, isPrimary: true, filename: detection.croppedFilename || autoFields.croppedFilename || '' }]
       : (detection.images || []),
     sourcePhotoUrl: extraData.sourcePhotoUrl || detection.originalImageUrl || '',
     sourceImageHash: extraData.sourceImageHash || detection.sourceImageHash || null,
