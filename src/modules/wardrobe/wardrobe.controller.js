@@ -339,6 +339,20 @@ const getWardrobes = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
 });
 
+/**
+ * @desc    Generate 3D model (.glb) for a wardrobe garment using Hugging Face TripoSR
+ * @route   POST /api/wardrobe/items/:id/generate-3d OR POST /api/wardrobe/generate-3d/:id
+ * @access  Private
+ */
+const generateItem3D = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const itemId = req.params.id;
+
+  const result = await wardrobeService.generateItem3DModel(userId, itemId);
+
+  return ApiResponse.success(res, result, '3D Garment model generated successfully via TripoSR');
+});
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -347,6 +361,7 @@ module.exports = {
   getItemDetails,
   updateItem,
   deleteItem,
+  generateItem3D,
   analyzePhoto,
   scanGalleryPhoto,
   bulkAddPhotos,

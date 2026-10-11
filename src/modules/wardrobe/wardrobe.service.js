@@ -3,6 +3,7 @@ const Wardrobe = require('./wardrobe.model');
 const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
+const tripo3dService = require('../../services/model3D/tripo3d.service');
 
 /**
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
@@ -512,6 +513,68 @@ const addItemFromDetection = async (userId, detection, extraData = {}) => {
   return await addItem(userId, itemPayload);
 };
 
+/**
+ * Generate 3D Model for a wardrobe item using Hugging Face TripoSR
+ */
+const generateItem3DModel = async (userId, itemId) => {
+  const item = await WardrobeItem.findOne({ _id: itemId, userId });
+  if (!item) {
+    throw new ApiError(404, 'Wardrobe item not found');
+  }
+
+  // Find best image to reconstruct (prefer cropped/segmented image, else primary image)
+  const primaryImg =
+    item.images?.find((img) => img.type === 'CROPPED' || img.type === 'SEGMENTED')?.url ||
+    item.images?.find((img) => img.isPrimary)?.url ||
+    item.images?.[0]?.url ||
+    item.sourcePhotoUrl;
+
+  if (!primaryImg) {
+    throw new ApiError(400, 'This item does not have a valid photo to convert to 3D');
+  }
+
+  // Set status to PROCESSING
+  item.model3d = {
+    url: item.model3d?.url || null,
+    filename: item.model3d?.filename || null,
+    status: 'PROCESSING',
+    engine: 'TripoSR',
+    generatedAt: null,
+    error: null,
+  };
+  await item.save();
+
+  try {
+    const result = await tripo3dService.generate3DFromImage(primaryImg, {
+      resolution: 128,
+      foregroundRatio: 0.85,
+    });
+
+    item.model3d = {
+      url: result.url,
+      filename: result.filename,
+      status: 'COMPLETED',
+      engine: result.engine || 'TripoSR',
+      generatedAt: new Date(),
+      error: null,
+    };
+    await item.save();
+    return item;
+  } catch (err) {
+    console.error(`[generateItem3DModel] Failed for item ${itemId}:`, err.message);
+    item.model3d = {
+      url: item.model3d?.url || null,
+      filename: item.model3d?.filename || null,
+      status: 'FAILED',
+      engine: 'TripoSR',
+      generatedAt: null,
+      error: err.message,
+    };
+    await item.save();
+    throw new ApiError(500, `3D Model generation failed: ${err.message}`);
+  }
+};
+
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -521,6 +584,7 @@ module.exports = {
   getItemById,
   updateItem,
   deleteItem,
+  generateItem3DModel,
   // Delegated AI Cloth Analysis & Ingestion functions for full backward compatibility
   analyzePhoto: clothAnalysisService.analyzePhoto,
   scanGalleryPhoto: clothAnalysisService.scanGalleryPhoto,

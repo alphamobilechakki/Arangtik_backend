@@ -63,6 +63,10 @@ router.patch('/items/:id', wardrobeController.updateItem);
 router.delete('/delete-item/:id', wardrobeController.deleteItem);
 router.delete('/items/:id', wardrobeController.deleteItem);
 
+// 3D Model Generation (Hugging Face TripoSR)
+router.post('/generate-3d/:id', wardrobeController.generateItem3D);
+router.post('/items/:id/generate-3d', wardrobeController.generateItem3D);
+
 // __________________________________________________________________________
 // 3. AI SCAN & UPLOAD APIs (Photo se automatic kapde add karna)
 // __________________________________________________________________________

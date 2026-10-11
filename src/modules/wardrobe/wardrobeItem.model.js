@@ -160,6 +160,19 @@ const WardrobeItemSchema = new mongoose.Schema(
       default: {},
     },
     tags: [{ type: String, trim: true }],
+    // 3D Garment Model Specification (TripoSR / Web 3D Viewer)
+    model3d: {
+      url: { type: String, trim: true, default: null },
+      filename: { type: String, trim: true, default: null },
+      status: {
+        type: String,
+        enum: ['NOT_STARTED', 'PROCESSING', 'COMPLETED', 'FAILED'],
+        default: 'NOT_STARTED',
+      },
+      engine: { type: String, default: 'TripoSR' },
+      generatedAt: { type: Date, default: null },
+      error: { type: String, default: null },
+    },
   },
   {
     timestamps: true,
