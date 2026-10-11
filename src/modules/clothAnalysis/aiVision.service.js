@@ -279,70 +279,78 @@ const analyzeImageWithGemini = async (imagePath, userFaceBoxes = []) => {
   let prompt = '';
   if (normalizedFaceBoxes.length > 0) {
     prompt = `
-You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
+You are an expert World-Class Fashion Vision AI specialized in Digital Wardrobe Clothing Extraction.
 We have identified the TARGET PERSON in this photo whose face is located at bounding box [ymin, xmin, ymax, xmax]: ${JSON.stringify(normalizedFaceBoxes)}.
 
-CRITICAL MULTI-ITEM EXTRACTION INSTRUCTIONS:
-1. Detect and return ALL distinct wearable items worn by THIS TARGET PERSON:
-   - Upper wear (T-Shirt, Shirt, Polo, Kurta, Hoodie, Jacket, Blazer, etc.)
-   - Lower wear (Jeans, Pants, Trousers, Shorts, Trackpants, etc.)
-   - Footwear (Shoes, Sneakers, Loafers, Sandals, etc.)
-   - Accessories (Sunglasses, Watch, Belt, Cap, Hat, etc.)
-2. STRICTLY IGNORE garments worn by other people/companions in group photos.
-3. For EACH distinct item found on the TARGET PERSON, return:
-   - "name": Highly descriptive fashion title (e.g. "Black Mock-Neck Quarter-Zip Short-Sleeve T-Shirt", "Black Slim-Fit Denim Jeans", "Black Wayfarer Sunglasses", "Black Leather Strap Wristwatch")
-   - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
-   - "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
-   - "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact item boundaries.
-   - "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment. For Upper Wear (shirts/t-shirts/tops): stop cleanly right at the collar ribbing seam (NEVER include neck skin or throat), cut cleanly across sleeve cuff openings (NEVER include bare arms or hands), and cut at bottom waist hem (NEVER include pants/belt). For accessories, trace the accessory boundary.
-   - "attributes": {
-       "primaryColor": dominant color name (e.g. "Black", "White", "Navy Blue", "Olive Green"),
-       "secondaryColors": array of secondary colors,
-       "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED",
-       "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "LEATHER" | "PLASTIC" | "OTHER",
-       "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT",
-       "neckline": "Collar" | "Round Neck" | "V-Neck" | "Mandarin" | "Mock Neck" | "Other",
-       "sleeveStyle": "FULL_SLEEVE" | "HALF_SLEEVE" | "SLEEVELESS"
-     }
+CRITICAL EXTRACTION RULES (STRICT COMPLIANCE REQUIRED):
+1. ONLY EXTRACT CORE CLOTHING GARMENTS worn by THIS TARGET PERSON:
+   - Upper wear (T-Shirt, Shirt, Polo, Top, Hoodie, Jacket, Blazer, etc.)
+   - Lower wear (Jeans, Pants, Trousers, Shorts, Trackpants, Skirt, etc.)
+   - Traditional / Full Body (Saree, Kurta Set, Salwar Suit, Anarkali, Lehenga Choli, One-piece Dress, Gown)
+2. STRICTLY DO NOT EXTRACT ACCESSORIES OR FOOTWEAR from this person's outfit photo:
+   - DO NOT extract sunglasses, spectacles, watches, belts, caps, hats, rings, bracelets, or shoes from a person's photo! Only extract actual garments of clothing.
+3. SEVERELY CUTOFF / HALF-VISIBLE GARMENT RULE (VERY IMPORTANT):
+   - If a garment is cut off by the camera frame such that only a small portion is visible (for example: only half a T-shirt or collar is visible because the photo starts at mid-chest, but the pants/jeans are fully visible), DO NOT DETECT THE HALF T-SHIRT! Extract ONLY the fully visible pants/jeans. A garment must be prominently visible (>60% of the piece in frame) to be extracted.
+4. WOMEN'S ETHNIC / TRADITIONAL ENSEMBLE RULES (NO AWKWARD FRAGMENTATION):
+   - SAREE & BLOUSE: When a woman is wearing a Saree, DO NOT split the Saree and Blouse! The Saree and Blouse form ONE complete unified ensemble (category: "TRADITIONAL", subCategory: "Saree"). The bounding box MUST cover the entire saree outfit from shoulders down to the bottom pallu/pleats. DO NOT create a separate blouse piece!
+   - SUITS & KURTA SETS: When a woman is wearing a Kurta with Salwar/Palazzo and Dupatta, keep the entire suit together as ONE unified traditional ensemble (e.g. "Pink Embroidered Kurta Suit Set").
+   - LEHENGA CHOLI: Keep the lehenga, choli, and dupatta together as ONE complete ensemble.
+   - WESTERN SEPARATES: If wearing distinct 2-piece modern clothing (e.g. Crop Top / Shirt + Jeans / Trousers / Skirt), extract Upper Wear and Lower Wear separately.
+5. STRICTLY IGNORE garments worn by other people/companions in group photos.
 
-CRITICAL RULES:
-- TRADITIONAL ENSEMBLE RULE: For Ethnic Wear (Anarkali, Kurti with Dupatta, Salwar Kameez, Lehenga, Saree), keep the matching dress and draped dupatta TOGETHER as ONE complete ensemble (e.g. "Anarkali Suit with Dupatta Set"). DO NOT separate or cut off the draped dupatta.
-- Stop cleanly at sleeve cuff hems to exclude bare wrists/hands.
-- NEVER detect bare skin, human face, or bare neck as a clothing item!
+For EACH valid garment found on the TARGET PERSON, return:
+- "name": Highly descriptive fashion title (e.g. "Black Mock-Neck Quarter-Zip Short-Sleeve T-Shirt", "Black Slim-Fit Denim Jeans", "Red Banarasi Silk Saree with Blouse Ensemble")
+- "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR"
+- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Saree" | "Kurta" | "Dress" | "Skirt" | "Jacket"
+- "box2d": [ymin, xmin, ymax, xmax] (0-1000 scale) covering the exact item boundaries.
+- "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the outer fabric boundary contour of the garment. Stop cleanly right at collar seam (NEVER include neck skin), cut cleanly across sleeve cuff openings (NEVER include bare arms/hands), and cut at bottom waist hem.
+- "attributes": {
+    "primaryColor": dominant color name (e.g. "Black", "White", "Navy Blue"),
+    "secondaryColors": array of secondary colors,
+    "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED",
+    "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "OTHER",
+    "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT",
+    "neckline": "Collar" | "Round Neck" | "V-Neck" | "Mandarin" | "Mock Neck" | "Other",
+    "sleeveStyle": "FULL_SLEEVE" | "HALF_SLEEVE" | "SLEEVELESS"
+  }
+
 - Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
   } else {
     prompt = `
-You are an expert World-Class Fashion Vision AI specialized in Ultra-Granular Digital Wardrobe Extraction.
-Analyze the uploaded image (which may contain a person wearing an outfit, clothes on hangers/mannequins, flat-lays, or showroom displays).
-Identify EVERY distinct wearable item, garment, footwear, or fashion accessory present:
-- Upper wear (T-Shirt, Shirt, Polo, Kurta, Hoodie, Jacket, Blazer, Top, etc.)
-- Lower wear (Jeans, Pants, Trousers, Shorts, Skirt, etc.)
-- Footwear (Shoes, Sneakers, Loafers, Heels, Sandals, etc.)
-- Accessories (Sunglasses, Watch, Belt, Cap, Hat, Jewellery, etc.)
-- Traditional / Gowns / Ethnic wear (Saree, Kurta, Sherwani, Lehenga, Gown, etc.)
+You are an expert World-Class Fashion Vision AI specialized in Digital Wardrobe Clothing Extraction.
+Analyze the uploaded image (which may contain a person wearing an outfit, clothes on hangers, flat-lays, or showroom displays).
 
-For EACH distinct wearable item found, return a JSON object with:
-- "name": Highly descriptive fashion title (e.g. "White Ribbed Crewneck Short-Sleeve T-Shirt", "Black Quarter-Zip Polo T-Shirt", "Black Slim-Fit Denim Jeans", "Black Square Sunglasses", "Brown Leather Strap Watch")
+CRITICAL EXTRACTION RULES (STRICT COMPLIANCE REQUIRED):
+1. IF THE PHOTO IS A PERSON WEARING AN OUTFIT:
+   - Extract ONLY the primary clothing garments (Upper Wear, Lower Wear, or Full Body / Traditional dress).
+   - DO NOT extract sunglasses, spectacles, watches, belts, caps, or shoes from a person's outfit photo!
+2. STANDALONE PRODUCT / ACCESSORY / SHOE EXCEPTION:
+   - Footwear (Shoes, Sneakers) or Accessories (Watch, Sunglasses) must ONLY be detected if the uploaded photo is specifically a DEDICATED STANDALONE product photo of that item (e.g. a flat-lay of shoes on the floor or a watch on a desk, with NO person wearing an outfit).
+3. SEVERELY CUTOFF / HALF-VISIBLE GARMENT RULE (VERY IMPORTANT):
+   - If a garment is cut off by the edge of the image frame such that only a partial portion is visible (for example: a photo starting below the chest showing only the bottom half of a T-shirt, but showing full pants/jeans), DO NOT DETECT THE HALF T-SHIRT! Detect ONLY the fully visible pants/jeans. A garment must be prominently visible (>60% of the item in frame) to be extracted.
+4. WOMEN'S ETHNIC / TRADITIONAL ENSEMBLE RULES (NO AWKWARD FRAGMENTATION):
+   - SAREE & BLOUSE: When a woman is wearing a Saree, DO NOT split the Saree and Blouse into two pieces! The Saree, Blouse, and Pallu form ONE complete unified ensemble (category: "TRADITIONAL", subCategory: "Saree"). The bounding box covers from the shoulders down to the floor. NEVER extract a separate tiny blouse!
+   - KURTA SETS / SUITS: For Kurta with Salwar/Palazzo and Dupatta, Anarkali Suits, or Lehenga Choli, detect the entire outfit as ONE complete unified ensemble. Do not chop it into fragmented pieces.
+   - WESTERN SEPARATES: When wearing distinct 2-piece separates (e.g. Top/Shirt + Jeans/Trousers/Skirt), extract Upper Wear and Lower Wear separately.
+5. NEVER detect bare skin, human face, bare neck, or mannequin stand as a clothing item!
+
+For EACH valid wearable item found, return a JSON object with:
+- "name": Highly descriptive fashion title (e.g. "White Ribbed Crewneck Short-Sleeve T-Shirt", "Black Slim-Fit Denim Jeans", "Red Banarasi Silk Saree with Blouse Ensemble")
 - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
-- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Sunglasses" | "Watch" | "Shoes" | "Belt" | "Jacket" | "Dress" | "Kurta"
+- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Saree" | "Kurta" | "Dress" | "Shoes" | "Watch"
 - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering ONLY this specific item.
-- "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the garment's outer fabric boundary contour. For upper garments (shirts/t-shirts/tops): stop cleanly right at collar seam (NEVER include neck skin), cut cleanly across sleeve cuff openings (NEVER include bare wrists/hands), and cut at bottom hem. For traditional dresses with draped dupatta, enclose the complete outfit ensemble together. For accessories, trace accessory boundary.
+- "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the garment's outer fabric boundary contour.
 - "attributes": {
     "primaryColor": Dominant color shade (e.g. "White", "Black", "Navy Blue"),
     "secondaryColors": Array of accent colors,
     "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBELLISHED" | "OTHER",
-    "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "LEATHER" | "PLASTIC" | "OTHER",
+    "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "SYNTHETIC" | "SATIN" | "VELVET" | "OTHER",
     "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT" | "A_LINE" | "FLARE",
     "neckline": "Round Neck" | "Collar" | "V-Neck" | "Mock Neck" | "Mandarin" | "Other",
     "sleeveStyle": "HALF_SLEEVE" | "FULL_SLEEVE" | "SLEEVELESS"
   }
 
-CRITICAL RULES:
-- Separate multi-piece outfits (e.g. separate T-shirt and Jeans into 2 items).
-- TRADITIONAL ENSEMBLE RULE: For Ethnic Wear (Anarkali, Kurti with Dupatta, Salwar Kameez, Lehenga, Saree), keep the matching dress and draped dupatta TOGETHER as ONE complete ensemble (e.g. "Powder Blue Anarkali Suit with Dupatta Set"). DO NOT split or cut away the draped dupatta into a separate narrow strip.
-- Cut cleanly right at sleeve cuff hems to exclude bare wrists and hands.
-- NEVER detect bare skin, human face, or bare neck as a clothing item!
 - Return ONLY a valid raw JSON array of objects without markdown backticks or commentary.
 `;
   }
@@ -391,55 +399,177 @@ CRITICAL RULES:
     return getFallbackAnalysis(metadata);
   }
 
-  // STRICT NON-GARMENT / FACE POST-FILTER
+  // COMPREHENSIVE PROGRAMMATIC VALIDATION & FILTERING ENGINE
   const nonGarmentRegex = /\b(face|chin|beard|hair|human head|human face|bare skin|mannequin stand|dummy stand)\b/i;
-  const filteredList = rawList.filter((item) => {
+
+  // 1. Initial cleanup of non-garments and malformed items
+  let validItems = rawList.filter((item) => {
+    if (!item || !item.name) return false;
     const name = (item.name || '').toLowerCase();
     const sub = (item.subCategory || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
-
-    // Filter out non-garment body parts (except accessories like sunglasses, hats, watches)
-    const isAccessory = cat === 'accessories' || sub === 'sunglasses' || sub === 'watch' || sub === 'belt' || cat === 'footwear';
-    if (!isAccessory && (nonGarmentRegex.test(name) || nonGarmentRegex.test(sub))) {
-      return false;
-    }
-    if (cat === 'other' && !item.attributes?.primaryColor) {
-      return false;
-    }
-
-    // Check minimum dimensions (allow smaller bounds for accessories like sunglasses, watch)
-    if (item.box2d && item.box2d.length === 4) {
-      const [ymin, xmin, ymax, xmax] = item.box2d;
-      const height = ymax - ymin;
-      const width = xmax - xmin;
-      const minDim = isAccessory ? 15 : 30;
-      if (height < minDim || width < minDim) return false;
-
-      // If target user face coordinates are known, ensure garment is horizontally aligned with the target person
-      if (normalizedFaceBoxes.length > 0 && !isAccessory) {
-        const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
-          const faceCenterX = (fXmin + fXmax) / 2;
-          const garmentCenterX = (xmin + xmax) / 2;
-          const faceWidth = fXmax - fXmin;
-          const maxHorizontalOffset = Math.max(120, faceWidth * 1.6);
-          return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
-        });
-        if (!isAlignedWithAnyUser) {
-          console.log(`[aiVision] Discarding garment "${item.name}" as it belongs to another person in the group photo.`);
-          return false;
-        }
-      }
-    }
-
+    if (nonGarmentRegex.test(name) || nonGarmentRegex.test(sub)) return false;
+    if (cat === 'other' && !item.attributes?.primaryColor) return false;
+    if (!Array.isArray(item.box2d) || item.box2d.length !== 4) return false;
+    const [ymin, xmin, ymax, xmax] = item.box2d;
+    if (ymax <= ymin || xmax <= xmin) return false;
     return true;
   });
 
-  if (filteredList.length === 0) {
+  if (validItems.length === 0) {
+    console.log('[aiVision] Valid items resulted in 0 garments. Engaging smart default fallback...');
+    return getFallbackAnalysis(metadata);
+  }
+
+  // 2. Identify if this photo contains Core Clothing (Upper Wear, Lower Wear, Traditional, Dress)
+  const isCoreGarment = (it) => {
+    const c = (it.category || '').toUpperCase();
+    const s = (it.subCategory || '').toLowerCase();
+    const n = (it.name || '').toLowerCase();
+    return (
+      c === 'UPPER_WEAR' ||
+      c === 'LOWER_WEAR' ||
+      c === 'TRADITIONAL' ||
+      c === 'OUTERWEAR' ||
+      c === 'FULL_BODY' ||
+      ['shirt', 't-shirt', 'top', 'polo', 'hoodie', 'jacket', 'blazer', 'jeans', 'pant', 'trousers', 'shorts', 'skirt', 'saree', 'kurta', 'dress', 'gown', 'suit', 'lehenga'].some((k) => s.includes(k) || n.includes(k))
+    );
+  };
+
+  const isFootwearOrAccessory = (it) => {
+    const c = (it.category || '').toUpperCase();
+    const s = (it.subCategory || '').toLowerCase();
+    const n = (it.name || '').toLowerCase();
+    return (
+      c === 'ACCESSORIES' ||
+      c === 'FOOTWEAR' ||
+      ['sunglasses', 'glasses', 'spectacles', 'watch', 'belt', 'cap', 'hat', 'shoes', 'sneakers', 'sandals', 'heels', 'loafers', 'boots', 'jewelry', 'necklace', 'bracelet'].some((k) => s.includes(k) || n.includes(k))
+    );
+  };
+
+  const hasCoreGarments = validItems.some(isCoreGarment);
+
+  // RULE: In a person's outfit / clothing photo, STRICTLY FILTER OUT ACCESSORIES & FOOTWEAR!
+  // Accessories / footwear are only kept if they are standalone product photos (no core clothes present).
+  if (hasCoreGarments) {
+    const beforeCount = validItems.length;
+    validItems = validItems.filter((it) => !isFootwearOrAccessory(it));
+    if (validItems.length < beforeCount) {
+      console.log(`[aiVision] Filtered out ${beforeCount - validItems.length} accessory/footwear item(s) from full outfit photo.`);
+    }
+  }
+
+  // 3. WOMEN'S SAREE & BLOUSE ENSEMBLE CONSOLIDATION
+  // If Saree and separate Blouse/Choli are detected in the same photo, merge them into ONE Saree ensemble!
+  const sareeIdx = validItems.findIndex((it) => {
+    const n = (it.name || '').toLowerCase();
+    const s = (it.subCategory || '').toLowerCase();
+    return n.includes('saree') || s.includes('saree') || n.includes('sari') || s.includes('sari');
+  });
+
+  if (sareeIdx !== -1) {
+    const saree = validItems[sareeIdx];
+    const blouseIndices = [];
+    validItems.forEach((it, idx) => {
+      if (idx === sareeIdx) return;
+      const n = (it.name || '').toLowerCase();
+      const s = (it.subCategory || '').toLowerCase();
+      const isBlouse = n.includes('blouse') || s.includes('blouse') || n.includes('choli') || s.includes('choli');
+      if (isBlouse) {
+        blouseIndices.push(idx);
+      }
+    });
+
+    if (blouseIndices.length > 0) {
+      let [sYmin, sXmin, sYmax, sXmax] = saree.box2d;
+      blouseIndices.forEach((bIdx) => {
+        const [bYmin, bXmin, bYmax, bXmax] = validItems[bIdx].box2d;
+        sYmin = Math.min(sYmin, bYmin);
+        sXmin = Math.min(sXmin, bXmin);
+        sYmax = Math.max(sYmax, bYmax);
+        sXmax = Math.max(sXmax, bXmax);
+      });
+      saree.box2d = [sYmin, sXmin, sYmax, sXmax];
+      saree.category = 'TRADITIONAL';
+      saree.subCategory = 'Saree';
+      if (!saree.name.toLowerCase().includes('ensemble')) {
+        saree.name = `${saree.name} with Blouse Ensemble`;
+      }
+      validItems = validItems.filter((_, idx) => !blouseIndices.includes(idx));
+      console.log(`[aiVision] Consolidated Saree and Blouse into a single unified ensemble.`);
+    }
+  }
+
+  // 4. SEVERELY CUTOFF / HALF-VISIBLE GARMENTS VALIDATION
+  const uppers = validItems.filter((it) => (it.category || '').toUpperCase() === 'UPPER_WEAR');
+  const lowers = validItems.filter((it) => (it.category || '').toUpperCase() === 'LOWER_WEAR');
+  const itemsToDrop = new Set();
+
+  // If there's a prominent full Lower Wear (height > 340) and an Upper Wear that is cut off at the top frame:
+  if (lowers.length > 0) {
+    const maxLowerHeight = Math.max(...lowers.map((it) => it.box2d[2] - it.box2d[0]));
+    uppers.forEach((upper) => {
+      const [uYmin, , uYmax] = upper.box2d;
+      const uHeight = uYmax - uYmin;
+      // Cut off at the top frame (ymin <= 25) AND significantly shorter than the lower wear (< 240)
+      if (uYmin <= 25 && uHeight < 240 && maxLowerHeight > 340) {
+        console.log(`[aiVision] Discarding truncated/half Upper Wear "${upper.name}" (height: ${uHeight}) as Lower Wear is fully visible.`);
+        itemsToDrop.add(upper);
+      }
+    });
+  }
+
+  // If there's a prominent full Upper Wear (height > 380) and a Lower Wear that is cut off at the bottom frame:
+  if (uppers.length > 0) {
+    const maxUpperHeight = Math.max(...uppers.map((it) => it.box2d[2] - it.box2d[0]));
+    lowers.forEach((lower) => {
+      const [, , lYmax] = lower.box2d;
+      const lHeight = lYmax - lower.box2d[0];
+      // Cut off at the bottom frame (ymax >= 975) AND significantly shorter than the upper wear (< 200)
+      if (lYmax >= 975 && lHeight < 200 && maxUpperHeight > 380) {
+        console.log(`[aiVision] Discarding truncated/half Lower Wear "${lower.name}" (height: ${lHeight}) as Upper Wear is fully visible.`);
+        itemsToDrop.add(lower);
+      }
+    });
+  }
+
+  // Filter out any items in itemsToDrop or sliver fragments
+  validItems = validItems.filter((item) => {
+    if (itemsToDrop.has(item)) return false;
+    const [ymin, , ymax] = item.box2d;
+    const height = ymax - ymin;
+    if (validItems.length > 1 && height < 130) {
+      console.log(`[aiVision] Discarding garment fragment "${item.name}" (height ${height} < 130 threshold).`);
+      return false;
+    }
+    return true;
+  });
+
+  // 5. Target User Face Alignment Filter (for group photos)
+  if (normalizedFaceBoxes.length > 0) {
+    validItems = validItems.filter((item) => {
+      const [ymin, xmin, ymax, xmax] = item.box2d;
+      const isAlignedWithAnyUser = normalizedFaceBoxes.some(([fYmin, fXmin, fYmax, fXmax]) => {
+        const faceCenterX = (fXmin + fXmax) / 2;
+        const garmentCenterX = (xmin + xmax) / 2;
+        const faceWidth = fXmax - fXmin;
+        const maxHorizontalOffset = Math.max(120, faceWidth * 1.6);
+        return Math.abs(faceCenterX - garmentCenterX) <= maxHorizontalOffset && ymax >= fYmin;
+      });
+      if (!isAlignedWithAnyUser) {
+        console.log(`[aiVision] Discarding garment "${item.name}" as it belongs to another person in the group photo.`);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  if (validItems.length === 0) {
     console.log('[aiVision] Filtered list resulted in 0 garments. Engaging smart default fallback...');
     return getFallbackAnalysis(metadata);
   }
 
-  return filteredList;
+  return validItems;
 };
 
 /**
@@ -597,23 +727,39 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
     let matchMessage = 'New dress detected! Ready to add to wardrobe.';
     let matchedItem = null;
 
+    const buildMatchedItemSummary = (item, simScore) => {
+      if (!item) return null;
+      const directColor = item.color || item.primaryColor;
+      const attrColor = item.attributes ? (item.attributes.color || item.attributes.primaryColor) : undefined;
+      const directFabric = item.fabric;
+      const attrFabric = item.attributes ? item.attributes.fabric : undefined;
+      const directPattern = item.pattern || item.designPattern;
+      const attrPattern = item.attributes ? (item.attributes.pattern || item.attributes.designPattern) : undefined;
+
+      return {
+        _id: item._id,
+        name: item.name,
+        category: item.category,
+        subCategory: item.subCategory,
+        color: directColor || attrColor || '',
+        fabric: directFabric || attrFabric || '',
+        pattern: directPattern || attrPattern || '',
+        primaryImageUrl: item.images?.find((img) => img.isPrimary)?.url || item.images?.[0]?.url,
+        currentStatus: item.currentStatus,
+        lastWornDate: item.usageStats?.lastWornDate || item.lastWornAt,
+        wearCount: item.usageStats?.wearCount || item.wearCount || 0,
+        similarityScore: Math.round(simScore * 100) / 100,
+      };
+    };
+
     if (highestScore >= 0.72) {
       matchStatus = 'EXACT_MATCH';
       matchMessage = `This dress is already registered in your wardrobe as "${bestMatch.name}".`;
-      matchedItem = {
-        _id: bestMatch._id,
-        name: bestMatch.name,
-        category: bestMatch.category,
-        subCategory: bestMatch.subCategory,
-        primaryImageUrl: bestMatch.images?.find((img) => img.isPrimary)?.url || bestMatch.images?.[0]?.url,
-        currentStatus: bestMatch.currentStatus,
-        lastWornDate: bestMatch.usageStats?.lastWornDate,
-        wearCount: bestMatch.usageStats?.wearCount || 0,
-        similarityScore: Math.round(highestScore * 100) / 100,
-      };
+      matchedItem = buildMatchedItemSummary(bestMatch, highestScore);
     } else if (highestScore >= 0.52) {
       matchStatus = 'AMBIGUOUS_MATCH';
       matchMessage = `We found a similar item in your wardrobe: "${bestMatch.name}". Is this the same item or a new one?`;
+      matchedItem = buildMatchedItemSummary(bestMatch, highestScore);
     }
 
     return {
@@ -626,7 +772,7 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
       box2d: detected.box2d,
       polygon: detected.polygon,
       attributes: detected.attributes,
-      matchType: matchStatus === 'EXACT_MATCH' ? 'EXISTING_ITEM' : 'NEW_ITEM',
+      matchType: matchStatus === 'EXACT_MATCH' ? 'EXISTING_ITEM' : (matchStatus === 'AMBIGUOUS_MATCH' ? 'POTENTIAL_DUPLICATE' : 'NEW_ITEM'),
       matchedItem: matchedItem,
       matchResult: {
         status: matchStatus,

@@ -134,10 +134,14 @@ const analyzePhoto = async (userId, file, options = {}) => {
   // Enrich each detected garment with its own structured autoFilledFields for multi-item selection in UI
   const formattedDetections = matchedDetections.map((item, idx) => {
     const itemAttrs = item.attributes || {};
+    const isExactDuplicate = item.matchResult?.status === 'EXACT_MATCH';
+    const isAmbiguous = item.matchResult?.status === 'AMBIGUOUS_MATCH';
     return {
       ...item,
       detectionIndex: idx,
-      selected: true,
+      selected: !isExactDuplicate, // Exact duplicates auto-deselected by default to prevent duplicate adds
+      isDuplicate: isExactDuplicate,
+      isAmbiguous: isAmbiguous,
       autoFilledFields: {
         name: item.name || '',
         category: item.category || '',
@@ -200,6 +204,10 @@ const analyzePhoto = async (userId, file, options = {}) => {
     autoFilledFields,
     analysis: formattedDetections,
     items: formattedDetections,
+    matchResult: primaryItem.matchResult || null,
+    matchedItem: primaryItem.matchedItem || null,
+    isDuplicate: !!primaryItem.isDuplicate,
+    isAmbiguous: !!primaryItem.isAmbiguous,
   };
 };
 
