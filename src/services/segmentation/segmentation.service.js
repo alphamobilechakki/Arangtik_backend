@@ -128,21 +128,38 @@ class SegmentationService {
     }
 
     try {
-      // 1. Convert input to raw RGBA Buffer using Sharp (safe, fast, normalized)
-      const { data: rawRgba, info } = await sharp(originalBuffer)
+      // 1. Get original image metadata and calculate contextual padding to stabilize aspect ratio
+      const meta = await sharp(originalBuffer).metadata();
+      const { width, height } = meta;
+      const maxDim = Math.max(width, height);
+
+      // Neural segmentation models (U2Net/ISNet) expect square ~1:1 inputs with background margin.
+      // Skewed aspect ratios and border-touching crops cause mask inversion or extreme transparency.
+      const padX = Math.round(Math.max(24, Math.floor((maxDim - width) / 2 + maxDim * 0.08)));
+      const padY = Math.round(Math.max(24, Math.floor((maxDim - height) / 2 + maxDim * 0.08)));
+      const paddedWidth = width + padX * 2;
+      const paddedHeight = height + padY * 2;
+
+      // 2. Pad using edge replication so the neural model has clear background boundary context
+      const { data: paddedRgba } = await sharp(originalBuffer)
+        .extend({
+          top: padY,
+          bottom: padY,
+          left: padX,
+          right: padX,
+          extendWith: 'copy',
+        })
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
 
-      const { width, height } = info;
-
-      // 2. Wrap as image/x-rgba8 Blob with dimensions in MIME parameters
-      const blobInput = new Blob([rawRgba], {
-        type: `image/x-rgba8;width=${width};height=${height}`,
+      // Wrap as image/x-rgba8 Blob with dimensions in MIME parameters (bypasses internal Sharp to avoid GLib conflict)
+      const inputBlob = new Blob([paddedRgba], {
+        type: `image/x-rgba8;width=${paddedWidth};height=${paddedHeight}`,
       });
 
       // 3. Perform AI Segmentation / Background Removal directly to raw RGBA
-      const outputBlob = await removeBackground(blobInput, {
+      const outputBlob = await removeBackground(inputBlob, {
         output: {
           format: 'image/x-rgba8',
           quality: quality,
@@ -151,13 +168,48 @@ class SegmentationService {
 
       const rawOutputBuffer = Buffer.from(await outputBlob.arrayBuffer());
 
-      // 4. Quality Control & Body / Skin Exclusion via Polygon Mask
-      let finalBuffer = rawOutputBuffer;
+      // 4. Crop back the padding using Sharp to restore exact original dimensions and framing
+      const { data: rawBytes } = await sharp(rawOutputBuffer, {
+        raw: { width: paddedWidth, height: paddedHeight, channels: 4 },
+      })
+        .extract({ left: padX, top: padY, width, height })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // 5. Inversion & Opacity Protection: Check corner vs center alpha to prevent inverted/ghosted masks
+      const cornerIdxs = [
+        0, // top-left
+        (width - 1) * 4, // top-right
+        ((height - 1) * width) * 4, // bottom-left
+        ((height - 1) * width + width - 1) * 4, // bottom-right
+      ];
+      const avgCornerAlpha = (rawBytes[cornerIdxs[0] + 3] + rawBytes[cornerIdxs[1] + 3] + rawBytes[cornerIdxs[2] + 3] + rawBytes[cornerIdxs[3] + 3]) / 4;
+      const centerIdx = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
+      const centerAlpha = rawBytes[centerIdx + 3];
+
+      // If corners are opaque while center is hollow/transparent, model inverted foreground & background
+      if (avgCornerAlpha > 180 && centerAlpha < 60) {
+        console.warn('[Segmentation] Inverted mask detected. Inverting alpha channel to recover garment.');
+        for (let i = 0; i < rawBytes.length; i += 4) {
+          rawBytes[i + 3] = 255 - rawBytes[i + 3];
+        }
+      }
+
+      // Boost fabric opacity for solid garment look (prevents faded/washed-out ghosting)
+      for (let i = 0; i < rawBytes.length; i += 4) {
+        const a = rawBytes[i + 3];
+        if (a > 64) {
+          rawBytes[i + 3] = Math.min(255, Math.round(a * 1.15 + 20));
+        }
+      }
+
+      let finalBuffer = rawBytes;
       let transparentPixels = 0;
       let opaquePixels = 0;
       const totalPixels = width * height;
 
-      // If a precise garment boundary polygon is provided AND explicitly requested, composite it
+      // 6. Quality Control & Body / Skin Exclusion via Polygon Mask (if requested)
       if (usePolygonMask && Array.isArray(polygon) && polygon.length >= 3 && sharp) {
         try {
           const points = polygon
@@ -168,21 +220,19 @@ class SegmentationService {
             `<polygon points="${points}" fill="#ffffff" />` +
             `</svg>`
           );
-          // Apply soft feathered blur to avoid razor-sharp polygonal cuts
           const maskPng = await sharp(svgMask)
             .resize(width, height)
             .blur(2.5)
             .png()
             .toBuffer();
 
-          const maskedRaw = await sharp(rawOutputBuffer, {
+          const maskedRaw = await sharp(finalBuffer, {
             raw: { width, height, channels: 4 },
           })
             .composite([{ input: maskPng, blend: 'dest-in' }])
             .raw()
             .toBuffer();
 
-          // Measure remaining opaque pixels after polygon cutout
           let maskedOpaque = 0;
           for (let i = 0; i < maskedRaw.length; i += 4) {
             if (maskedRaw[i + 3] >= 64) maskedOpaque++;
@@ -234,7 +284,7 @@ class SegmentationService {
         };
       }
 
-      // 5. Intelligent Inpainting: Auto-fill notches, holes, and hand occlusion gaps (if enabled)
+      // 7. Intelligent Inpainting: Auto-fill notches, holes, and hand occlusion gaps (if enabled)
       let hasInpaintedBuffer = false;
       if (autoInpaint) {
         try {
@@ -259,7 +309,7 @@ class SegmentationService {
         }
       }
 
-      // 6. Encode clean transparent cutout if not already saved by inpainting
+      // 8. Encode clean transparent cutout if not already saved by inpainting
       if (!hasInpaintedBuffer) {
         if (outputFormat === 'image/png') {
           await sharp(finalBuffer, {
