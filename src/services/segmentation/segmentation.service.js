@@ -80,6 +80,107 @@ class SegmentationService {
   }
 
   /**
+   * Determines if an RGB color falls within the human skin color locus
+   */
+  isSkinPixel(r, g, b) {
+    if (!(r > 50 && g > 30 && b > 15)) return false;
+    if (!(r >= g && g >= b)) return false;
+    if (r - g < 5) return false;
+    const y = 0.299 * r + 0.587 * g + 0.114 * b;
+    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) return true;
+    const sum = r + g + b;
+    if (sum > 0) {
+      const nr = r / sum, ng = g / sum;
+      if (nr > 0.36 && nr < 0.60 && ng > 0.28 && ng < 0.38) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Removes human skin pixels and isolates the primary garment body (Men's wear ghost mannequin mode)
+   */
+  removeSkinAndIsolateGarment(buffer, width, height, garmentColor = '') {
+    const out = Buffer.from(buffer);
+    const skinToneNames = ['nude', 'beige', 'tan', 'camel', 'peach', 'skin', 'flesh'];
+    const isSkinColorFabric = skinToneNames.some((c) => (garmentColor || '').toLowerCase().includes(c));
+
+    // If garment itself is not a skin-colored tone, remove skin pixels
+    if (!isSkinColorFabric) {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          if (out[idx + 3] < 30) continue;
+          const r = out[idx];
+          const g = out[idx + 1];
+          const b = out[idx + 2];
+          // Remove human skin or studio white background gap remnants
+          if (this.isSkinPixel(r, g, b) || (r > 225 && g > 225 && b > 225)) {
+            out[idx + 3] = 0;
+          }
+        }
+      }
+    }
+
+    // Connected Component Analysis: keep only the main garment body (drops floating watch, detached wrist specks, etc.)
+    const totalPixels = width * height;
+    const visited = new Uint8Array(totalPixels);
+    const components = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const pIdx = y * width + x;
+        if (visited[pIdx] || out[pIdx * 4 + 3] < 64) continue;
+
+        const queue = [pIdx];
+        visited[pIdx] = 1;
+        const comp = [];
+        let head = 0;
+
+        while (head < queue.length) {
+          const curr = queue[head++];
+          comp.push(curr);
+          const cy = Math.floor(curr / width);
+          const cx = curr % width;
+          const neighbors = [
+            [cy - 1, cx],
+            [cy + 1, cx],
+            [cy, cx - 1],
+            [cy, cx + 1],
+          ];
+
+          for (const [ny, nx] of neighbors) {
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              const nIdx = ny * width + nx;
+              if (!visited[nIdx] && out[nIdx * 4 + 3] >= 64) {
+                visited[nIdx] = 1;
+                queue.push(nIdx);
+              }
+            }
+          }
+        }
+        components.push(comp);
+      }
+    }
+
+    if (components.length > 0) {
+      components.sort((a, b) => b.length - a.length);
+      const largest = components[0];
+      // Only keep the largest garment component if it represents a significant portion
+      if (largest.length >= totalPixels * 0.08) {
+        const mainMask = new Uint8Array(totalPixels);
+        for (const p of largest) mainMask[p] = 1;
+        for (let i = 0; i < totalPixels; i++) {
+          if (!mainMask[i]) out[i * 4 + 3] = 0;
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Segments a cropped clothing image to remove background and create a transparent cutout.
    * Falls back gracefully to original rectangular crop if segmentation fails or erases the image.
    * 
@@ -95,6 +196,8 @@ class SegmentationService {
       polygon = null,
       usePolygonMask = false,
       autoInpaint = false,
+      excludeSkin = false,
+      garmentColor = '',
     } = options;
 
     let originalBuffer;
@@ -243,6 +346,15 @@ class SegmentationService {
           }
         } catch (polyErr) {
           console.warn('[Segmentation] Polygon mask compositing failed, keeping standard bg removal:', polyErr.message);
+        }
+      }
+
+      // 7. Men's Wear Skin Exclusion (removes bare neck, arms, hands and isolates pure garment)
+      if (excludeSkin) {
+        try {
+          finalBuffer = this.removeSkinAndIsolateGarment(finalBuffer, width, height, garmentColor);
+        } catch (skinErr) {
+          console.warn('[Segmentation] Skin exclusion fallback, keeping segmented cutout:', skinErr.message);
         }
       }
 

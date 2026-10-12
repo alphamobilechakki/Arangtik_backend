@@ -658,6 +658,20 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
             });
           }
 
+          // Identify Ladies vs Menswear (User Rule: Skin exclusion is enabled strictly for men's garments, never for ladies)
+          const isLadiesGarment = (it) => {
+            const g = (it.gender || it.attributes?.gender || '').toUpperCase();
+            if (g === 'WOMEN' || g === 'FEMALE') return true;
+            const s = (it.subCategory || '').toLowerCase();
+            const c = (it.category || '').toUpperCase();
+            const n = (it.name || '').toLowerCase();
+            return ['saree', 'sari', 'blouse', 'lehenga', 'choli', 'salwar', 'anarkali', 'dress', 'gown', 'skirt', 'kurti', 'dupatta'].some(
+              (k) => s.includes(k) || n.includes(k) || c.includes(k)
+            );
+          };
+
+          const shouldExcludeSkin = !isLadiesGarment(item);
+
           // Background Removal: Run neural segmentation by default so dress background is cleanly removed
           const shouldSegment = options.removeBackground !== false && process.env.DISABLE_SEGMENTATION !== 'true';
           if (shouldSegment) {
@@ -666,6 +680,8 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
                 filenamePrefix: `seg-${index}`,
                 polygon: relativePolygon,
                 usePolygonMask: false,
+                excludeSkin: shouldExcludeSkin,
+                garmentColor: item.attributes?.primaryColor || item.color || '',
                 autoInpaint: false,
               });
               if (segResult && segResult.outputUrl) {
