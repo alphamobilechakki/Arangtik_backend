@@ -126,4 +126,63 @@ describe('Dress Duplicate & Ambiguity Detection Engine', () => {
     assert.ok(match.matchResult.confidenceScore < 0.52);
     assert.equal(match.matchedItem, null);
   });
+
+  it('correctly detects an EXACT_MATCH for sparse items (without optional fabric/fit/neckline attributes)', () => {
+    // Real-world scan with minimal attributes: Category, SubCategory, Color, Pattern
+    const sparseDetectedItem = {
+      tempId: 'det_sparse_1',
+      name: 'Navy Blue Shirt',
+      category: 'UPPER_WEAR',
+      subCategory: 'Shirt',
+      croppedImageUrl: '/uploads/crops/crop_navy_shirt_minimal.png',
+      attributes: {
+        primaryColor: 'Navy Blue',
+        pattern: 'Solid',
+      },
+    };
+
+    const matches = aiVisionService.matchAgainstWardrobe([sparseDetectedItem], existingWardrobeItems);
+    assert.equal(matches.length, 1);
+
+    const match = matches[0];
+    assert.equal(match.matchResult.status, 'EXACT_MATCH');
+    assert.ok(match.matchResult.confidenceScore >= 0.72);
+    assert.ok(match.matchedItem);
+    assert.equal(match.matchedItem._id, 'item_101');
+  });
+
+  it('correctly avoids duplicate match when colors are distinct (Red Shirt vs Navy Blue Shirt)', () => {
+    // Red Shirt should NEVER match a Navy Blue Shirt
+    const redShirt = {
+      tempId: 'det_red_1',
+      name: 'Crimson Red Shirt',
+      category: 'UPPER_WEAR',
+      subCategory: 'Shirt',
+      croppedImageUrl: '/uploads/crops/crop_red_shirt.png',
+      attributes: {
+        primaryColor: 'Red',
+        pattern: 'Solid',
+      },
+    };
+
+    const matches = aiVisionService.matchAgainstWardrobe([redShirt], existingWardrobeItems);
+    assert.equal(matches.length, 1);
+
+    const match = matches[0];
+    assert.equal(match.matchResult.status, 'NEW_ITEM');
+    assert.ok(match.matchResult.confidenceScore < 0.52);
+    assert.equal(match.matchedItem, null);
+  });
+
+  it('calculates perceptual dHash and high similarity for matching visual gradients', () => {
+    const hashA = '0000000000000000';
+    const hashB = '0000000000000000';
+    const simExact = aiVisionService.calculateHashSimilarity(hashA, hashB);
+    assert.equal(simExact, 1.0);
+
+    // 1-bit difference
+    const hashC = '0000000000000001';
+    const simNear = aiVisionService.calculateHashSimilarity(hashA, hashC);
+    assert.ok(simNear >= 0.98);
+  });
 });

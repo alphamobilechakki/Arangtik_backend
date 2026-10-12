@@ -37,17 +37,24 @@ const analyzePhoto = async (userId, file, options = {}) => {
     if (defaultW) targetWardrobeId = defaultW._id;
   }
 
-  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  const wardrobeFilter = { userId };
   if (targetWardrobeId) {
     wardrobeFilter.wardrobeId = targetWardrobeId;
   }
 
-  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
+  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari, then full wardrobe)
   if (sourceImageHash) {
-    const existingExactItems = await WardrobeItem.find({
+    let existingExactItems = await WardrobeItem.find({
       ...wardrobeFilter,
       sourceImageHash,
     }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+    if (existingExactItems.length === 0 && targetWardrobeId) {
+      existingExactItems = await WardrobeItem.find({
+        userId,
+        sourceImageHash,
+      }).sort({ sourceImageIndex: 1, createdAt: 1 });
+    }
 
     if (existingExactItems.length > 0) {
       console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
@@ -126,7 +133,10 @@ const analyzePhoto = async (userId, file, options = {}) => {
   const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
   // 3. Fetch existing wardrobe items for THIS specific Almari to check for duplicates/matches
-  const existingItems = await WardrobeItem.find(wardrobeFilter);
+  let existingItems = await WardrobeItem.find(wardrobeFilter);
+  if (existingItems.length === 0 && targetWardrobeId) {
+    existingItems = await WardrobeItem.find({ userId });
+  }
 
   // 4. Perform hybrid matching (Exact match, Ambiguous match, New item)
   const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, existingItems);
@@ -229,19 +239,26 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     if (defaultW) targetWardrobeId = defaultW._id;
   }
 
-  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  const wardrobeFilter = { userId };
   if (targetWardrobeId) {
     wardrobeFilter.wardrobeId = targetWardrobeId;
   }
 
   console.log(`[ClothAnalysis] Scan initiated for user: ${userId}, wardrobe: ${targetWardrobeId}, file: ${file.filename}, hash: ${sourceImageHash ? sourceImageHash.slice(0, 12) : 'null'}`);
 
-  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
+  // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari, then full wardrobe)
   if (sourceImageHash) {
-    const existingExactItems = await WardrobeItem.find({
+    let existingExactItems = await WardrobeItem.find({
       ...wardrobeFilter,
       sourceImageHash,
     }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+    if (existingExactItems.length === 0 && targetWardrobeId) {
+      existingExactItems = await WardrobeItem.find({
+        userId,
+        sourceImageHash,
+      }).sort({ sourceImageIndex: 1, createdAt: 1 });
+    }
 
     if (existingExactItems.length > 0) {
       console.log(`[ClothAnalysis] [DUPLICATE_CHECK] Exact source image match found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing wardrobe item(s).`);
@@ -331,7 +348,10 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   console.log(`[ClothAnalysis] Detected & segmented ${croppedDetections.length} garments for user ${userId}`);
 
   // 4. Duplicate / Similarity matching against target Almari's existing items
-  const existingItems = await WardrobeItem.find(wardrobeFilter);
+  let existingItems = await WardrobeItem.find(wardrobeFilter);
+  if (existingItems.length === 0 && targetWardrobeId) {
+    existingItems = await WardrobeItem.find({ userId });
+  }
   const inFlightItems = [...existingItems];
 
   const processedItems = [];
@@ -466,7 +486,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     }
   }
 
-  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  const wardrobeFilter = { userId };
   if (targetWardrobeId) {
     wardrobeFilter.wardrobeId = targetWardrobeId;
   }
@@ -484,12 +504,19 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     const file = files[idx];
     const sourceImageHash = calculateSourceImageHash(file.path);
 
-    // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari)
+    // LEVEL 1: Exact Source Image Duplicate Check (Scoped to target Almari, then full wardrobe)
     if (sourceImageHash) {
-      const existingExactItems = await WardrobeItem.find({
+      let existingExactItems = await WardrobeItem.find({
         ...wardrobeFilter,
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+      if (existingExactItems.length === 0 && targetWardrobeId) {
+        existingExactItems = await WardrobeItem.find({
+          userId,
+          sourceImageHash,
+        }).sort({ sourceImageIndex: 1, createdAt: 1 });
+      }
 
       if (existingExactItems.length > 0) {
         console.log(`[ClothAnalysis] [bulkAddDressPhotos] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items (skipped duplicate addition).`);
@@ -515,7 +542,10 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
       // 2. Fetch up-to-date closet items for this target Almari to prevent duplicate additions
-      const existingItems = await WardrobeItem.find(wardrobeFilter);
+      let existingItems = await WardrobeItem.find(wardrobeFilter);
+      if (existingItems.length === 0 && targetWardrobeId) {
+        existingItems = await WardrobeItem.find({ userId });
+      }
       const inFlightItems = [...existingItems, ...results.newItemsCreated];
       const matchedDetections = aiVisionService.matchAgainstWardrobe(croppedDetections, inFlightItems);
 
@@ -649,7 +679,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     if (defaultW) targetWardrobeId = defaultW._id;
   }
 
-  const wardrobeFilter = { userId, storeType: 'WARDROBE' };
+  const wardrobeFilter = { userId };
   if (targetWardrobeId) {
     wardrobeFilter.wardrobeId = targetWardrobeId;
   }
@@ -665,12 +695,19 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
     const sourceImageHash = calculateSourceImageHash(file.path);
 
-    // Level 1: Exact Source Image Duplicate Check (Scoped to target Almari)
+    // Level 1: Exact Source Image Duplicate Check (Scoped to target Almari, then full wardrobe)
     if (sourceImageHash) {
-      const existingExactItems = await WardrobeItem.find({
+      let existingExactItems = await WardrobeItem.find({
         ...wardrobeFilter,
         sourceImageHash,
       }).sort({ sourceImageIndex: 1, createdAt: 1 });
+
+      if (existingExactItems.length === 0 && targetWardrobeId) {
+        existingExactItems = await WardrobeItem.find({
+          userId,
+          sourceImageHash,
+        }).sort({ sourceImageIndex: 1, createdAt: 1 });
+      }
 
       if (existingExactItems.length > 0) {
         console.log(`[ClothAnalysis] [GalleryIngest] [DUPLICATE_CHECK] Exact duplicate image found for user: ${userId}, wardrobe: ${targetWardrobeId}, hash: ${sourceImageHash.slice(0, 12)}... Reusing ${existingExactItems.length} existing items (skipped duplicate addition).`);
@@ -738,7 +775,10 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
       // 3. Match against target Almari's existing wardrobe items
-      const existingItems = await WardrobeItem.find(wardrobeFilter);
+      let existingItems = await WardrobeItem.find(wardrobeFilter);
+      if (existingItems.length === 0 && targetWardrobeId) {
+        existingItems = await WardrobeItem.find({ userId });
+      }
       const inFlightItems = [...existingItems];
 
       const imageNewItems = [];

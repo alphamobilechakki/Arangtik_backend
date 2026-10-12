@@ -247,6 +247,55 @@ const addItem = async (userId, itemData, file = null) => {
     }
   }
 
+  // --- AUTOMATIC DUPLICATE DRESS PREVENTION ---
+  // Unless user explicitly specified allowDuplicate or forceAdd:
+  const isForceAdd = itemData.forceAdd === true || itemData.allowDuplicate === true;
+  if (!isForceAdd) {
+    // 1. Exact Source Image Duplicate Check (File Hash)
+    if (sourceImageHash) {
+      const existingExact = await WardrobeItem.findOne({
+        userId,
+        sourceImageHash,
+      });
+      if (existingExact) {
+        console.log(`[wardrobeService.addItem] Exact photo duplicate detected for user ${userId}: "${existingExact.name}". Returning existing item.`);
+        return existingExact;
+      }
+    }
+
+    // 2. AI Vision / Attribute Duplicate Match against user's existing wardrobe
+    const existingCandidates = await WardrobeItem.find({
+      userId,
+      category,
+    });
+
+    if (existingCandidates.length > 0) {
+      const aiVisionService = require('../clothAnalysis/aiVision.service');
+      const itemToMatch = {
+        name,
+        category,
+        subCategory,
+        color,
+        pattern,
+        fabric,
+        fit,
+        neckline,
+        attributes,
+      };
+
+      const matchResults = aiVisionService.matchAgainstWardrobe([itemToMatch], existingCandidates);
+      if (matchResults.length > 0 && matchResults[0].matchResult?.status === 'EXACT_MATCH') {
+        const matchedItemDoc = existingCandidates.find(
+          (cand) => String(cand._id) === String(matchResults[0].matchedItem?._id)
+        );
+        if (matchedItemDoc) {
+          console.log(`[wardrobeService.addItem] Exact wardrobe duplicate detected for user ${userId}: "${matchedItemDoc.name}" (${matchResults[0].matchResult.confidenceScore * 100}% match). Returning existing item.`);
+          return matchedItemDoc;
+        }
+      }
+    }
+  }
+
   const newItem = await WardrobeItem.create({
     userId,
     wardrobeId: finalWardrobeId || null,

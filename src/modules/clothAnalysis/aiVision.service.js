@@ -92,95 +92,182 @@ const areColorsSimilar = (c1, c2) => {
 };
 
 /**
+ * Fast Perceptual Difference Hash (dHash) using Sharp
+ * Generates 64-bit fingerprint of luminance gradients across 8x8 grid.
+ */
+const calculatePerceptualHash = async (imagePathOrBuffer) => {
+  if (!imagePathOrBuffer) return null;
+  try {
+    const rawPixels = await sharp(imagePathOrBuffer)
+      .resize(9, 8, { fit: 'fill' })
+      .grayscale()
+      .raw()
+      .toBuffer();
+
+    let hash = '';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const left = rawPixels[row * 9 + col];
+        const right = rawPixels[row * 9 + col + 1];
+        hash += left > right ? '1' : '0';
+      }
+    }
+    return BigInt('0b' + hash).toString(16).padStart(16, '0');
+  } catch (err) {
+    return null;
+  }
+};
+
+/**
+ * Calculates similarity (0.0 to 1.0) between two 64-bit dHashes using Hamming distance
+ */
+const calculateHashSimilarity = (hash1, hash2) => {
+  if (!hash1 || !hash2) return 0;
+  try {
+    const b1 = BigInt('0x' + hash1);
+    const b2 = BigInt('0x' + hash2);
+    let xor = b1 ^ b2;
+    let dist = 0;
+    while (xor > 0n) {
+      if (xor & 1n) dist++;
+      xor >>= 1n;
+    }
+    return Math.max(0, 1 - dist / 64);
+  } catch (e) {
+    return 0;
+  }
+};
+
+/**
  * Multi-Dimensional Similarity Engine between analyzed item and existing wardrobe item
+ * Incorporates dynamic normalized weighting, color-family constraints, and perceptual visual cues.
  */
 const calculateItemSimilarity = (detectedItem, existingItem) => {
+  if (!detectedItem || !existingItem) return 0;
+
+  // 1. Broad Category Compatibility Check
+  const detCat = (detectedItem.category || '').toUpperCase();
+  const existCat = (existingItem.category || '').toUpperCase();
+
+  const isCatExact = detCat && existCat && detCat === existCat;
+  const isCatRelated =
+    (detCat === 'TRADITIONAL' && existCat === 'UPPER_WEAR') ||
+    (detCat === 'UPPER_WEAR' && existCat === 'TRADITIONAL') ||
+    (detCat === 'ONE_PIECE' && (existCat === 'DRESS' || existCat === 'TRADITIONAL')) ||
+    (existCat === 'ONE_PIECE' && (detCat === 'DRESS' || detCat === 'TRADITIONAL'));
+
+  // Incompatible categories (e.g. UPPER_WEAR vs LOWER_WEAR, FOOTWEAR vs UPPER_WEAR) can never match
+  if (detCat && existCat && !isCatExact && !isCatRelated) {
+    return 0;
+  }
+
   let score = 0;
   let weightTotal = 0;
 
-  // 1. Broad Category Match (Weight: 15)
-  weightTotal += 15;
-  if (detectedItem.category === existingItem.category) {
+  // Base Category Weight: 20
+  weightTotal += 20;
+  if (isCatExact) {
+    score += 20;
+  } else if (isCatRelated) {
     score += 15;
-  } else if (
-    (detectedItem.category === 'TRADITIONAL' && existingItem.category === 'UPPER_WEAR') ||
-    (detectedItem.category === 'UPPER_WEAR' && existingItem.category === 'TRADITIONAL')
-  ) {
-    score += 10;
   }
 
-  // 2. Specific Sub-Category Match (Weight: 15)
-  weightTotal += 15;
-  const detSub = (detectedItem.subCategory || '').toLowerCase();
-  const existSub = (existingItem.subCategory || '').toLowerCase();
+  // 2. Sub-Category Match (Weight: 25)
+  const detSub = (detectedItem.subCategory || '').trim().toLowerCase();
+  const existSub = (existingItem.subCategory || '').trim().toLowerCase();
+
   if (detSub && existSub) {
+    weightTotal += 25;
     if (detSub === existSub) {
-      score += 15;
+      score += 25;
+    } else if (
+      (detSub === 'shirt' && existSub === 't-shirt') ||
+      (detSub === 't-shirt' && existSub === 'shirt') ||
+      (detSub === 'polo' && existSub === 't-shirt') ||
+      (detSub === 't-shirt' && existSub === 'polo')
+    ) {
+      // Related top garments but distinct styles: give partial score
+      score += 8;
     } else if (detSub.includes(existSub) || existSub.includes(detSub)) {
-      score += 12;
+      score += 18;
     }
   }
 
-  // 3. Color & Theme Match (Weight: 25)
-  weightTotal += 25;
-  const detColor = (getAttr(detectedItem, 'primaryColor') || '').toLowerCase();
-  const existColor = (getAttr(existingItem, 'primaryColor') || '').toLowerCase();
+  // 3. Color & Theme Match (Weight: 35)
+  const detColor = (getAttr(detectedItem, 'primaryColor') || '').trim().toLowerCase();
+  const existColor = (getAttr(existingItem, 'primaryColor') || '').trim().toLowerCase();
+  let colorConflict = false;
 
   if (detColor && existColor) {
+    weightTotal += 35;
     if (detColor === existColor) {
-      score += 25;
+      score += 35;
     } else if (areColorsSimilar(detColor, existColor)) {
-      score += 20;
+      score += 28;
+    } else {
+      // Confirmed distinct color families (e.g. Red vs Blue, Green vs Black)
+      colorConflict = true;
     }
   }
 
-  // 4. Design Pattern & Embellishments / Work Match (Weight: 15)
-  weightTotal += 15;
-  const detPattern = (getAttr(detectedItem, 'designPattern') || getAttr(detectedItem, 'pattern') || '').toLowerCase();
-  const existPattern = (getAttr(existingItem, 'designPattern') || getAttr(existingItem, 'pattern') || '').toLowerCase();
+  // 4. Design Pattern & Work Match (Weight: 20)
+  const detPattern = (getAttr(detectedItem, 'designPattern') || getAttr(detectedItem, 'pattern') || '').trim().toLowerCase();
+  const existPattern = (getAttr(existingItem, 'designPattern') || getAttr(existingItem, 'pattern') || '').trim().toLowerCase();
+
   if (detPattern && existPattern) {
+    weightTotal += 20;
     if (detPattern === existPattern) {
-      score += 15;
+      score += 20;
     } else if (
       (detPattern.includes('embellish') && existPattern.includes('sequin')) ||
       (detPattern.includes('sequin') && existPattern.includes('embellish')) ||
       (detPattern.includes('zari') && existPattern.includes('embroider')) ||
       (detPattern.includes('embroider') && existPattern.includes('zari'))
     ) {
-      score += 11;
+      score += 15;
     }
   }
 
-  // 5. Fabric & Texture Match (Weight: 15)
-  weightTotal += 15;
-  const detFabric = (getAttr(detectedItem, 'fabric') || '').toLowerCase();
-  const existFabric = (getAttr(existingItem, 'fabric') || '').toLowerCase();
-  if (detFabric && existFabric && (detFabric === existFabric || detFabric.includes(existFabric) || existFabric.includes(detFabric))) {
-    score += 10;
-  }
-  const detTex = (getAttr(detectedItem, 'fabricTexture') || '').toLowerCase();
-  const existTex = (getAttr(existingItem, 'fabricTexture') || '').toLowerCase();
-  if (detTex && existTex && detTex === existTex) {
-    score += 5;
+  // 5. Fabric & Texture Match (Weight: 10 - Evaluated only when specified in both items)
+  const detFabric = (getAttr(detectedItem, 'fabric') || '').trim().toLowerCase();
+  const existFabric = (getAttr(existingItem, 'fabric') || '').trim().toLowerCase();
+  if (detFabric && existFabric) {
+    weightTotal += 10;
+    if (detFabric === existFabric || detFabric.includes(existFabric) || existFabric.includes(detFabric)) {
+      score += 10;
+    }
   }
 
-  // 6. Silhouette & Fit Match (Weight: 10)
-  weightTotal += 10;
-  const detSil = (getAttr(detectedItem, 'silhouette') || getAttr(detectedItem, 'fit') || '').toLowerCase();
-  const existSil = (getAttr(existingItem, 'silhouette') || getAttr(existingItem, 'fit') || '').toLowerCase();
-  if (detSil && existSil && (detSil === existSil || detSil.includes(existSil) || existSil.includes(detSil))) {
-    score += 10;
+  // 6. Silhouette & Fit Match (Weight: 10 - Evaluated only when specified in both items)
+  const detSil = (getAttr(detectedItem, 'silhouette') || getAttr(detectedItem, 'fit') || '').trim().toLowerCase();
+  const existSil = (getAttr(existingItem, 'silhouette') || getAttr(existingItem, 'fit') || '').trim().toLowerCase();
+  if (detSil && existSil) {
+    weightTotal += 10;
+    if (detSil === existSil || detSil.includes(existSil) || existSil.includes(detSil)) {
+      score += 10;
+    }
   }
 
-  // 7. Neckline & Sleeve Style (Weight: 5)
-  weightTotal += 5;
-  const detNeck = (getAttr(detectedItem, 'neckline') || '').toLowerCase();
-  const existNeck = (getAttr(existingItem, 'neckline') || '').toLowerCase();
-  if (detNeck && existNeck && detNeck === existNeck) {
-    score += 5;
+  // 7. Neckline Style (Weight: 5 - Evaluated only when specified in both items)
+  const detNeck = (getAttr(detectedItem, 'neckline') || '').trim().toLowerCase();
+  const existNeck = (getAttr(existingItem, 'neckline') || '').trim().toLowerCase();
+  if (detNeck && existNeck) {
+    weightTotal += 5;
+    if (detNeck === existNeck) {
+      score += 5;
+    }
   }
 
-  return Math.min(1, score / weightTotal);
+  if (weightTotal === 0) return 0;
+
+  let calculatedScore = Math.min(1, score / weightTotal);
+
+  // If two garments have explicitly different, non-matching colors, they can never be the same dress
+  if (colorConflict) {
+    calculatedScore = Math.min(calculatedScore, 0.40);
+  }
+
+  return calculatedScore;
 };
 
 /**
@@ -733,7 +820,7 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
 
     for (const existing of existingWardrobeItems) {
       const score = calculateItemSimilarity(detected, existing);
-      if (score >= 0.65) {
+      if (score >= 0.50) {
         candidates.push({
           _id: existing._id,
           name: existing.name,
@@ -823,4 +910,6 @@ module.exports = {
   cropDetectedItems,
   matchAgainstWardrobe,
   calculateItemSimilarity,
+  calculatePerceptualHash,
+  calculateHashSimilarity,
 };
