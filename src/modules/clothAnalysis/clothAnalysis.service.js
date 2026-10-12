@@ -123,7 +123,7 @@ const analyzePhoto = async (userId, file, options = {}) => {
   const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
 
   // 2. Crop detected clothing pieces from the original image
-  const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+  const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
   // 3. Fetch existing wardrobe items for THIS specific Almari to check for duplicates/matches
   const existingItems = await WardrobeItem.find(wardrobeFilter);
@@ -327,7 +327,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
   const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
 
   // 3. Sharp Crop + Segmentation (ISNet/U2Net via @imgly/background-removal-node -> transparent WebP)
-  const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+  const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
   console.log(`[ClothAnalysis] Detected & segmented ${croppedDetections.length} garments for user ${userId}`);
 
   // 4. Duplicate / Similarity matching against target Almari's existing items
@@ -512,7 +512,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
     try {
       // 1. Detect garments in this photo (standalone clothing item or flat lay)
       const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path);
-      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
       // 2. Fetch up-to-date closet items for this target Almari to prevent duplicate additions
       const existingItems = await WardrobeItem.find(wardrobeFilter);
@@ -735,7 +735,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
       // 2. Vision AI: Extract clothing items specifically for the matched user in this photo
       const userFaceBoxes = (scanResult.matchedFaces || []).map((f) => f.boundingBox);
       const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
-      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections);
+      const croppedDetections = await aiVisionService.cropDetectedItems(file.path, rawDetections, options);
 
       // 3. Match against target Almari's existing wardrobe items
       const existingItems = await WardrobeItem.find(wardrobeFilter);
