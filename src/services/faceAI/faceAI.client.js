@@ -67,16 +67,58 @@ class FaceAIClient {
   async imageToTensor(input) {
     let pipeline;
     if (typeof input === 'string') {
-      let resolvedPath = input;
-      if (!path.isAbsolute(resolvedPath)) {
-        resolvedPath = path.join(__dirname, '../../../', resolvedPath);
+      let resolvedPath = input.trim();
+
+      // Handle remote HTTP/HTTPS URLs (e.g. from production domain or CDN)
+      if (/^https?:\/\//i.test(resolvedPath)) {
+        // 1. Try resolving locally from uploads directory by filename
+        const filename = path.basename(resolvedPath.split('?')[0]);
+        const localUploadsPath = path.resolve(__dirname, '../../../uploads', filename);
+        if (fs.existsSync(localUploadsPath)) {
+          pipeline = sharp(localUploadsPath);
+        } else {
+          // 2. Fetch remote URL buffer via HTTP
+          try {
+            const response = await fetch(resolvedPath);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            pipeline = sharp(Buffer.from(arrayBuffer));
+          } catch (netErr) {
+            throw new ApiError(400, `Image file could not be retrieved from URL: ${resolvedPath} (${netErr.message})`, [
+              { code: ERROR_CODES.INVALID_IMAGE, message: `Failed to download image from URL: ${netErr.message}` },
+            ]);
+          }
+        }
+      } else {
+        if (!path.isAbsolute(resolvedPath)) {
+          // If relative path mentions uploads, check directly in uploads folder
+          if (resolvedPath.includes('uploads')) {
+            const filename = path.basename(resolvedPath.split('?')[0]);
+            const candidate = path.resolve(__dirname, '../../../uploads', filename);
+            if (fs.existsSync(candidate)) {
+              resolvedPath = candidate;
+            }
+          }
+          if (!path.isAbsolute(resolvedPath)) {
+            resolvedPath = path.join(__dirname, '../../../', resolvedPath);
+          }
+        }
+        if (!fs.existsSync(resolvedPath)) {
+          // Fallback to checking uploads directory by filename
+          const filename = path.basename(input.split('?')[0]);
+          const candidate = path.resolve(__dirname, '../../../uploads', filename);
+          if (fs.existsSync(candidate)) {
+            resolvedPath = candidate;
+          } else {
+            throw new ApiError(400, `Image file not found at path: ${input}`, [
+              { code: ERROR_CODES.INVALID_IMAGE, message: 'Image file does not exist on disk' },
+            ]);
+          }
+        }
+        pipeline = sharp(resolvedPath);
       }
-      if (!fs.existsSync(resolvedPath)) {
-        throw new ApiError(400, `Image file not found at path: ${input}`, [
-          { code: ERROR_CODES.INVALID_IMAGE, message: 'Image file does not exist on disk' },
-        ]);
-      }
-      pipeline = sharp(resolvedPath);
     } else if (Buffer.isBuffer(input)) {
       pipeline = sharp(input);
     } else {

@@ -17,17 +17,41 @@ class FaceRecognitionService {
    */
   resolveImagePath(imagePath) {
     if (!imagePath) return '';
-    let cleaned = imagePath.replace(/^[\\/]+/, '');
-    // If it starts with uploads/, resolve from backend root
+    const trimmed = imagePath.trim();
+
+    // If it's a URL (http:// or https://)
+    if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        const urlObj = new URL(trimmed);
+        const filename = path.basename(urlObj.pathname);
+        const uploadsPath = path.resolve(__dirname, '../../../uploads', filename);
+        if (fs.existsSync(uploadsPath)) {
+          return uploadsPath;
+        }
+      } catch (e) {
+        // Fallback below
+      }
+      // Return HTTP URL as is so network fetchers can retrieve it (NEVER prepend local root)
+      return trimmed;
+    }
+
+    let cleaned = trimmed.replace(/^[\\/]+/, '');
+    if (cleaned.startsWith('api/uploads/')) {
+      cleaned = cleaned.replace(/^api\/uploads\//, 'uploads/');
+    }
+
     const absolutePath = path.resolve(__dirname, '../../../', cleaned);
     if (fs.existsSync(absolutePath)) {
       return absolutePath;
     }
-    // Also try checking directly in uploads directory
-    const uploadsPath = path.resolve(__dirname, '../../../uploads', path.basename(imagePath));
+
+    // Try checking directly in uploads directory
+    const filename = path.basename(trimmed.split('?')[0]);
+    const uploadsPath = path.resolve(__dirname, '../../../uploads', filename);
     if (fs.existsSync(uploadsPath)) {
       return uploadsPath;
     }
+
     return absolutePath;
   }
 
@@ -188,25 +212,32 @@ class FaceRecognitionService {
       // If reference embedding doesn't exist yet, try to auto-generate if profileImage exists
       if (!referenceEmbedding || referenceEmbedding.length !== 128) {
         if (!user.profileImage) {
-          throw new ApiError(400, 'Profile image or Wardrobe face photo is required for face recognition. Please upload a photo first.', [
+          throw new ApiError(400, 'Profile image or Wardrobe face photo is required for face recognition. Please upload a clear photo first.', [
             { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: 'Reference face embedding not found and no reference image is available' },
           ]);
         }
 
         console.log(`[FaceRecognition] Reference embedding missing for user ${userId}. Auto-generating from profileImage...`);
-        const resolvedProfilePath = this.resolveImagePath(user.profileImage);
-        const face = await faceAIService.extractReferenceFace(resolvedProfilePath);
+        try {
+          const resolvedProfilePath = this.resolveImagePath(user.profileImage);
+          const face = await faceAIService.extractReferenceFace(resolvedProfilePath);
 
-        user.referenceFace = {
-          embedding: face.embedding,
-          boundingBox: face.boundingBox,
-          detectionConfidence: face.confidence,
-          lastGeneratedAt: new Date(),
-          imagePath: user.profileImage,
-        };
+          user.referenceFace = {
+            embedding: face.embedding,
+            boundingBox: face.boundingBox,
+            detectionConfidence: face.confidence,
+            lastGeneratedAt: new Date(),
+            imagePath: user.profileImage,
+          };
 
-        await user.save();
-        referenceEmbedding = face.embedding;
+          await user.save();
+          referenceEmbedding = face.embedding;
+        } catch (genErr) {
+          console.warn(`[FaceRecognition] Could not auto-generate reference embedding from profileImage:`, genErr.message);
+          throw new ApiError(400, `Could not detect reference face from profile image: ${genErr.message}. Please upload a clear profile photo with your face visible, or register face at /api/face/register`, [
+            { code: ERROR_CODES.PROFILE_IMAGE_NOT_FOUND, message: genErr.message },
+          ]);
+        }
       }
     }
 
