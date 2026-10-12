@@ -658,9 +658,8 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
             });
           }
 
-          // Background Removal: Run neural segmentation if explicitly requested or auto-segmentation enabled
-          // By default, ultra-fast Sharp WebP cropping executes in ~15ms instead of ~3500ms ONNX CPU latency.
-          const shouldSegment = options.removeBackground === true || (process.env.AUTO_SEGMENTATION === 'true');
+          // Background Removal: Run neural segmentation by default so dress background is cleanly removed
+          const shouldSegment = options.removeBackground !== false && process.env.DISABLE_SEGMENTATION !== 'true';
           if (shouldSegment) {
             try {
               const segResult = await segmentationService.segmentClothing(cropFilePath, {
