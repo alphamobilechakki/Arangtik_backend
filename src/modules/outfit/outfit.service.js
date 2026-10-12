@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const WardrobeItem = require('../wardrobe/wardrobeItem.model');
 const Wardrobe = require('../wardrobe/wardrobe.model');
 const Outfit = require('./outfit.model');
+const User = require('../auth/user.model');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GEMINI_API_KEY } = require('../../config/env.config');
 const ApiError = require('../../utils/apiError');
@@ -361,7 +362,7 @@ const buildOutfitObject = ({ archetype, primaryItems, outerwear, footwear, acces
  * Intelligent Personal Fashion Stylist powered by Google Gemini AI
  * Evaluates real clothes, occasion nuances, textures, silhouettes, and aesthetic trends dynamically without hardcoding.
  */
-const generateOutfitsWithGemini = async (items, occasion, season, limit = 5, globalMissingSlots = []) => {
+const generateOutfitsWithGemini = async (items, occasion, season, limit = 5, globalMissingSlots = [], userGender = 'UNSPECIFIED') => {
   if (!GEMINI_API_KEY || !items || items.length === 0) return null;
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -379,8 +380,16 @@ const generateOutfitsWithGemini = async (items, occasion, season, limit = 5, glo
     occasion: it.occasion || it.attributes?.occasions || [],
   }));
 
+  const clientVibe =
+    userGender === 'MALE'
+      ? 'The client profile is MALE (Gentleman). Focus on sharp, tailored, flattering menswear silhouettes (shirts, t-shirts, polo, blazers, trousers, jeans, sneakers, loafers).'
+      : userGender === 'FEMALE'
+      ? 'The client profile is FEMALE (Lady). Focus on chic, elegant, flattering womenswear aesthetics (tops, kurti, sarees, dresses, skirts, jeans, trousers, elegant footwear).'
+      : 'Focus on versatile, modern, high-aesthetic styling combinations.';
+
   const prompt = `You are an elite, world-class Celebrity Fashion Stylist & Color Theory Expert for the Arangtik Digital Wardrobe Mobile App.
 The user wants elevated outfit recommendations for occasion: "${occasion.toUpperCase()}"${season ? ` and season: "${season.toUpperCase()}"` : ''}.
+${clientVibe}
 
 Here is the user's REAL wardrobe inventory (DO NOT INVENT ANY ITEMS OUTSIDE THIS LIST):
 ${JSON.stringify(inventory, null, 2)}
@@ -554,6 +563,48 @@ const suggestOutfits = async (userId, options = {}) => {
     };
   }
 
+  // STEP 2.5: User Profile Gender Filter & Personalization
+  let userGender = (options.gender || '').toUpperCase();
+  if (!userGender || userGender === 'UNSPECIFIED') {
+    try {
+      const userDoc = await User.findById(userId).select('gender name').lean();
+      if (userDoc?.gender) {
+        userGender = userDoc.gender.toUpperCase();
+      }
+    } catch (e) {
+      // Ignore user lookup error
+    }
+  }
+
+  let stylingItems = items;
+  if (userGender === 'MALE') {
+    const femaleOnlyCategories = ['SAREE', 'LEHENGA', 'SKIRT', 'BLOUSE', 'BRA', 'BIKINI', 'HEELS', 'GOWN'];
+    const isFemalePiece = (it) => {
+      const sub = (it.subCategory || '').toUpperCase();
+      const cat = (it.category || '').toUpperCase();
+      const g = (it.gender || it.attributes?.gender || '').toUpperCase();
+      if (['WOMEN', 'FEMALE', 'GIRLS'].includes(g)) return true;
+      return femaleOnlyCategories.some((f) => sub.includes(f) || cat.includes(f));
+    };
+    const maleItems = items.filter((it) => !isFemalePiece(it));
+    if (maleItems.length >= 2) {
+      stylingItems = maleItems;
+    }
+  } else if (userGender === 'FEMALE') {
+    const maleOnlyCategories = ['SHERWANI', 'DHOTI', 'BOXER', 'TIE'];
+    const isMalePiece = (it) => {
+      const sub = (it.subCategory || '').toUpperCase();
+      const cat = (it.category || '').toUpperCase();
+      const g = (it.gender || it.attributes?.gender || '').toUpperCase();
+      if (['MEN', 'MALE', 'BOYS'].includes(g)) return true;
+      return maleOnlyCategories.some((m) => sub.includes(m) || cat.includes(m));
+    };
+    const femaleItems = items.filter((it) => !isMalePiece(it));
+    if (femaleItems.length >= 2) {
+      stylingItems = femaleItems;
+    }
+  }
+
   // STEP 3: Segregate items into slots
   const slots = {
     tops: [],
@@ -564,7 +615,7 @@ const suggestOutfits = async (userId, options = {}) => {
     accessories: [],
   };
 
-  for (const item of items) {
+  for (const item of stylingItems) {
     const slot = classifySlot(item);
     if (slot === SLOT_TYPES.TOP) slots.tops.push(item);
     else if (slot === SLOT_TYPES.BOTTOM) slots.bottoms.push(item);
@@ -584,12 +635,13 @@ const suggestOutfits = async (userId, options = {}) => {
   // STEP 4: PRIMARY ENGINE — Gemini AI Fashion Stylist
   if (GEMINI_API_KEY) {
     try {
-      const aiOutfits = await generateOutfitsWithGemini(items, occasion, season, limit, globalMissingSlots);
+      const aiOutfits = await generateOutfitsWithGemini(stylingItems, occasion, season, limit, globalMissingSlots, userGender);
       if (Array.isArray(aiOutfits) && aiOutfits.length > 0) {
         return {
           success: true,
           count: aiOutfits.length,
           availableItemsCount: items.length,
+          clientGender: userGender,
           wardrobeId: selectedWardrobeIds.length === 1 ? selectedWardrobeIds[0] : (selectedWardrobeIds.length > 1 ? selectedWardrobeIds : 'all'),
           selectedWardrobeIds: selectedWardrobeIds.length > 0 ? selectedWardrobeIds : ['all'],
           selectedWardrobesCount: selectedWardrobeIds.length,
