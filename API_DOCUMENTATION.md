@@ -717,7 +717,9 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 5.3 POST /api/wardrobe/generate-3d/:id — 3D Garment Model Generation
+## SERIES 6: 3D Garment Model Generation (`/api/wardrobe`)
+
+### 6.1 POST /api/wardrobe/generate-3d/:id — 3D Model Generation (Hugging Face TripoSR)
 - **Description:** Triggers background 3D mesh model reconstruction (`.obj` / `.glb`) for a segmented garment using TripoSR.
 - **Method:** `POST`
 - **Endpoint:** `/api/wardrobe/generate-3d/:id` *(Alias: `/items/:id/generate-3d`)*
@@ -743,9 +745,9 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-## SERIES 6: Wardrobe Items Catalog & Management (`/api/wardrobe`)
+## SERIES 7: Wardrobe Items Catalog & Management (`/api/wardrobe`)
 
-### 6.1 GET /api/wardrobe/get-items — Get All Clothes (Filter, Search & Paginate)
+### 7.1 GET /api/wardrobe/get-items — Get All Clothes (Filter, Search & Paginate)
 - **Description:** Retrieves all clothes in wardrobe with search keyword queries, pagination, and multi-attribute filters.
 - **Method:** `GET`
 - **Endpoint:** `/api/wardrobe/get-items` *(Aliases: `/get-all-items`, `/items`)*
@@ -795,7 +797,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 6.2 GET /api/wardrobe/get-item/:id — Get Item Details by ID
+### 7.2 GET /api/wardrobe/get-item/:id — Get Item Details by ID
 - **Description:** Fetches full attributes, dimensions, tags, and images of a specific clothing item.
 - **Method:** `GET`
 - **Endpoint:** `/api/wardrobe/get-item/:id` *(Aliases: `/get-item-details/:id`, `/items/:id`)*
@@ -823,7 +825,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 6.3 PATCH /api/wardrobe/edit-item/:id — Edit Item Attributes
+### 7.3 PATCH /api/wardrobe/edit-item/:id — Edit Item Attributes
 - **Description:** Modifies existing garment attributes (name, color, fabric, fit, tags, favorite state).
 - **Method:** `PATCH`
 - **Endpoint:** `/api/wardrobe/edit-item/:id` *(Aliases: `/update-item/:id`, `/items/:id`)*
@@ -855,7 +857,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 6.4 DELETE /api/wardrobe/delete-item/:id — Delete Item from Wardrobe
+### 7.4 DELETE /api/wardrobe/delete-item/:id — Delete Item from Wardrobe
 - **Description:** Permanently removes a clothing item from the wardrobe store.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/wardrobe/delete-item/:id` *(Alias: `/items/:id`)*
@@ -876,9 +878,9 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-## SERIES 7: Smart Outfit Suggestion & Stylist (`/api/outfit`)
+## SERIES 8: Smart Outfit Suggestion & Stylist (`/api/outfit`)
 
-### 7.1 POST /api/outfit/suggest — Generate Occasion-Based Outfits
+### 8.1 POST /api/outfit/suggest — Generate Occasion-Based Outfits
 - **Description:** Analyzes garments strictly available in the user's selected wardrobe (or across All Wardrobes) and generates multiple coordinated, color-harmonized outfit combinations.
   - **Zero Hallucination Guarantee:** Never invents or assumes missing items. If user has no shoes, outfits are suggested without shoes and `missingSlots: ["footwear"]` is reported transparently.
   - **Fashion Compatibility Engine:** Evaluates color harmony (Neutrals, Complementary, Monochromatic), contrast, pattern balance (solid + print), and occasion appropriateness.
@@ -958,7 +960,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 7.2 POST /api/outfit/save — Save Favorite Outfit
+### 8.2 POST /api/outfit/save — Save Favorite Outfit
 - **Description:** Saves a generated outfit combination to the user's permanent closet collection.
 - **Method:** `POST`
 - **Endpoint:** `/api/outfit/save`
@@ -1016,7 +1018,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 7.3 GET /api/outfit/saved — List Saved Closet Outfits
+### 8.3 GET /api/outfit/saved — List Saved Closet Outfits
 - **Description:** Returns all bookmarked outfits saved by the user with populated wardrobe items.
 - **Method:** `GET`
 - **Endpoint:** `/api/outfit/saved`
@@ -1058,7 +1060,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 7.4 DELETE /api/outfit/saved/:id — Delete Saved Outfit
+### 8.4 DELETE /api/outfit/saved/:id — Delete Saved Outfit
 - **Description:** Deletes a saved outfit combination by its ID.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/outfit/saved/:id`
@@ -1079,9 +1081,9 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-## SERIES 8: Media Upload & Static Storage (`/api/upload`)
+## SERIES 9: Media Upload & Static Storage (`/api/upload`)
 
-### 8.1 POST /api/upload/single — Upload Single Image (Multipart / Base64)
+### 9.1 POST /api/upload/single — Upload Single Image (Multipart / Base64)
 - **Description:** Stores an image file or Base64 string to `/uploads` with a unique short ID.
 - **Method:** `POST`
 - **Endpoint:** `/api/upload/single`
@@ -1106,7 +1108,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 8.2 POST /api/upload/multiple — Upload Multiple Images (Up to 20)
+### 9.2 POST /api/upload/multiple — Upload Multiple Images (Up to 20)
 - **Description:** Uploads up to 20 images simultaneously in batch.
 - **Method:** `POST`
 - **Endpoint:** `/api/upload/multiple`
@@ -1130,7 +1132,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 8.3 DELETE /api/upload/:filename — Delete Stored Image
+### 9.3 DELETE /api/upload/:filename — Delete Stored Image
 - **Description:** Deletes a media file from local storage.
 - **Method:** `DELETE`
 - **Endpoint:** `/api/upload/:filename`
@@ -1148,11 +1150,11 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-## SERIES 9: External Integration & Admin Sync (`/api/integration`)
+## SERIES 10: External Integration & Admin Sync (`/api/integration`)
 
 > 🔒 **Security Notice:** All integration endpoints require `x-api-key: <ADMIN_SYNC_API_KEY>` header.
 
-### 9.1 GET /api/integration/stats — System Inventory & Biometric Analytics
+### 10.1 GET /api/integration/stats — System Inventory & Biometric Analytics
 - **Description:** Returns aggregate telemetry metrics on registered users, wardrobes, items, and biometrics.
 - **Method:** `GET`
 - **Endpoint:** `/api/integration/stats`
@@ -1176,7 +1178,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 9.2 GET /api/integration/users — Synchronize System Users
+### 10.2 GET /api/integration/users — Synchronize System Users
 - **Description:** Returns list of registered users for external admin sync.
 - **Method:** `GET`
 - **Endpoint:** `/api/integration/users`
@@ -1203,7 +1205,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-### 9.3 GET /api/integration/users/:identifier — Get Detailed User Record
+### 10.3 GET /api/integration/users/:identifier — Get Detailed User Record
 - **Description:** Fetches complete user metadata by MongoDB ObjectId or phone number.
 - **Method:** `GET`
 - **Endpoint:** `/api/integration/users/:identifier`
@@ -1228,7 +1230,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 
 ---
 
-## SERIES 10: Complete Master Endpoint Reference Table
+## SERIES 11: Complete Master Endpoint Reference Table
 
 | # | Series | Method | Endpoint Path | Auth Required | Description |
 |---|---|---|---|---|---|
