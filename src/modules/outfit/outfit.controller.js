@@ -9,10 +9,11 @@ const outfitService = require('./outfit.service');
  */
 const suggestOutfits = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const { wardrobeId, occasion, season, limit } = req.body;
+  const { wardrobeId, wardrobeIds, occasion, season, limit } = req.body;
 
   const result = await outfitService.suggestOutfits(userId, {
     wardrobeId: wardrobeId || null,
+    wardrobeIds: wardrobeIds || null,
     occasion: occasion || 'CASUAL',
     season: season || null,
     limit: limit ? parseInt(limit, 10) : 5,

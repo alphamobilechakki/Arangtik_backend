@@ -422,22 +422,44 @@ const generateStylingAdvice = (archetype, top, bottom, outerwear, footwear, acce
 const suggestOutfits = async (userId, options = {}) => {
   const {
     wardrobeId = null,
+    wardrobeIds = null,
     occasion = 'CASUAL',
     season = null,
     limit = 5,
   } = options;
 
-  // STEP 1: Query Wardrobe Items strictly scoped to user & selected wardrobe
+  // STEP 1: Normalize selected wardrobe IDs (supports array of IDs, comma-separated string, or single ID)
+  let selectedWardrobeIds = [];
+  if (Array.isArray(wardrobeIds) && wardrobeIds.length > 0) {
+    selectedWardrobeIds = wardrobeIds.map((id) => id?.toString().trim()).filter((id) => id && id !== 'all');
+  } else if (typeof wardrobeIds === 'string' && wardrobeIds.trim() && wardrobeIds.trim() !== 'all') {
+    selectedWardrobeIds = wardrobeIds.split(',').map((id) => id.trim()).filter((id) => id && id !== 'all');
+  } else if (Array.isArray(wardrobeId) && wardrobeId.length > 0) {
+    selectedWardrobeIds = wardrobeId.map((id) => id?.toString().trim()).filter((id) => id && id !== 'all');
+  } else if (typeof wardrobeId === 'string' && wardrobeId.trim() && wardrobeId.trim() !== 'all') {
+    selectedWardrobeIds = [wardrobeId.trim()];
+  }
+
+  // STEP 2: Query Wardrobe Items strictly scoped to user & selected wardrobe(s)
   const query = { userId };
 
-  if (wardrobeId && wardrobeId !== 'all') {
-    // Check if wardrobe exists
-    const targetWardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
-    if (targetWardrobe?.isDefault) {
-      // Default wardrobe also includes items with null wardrobeId
-      query.$or = [{ wardrobeId }, { wardrobeId: null }, { wardrobeId: { $exists: false } }];
+  if (selectedWardrobeIds.length > 0) {
+    // Check if any of the selected wardrobes is the user's default wardrobe
+    const defaultWardrobe = await Wardrobe.findOne({ userId, isDefault: true }).lean();
+    const includesDefault =
+      defaultWardrobe &&
+      selectedWardrobeIds.some((id) => id.toString() === defaultWardrobe._id.toString());
+
+    if (includesDefault) {
+      // Default wardrobe also includes items with null or omitted wardrobeId
+      query.$or = [
+        { wardrobeId: { $in: selectedWardrobeIds } },
+        { wardrobeId: null },
+        { wardrobeId: { $exists: false } },
+      ];
     } else {
-      query.wardrobeId = wardrobeId;
+      // STRICT MULTI-WARDROBE FILTER: Only fetch items whose wardrobeId is in the selected list
+      query.wardrobeId = { $in: selectedWardrobeIds };
     }
   }
 
@@ -448,11 +470,15 @@ const suggestOutfits = async (userId, options = {}) => {
       success: true,
       count: 0,
       availableItemsCount: 0,
-      wardrobeId: wardrobeId || 'all',
+      wardrobeId: selectedWardrobeIds.length === 1 ? selectedWardrobeIds[0] : (selectedWardrobeIds.length > 1 ? selectedWardrobeIds : 'all'),
+      selectedWardrobeIds: selectedWardrobeIds.length > 0 ? selectedWardrobeIds : ['all'],
+      selectedWardrobesCount: selectedWardrobeIds.length,
       occasion: occasion.toUpperCase(),
       outfits: [],
       message:
-        'No clothing items found in the selected wardrobe. Please add clothes to receive personalized outfit combinations.',
+        selectedWardrobeIds.length > 0
+          ? `No clothing items found in the ${selectedWardrobeIds.length} selected wardrobe(s). Please add clothes to receive personalized outfit combinations.`
+          : 'No clothing items found in your wardrobe. Please add clothes to receive personalized outfit combinations.',
     };
   }
 
@@ -724,10 +750,12 @@ const suggestOutfits = async (userId, options = {}) => {
       success: true,
       count: 0,
       availableItemsCount: items.length,
-      wardrobeId: wardrobeId || 'all',
+      wardrobeId: selectedWardrobeIds.length === 1 ? selectedWardrobeIds[0] : (selectedWardrobeIds.length > 1 ? selectedWardrobeIds : 'all'),
+      selectedWardrobeIds: selectedWardrobeIds.length > 0 ? selectedWardrobeIds : ['all'],
+      selectedWardrobesCount: selectedWardrobeIds.length,
       occasion: occasion.toUpperCase(),
       outfits: [],
-      message: `You have ${items.length} item(s) in this wardrobe, but need complementary items (e.g. matching tops and bottoms, or dresses) to generate complete outfit combinations.`,
+      message: `You have ${items.length} item(s) in the ${selectedWardrobeIds.length > 0 ? selectedWardrobeIds.length + ' selected' : 'all'} wardrobe(s), but need complementary items (e.g. matching tops and bottoms, or dresses) to generate complete outfit combinations.`,
       missingSlots: globalMissingSlots,
     };
   }
@@ -811,7 +839,9 @@ Return ONLY JSON, no backticks or markdown.`;
     success: true,
     count: diverseOutfits.length,
     availableItemsCount: items.length,
-    wardrobeId: wardrobeId || 'all',
+    wardrobeId: selectedWardrobeIds.length === 1 ? selectedWardrobeIds[0] : (selectedWardrobeIds.length > 1 ? selectedWardrobeIds : 'all'),
+    selectedWardrobeIds: selectedWardrobeIds.length > 0 ? selectedWardrobeIds : ['all'],
+    selectedWardrobesCount: selectedWardrobeIds.length,
     occasion: occasion.toUpperCase(),
     missingSlots: globalMissingSlots,
     outfits: diverseOutfits,

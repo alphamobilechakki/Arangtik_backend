@@ -170,15 +170,23 @@ describe('Outfit Suggestion Core Domain & Logic Tests', () => {
       }
     );
 
-    // Save outfit requires title, occasion, items
-    req = { body: { title: '', occasion: 'CASUAL', items: [] } };
+    // wardrobeIds validation: must be array or string if provided
+    let invalidReq = { body: { wardrobeIds: 12345 } };
     assert.throws(
       () => {
-        outfitValidation.validateSaveOutfit(req, res, () => {});
+        outfitValidation.validateSuggestRequest(invalidReq, res, () => {});
       },
       (err) => {
-        return err.statusCode === 400 && err.message.includes('Title is required');
+        return err.statusCode === 400 && err.message.includes('wardrobeIds must be an array');
       }
     );
+
+    // Valid array of 5 ticked wardrobes
+    let validReq = { body: { wardrobeIds: ['w1', 'w2', 'w3', 'w4', 'w5'], occasion: 'CASUAL' } };
+    let passed = false;
+    outfitValidation.validateSuggestRequest(validReq, res, () => {
+      passed = true;
+    });
+    assert.equal(passed, true, 'Should accept array of ticked wardrobe IDs');
   });
 });

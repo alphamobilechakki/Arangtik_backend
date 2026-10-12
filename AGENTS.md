@@ -14,3 +14,5 @@
 
 7. **LOCKED & INTEGRATED APIs PROTECTION (STRICT RULE):** All endpoints marked with `[DONE / INTEGRATED ✅]` (Auth, Profile & Biometrics, Store Containers, Cloth Analysis & Gallery Ingestion, Wardrobe CRUD) are tested, active, and locked. **NEVER modify, refactor, break, or alter the request/response structure of existing working APIs** unless the user explicitly asks to change that specific functionality.
 
+8. **PRIMARY PRODUCT TARGET = MOBILE APP (NOT A WEBSITE):** Arangtik is strictly a mobile-first product built as a **Native Mobile Application (iOS / Android / Flutter / React Native)**, NOT a traditional website. The core mission is to make the backend 100% solid, correct, rock-solid, and mobile-optimized. All API designs, query filters, multi-wardrobe selection checkboxes, payload structures, camera/gallery uploads, and outfit recommendation flows must be built with mobile apps as the primary client.
+

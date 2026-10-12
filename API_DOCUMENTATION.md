@@ -187,14 +187,21 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
   Non-chatbot interactive user flow for smart styling recommendations:
 
   Step 1: Selection & Intent
-    • User chooses whether to style from "All Wardrobes" or a specific Almari.
+    • User chooses whether to style from "All Wardrobes" or specific Almari(s) (supports multi-selection checkboxes: e.g. 5 selected out of 10 wardrobes).
     • User picks the occasion: Casual, Office, Party, Wedding, Date, Travel.
 
   Step 2: Generate Coordinated Looks
     └─► POST /api/outfit/suggest
-        Body: { wardrobeId: "optional", occasion: "OFFICE", season: "SUMMER", limit: 4 }
+        Body: { 
+          wardrobeIds: ["wardrobeId_1", "wardrobeId_2"], // Multi-wardrobe selection: Array of ticked wardrobe IDs (e.g. 5 selected out of 10)
+          wardrobeId: "optionalSingleIdOrAll",           // Single wardrobe ID or "all"
+          occasion: "OFFICE", 
+          season: "SUMMER", 
+          limit: 4 
+        }
         Fashion Engine Logic:
         • Fetches real clothes only (Zero Hallucination — never creates fake clothes).
+        • Strictly scopes items to the checked wardrobes (e.g. if 5 of 10 checked, only evaluates clothes in those 5).
         • Checks color harmony: Neutrals (White/Black/Beige) + Contrast (Navy/Olive/Wine).
         • Evaluates occasion appropriateness & pattern harmony.
         • If user has no footwear, gracefully suggests look without shoes and sets missingSlots.

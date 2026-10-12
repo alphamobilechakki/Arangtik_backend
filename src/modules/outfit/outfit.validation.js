@@ -21,10 +21,14 @@ const VALID_OCCASIONS = [
  * Validate outfit suggestion request payload
  */
 const validateSuggestRequest = (req, res, next) => {
-  const { occasion, limit } = req.body;
+  const { occasion, limit, wardrobeIds } = req.body;
 
   if (occasion && typeof occasion !== 'string') {
     throw new ApiError(400, 'Occasion must be a valid text string (e.g. CASUAL, OFFICE, PARTY)');
+  }
+
+  if (wardrobeIds !== undefined && !Array.isArray(wardrobeIds) && typeof wardrobeIds !== 'string') {
+    throw new ApiError(400, 'wardrobeIds must be an array of wardrobe IDs or a comma-separated string');
   }
 
   if (limit !== undefined) {
