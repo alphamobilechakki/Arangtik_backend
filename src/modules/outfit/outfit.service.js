@@ -21,73 +21,41 @@ const SLOT_TYPES = {
   ACCESSORIES: 'ACCESSORIES',
 };
 
-// Common fashion composite color phrases mapped to clean hex values
-const FASHION_COLOR_MAP = {
-  'navy blue': '#000080',
-  'dark blue': '#00008b',
-  'sky blue': '#87ceeb',
-  'royal blue': '#4169e1',
-  'baby pink': '#f4c2c2',
-  'dusty rose': '#dcae96',
-  'blush pink': '#fe828c',
-  'bottle green': '#006a4e',
-  'emerald green': '#50c878',
-  'mint green': '#98ff98',
-  'olive green': '#556b2f',
-  'forest green': '#228b22',
-  'mustard yellow': '#e1ad01',
-  'off white': '#faf9f6',
-  'off-white': '#faf9f6',
-  'jet black': '#0a0a0a',
-  'charcoal grey': '#36454f',
-  'charcoal gray': '#36454f',
-  'cream': '#fffdd0',
-  'ivory': '#fffff0',
-  'khaki': '#f0e68c',
-  'taupe': '#483c32',
-  'nude': '#e3bc9a',
-  'tan': '#d2b48c',
-  'camel': '#c19a6b',
-  'rust': '#b7410e',
-  'terracotta': '#e2725b',
-  'wine': '#722f37',
-  'burgundy': '#800020',
-  'maroon': '#800000',
-};
-
 /**
- * Parses any color name, fashion term, or hex code using Colord
+ * Parses any color name or hex code dynamically using Colord library
  */
 const parseFashionColor = (rawColor) => {
   if (!rawColor) return null;
   const str = rawColor.toString().toLowerCase().trim();
-  const mapped = FASHION_COLOR_MAP[str] || str;
-  const c = colord(mapped);
+
+  // 1. Direct standard name / hex match
+  let c = colord(str);
   if (c.isValid()) return c;
 
-  // Fallback: strip descriptive prefixes (e.g. "dark red" -> "red")
-  const cleaned = str.replace(/\b(light|dark|bright|soft|deep|pale|pure|rich)\b/g, '').trim();
-  const fallback = colord(FASHION_COLOR_MAP[cleaned] || cleaned);
-  return fallback.isValid() ? fallback : null;
+  // 2. Joined composite name (e.g. "dark blue" -> "darkblue", "royal blue" -> "royalblue")
+  c = colord(str.replace(/[\s-]+/g, ''));
+  if (c.isValid()) return c;
+
+  // 3. First-word match (e.g. "navy blue" -> "navy", "olive green" -> "olive")
+  const parts = str.split(/[\s-]+/);
+  c = colord(parts[0]);
+  if (c.isValid()) return c;
+
+  // 4. Last-word fallback (e.g. "baby pink" -> "pink", "emerald green" -> "green")
+  c = colord(parts[parts.length - 1]);
+  return c.isValid() ? c : null;
 };
 
 /**
- * Determines if a color is a fashion neutral using HSL saturation & lightness thresholds
+ * Determines if a color is a fashion neutral using HSL color physics & colord
  */
 const isFashionNeutral = (colorObj, rawColorName = '') => {
   if (!colorObj) return false;
-  const name = (rawColorName || '').toLowerCase();
-  // Classic fashion neutrals keywords
-  if (
-    ['white', 'black', 'grey', 'gray', 'charcoal', 'beige', 'tan', 'khaki', 'taupe', 'cream', 'ivory', 'camel', 'navy', 'nude'].some(
-      (n) => name.includes(n)
-    )
-  ) {
-    return true;
-  }
   const hsl = colorObj.toHsl();
-  // Low saturation (desaturated tones) or very high/low lightness
-  return hsl.s <= 18 || hsl.l >= 92 || hsl.l <= 12;
+  // Low saturation or extreme lightness levels define timeless fashion neutrals
+  if (hsl.s <= 20 || hsl.l >= 90 || hsl.l <= 12) return true;
+  const name = (rawColorName || '').toLowerCase();
+  return ['navy', 'beige', 'tan', 'khaki', 'cream', 'taupe', 'charcoal'].some((n) => name.includes(n));
 };
 
 /**
@@ -113,13 +81,12 @@ const extractPattern = (item) => {
 };
 
 /**
- * Helper to get clean image url for item
+ * Resolves the cleanest accessible image URL for an item (segmented > primary > raw)
  */
 const getItemImageUrl = (item) => {
   if (Array.isArray(item.images) && item.images.length > 0) {
     const primary = item.images.find((img) => img.isPrimary);
     if (primary && primary.url) return primary.url;
-    // Prefer segmented over raw
     const segmented = item.images.find((img) => img.type === 'SEGMENTED');
     if (segmented && segmented.url) return segmented.url;
     return item.images[0].url || '';
@@ -128,14 +95,14 @@ const getItemImageUrl = (item) => {
 };
 
 /**
- * Categorize a wardrobe item into semantic outfit slot
+ * Categorizes a wardrobe item into a semantic outfit slot
  */
 const classifySlot = (item) => {
   const cat = (item.category || '').toUpperCase();
   const sub = (item.subCategory || '').toLowerCase();
   const name = (item.name || '').toLowerCase();
 
-  // 1. One-Piece Ensembles (Dresses, Gowns, Sarees, Kurta Sets, Jumpsuits)
+  // One-Piece Ensembles (Dresses, Gowns, Sarees, Kurta Sets)
   if (
     cat === 'TRADITIONAL' ||
     cat === 'DRESS' ||
@@ -147,27 +114,27 @@ const classifySlot = (item) => {
     return SLOT_TYPES.ONE_PIECE;
   }
 
-  // 2. Outerwear (Blazers, Jackets, Coats, Shrugs, Cardigans)
+  // Outerwear (Blazers, Jackets, Coats, Shrugs)
   if (
     cat === 'OUTERWEAR' ||
-    ['jacket', 'blazer', 'coat', 'shrug', 'cardigan', 'hoodie', 'overshirt', 'bomber', 'trench'].some(
+    ['jacket', 'blazer', 'coat', 'shrug', 'cardigan', 'hoodie', 'overshirt', 'bomber'].some(
       (k) => sub.includes(k) || name.includes(k)
     )
   ) {
     return SLOT_TYPES.OUTERWEAR;
   }
 
-  // 3. Footwear (Shoes, Sneakers, Loafers, Heels, Boots)
+  // Footwear (Shoes, Sneakers, Loafers, Heels, Boots)
   if (
     cat === 'FOOTWEAR' ||
-    ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'heel', 'heels', 'boot', 'boots', 'sandal', 'sandals', 'flat', 'flats', 'slippers'].some(
+    ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'heel', 'heels', 'boot', 'boots', 'sandal', 'sandals', 'flat', 'flats'].some(
       (k) => sub.includes(k) || name.includes(k)
     )
   ) {
     return SLOT_TYPES.FOOTWEAR;
   }
 
-  // 4. Accessories (Belts, Bags, Watches, Sunglasses)
+  // Accessories (Belts, Bags, Watches, Sunglasses)
   if (
     cat === 'ACCESSORIES' ||
     ['belt', 'bag', 'handbag', 'watch', 'sunglasses', 'scarf', 'tie', 'cap', 'hat', 'jewellery', 'jewelry'].some(
@@ -177,36 +144,25 @@ const classifySlot = (item) => {
     return SLOT_TYPES.ACCESSORIES;
   }
 
-  // 5. Lower Wear (Jeans, Trousers, Chinos, Pants, Shorts, Skirts)
+  // Lower Wear (Jeans, Trousers, Chinos, Pants, Shorts, Skirts)
   if (
     cat === 'LOWER_WEAR' ||
     cat === 'BOTTOMS' ||
-    ['jean', 'jeans', 'trouser', 'trousers', 'pant', 'pants', 'chino', 'chinos', 'short', 'shorts', 'skirt', 'palazzo', 'salwar', 'leggings', 'jogger', 'joggers'].some(
+    ['jean', 'jeans', 'trouser', 'trousers', 'pant', 'pants', 'chino', 'chinos', 'short', 'shorts', 'skirt', 'palazzo', 'salwar', 'jogger', 'joggers'].some(
       (k) => sub.includes(k) || name.includes(k)
     )
   ) {
     return SLOT_TYPES.BOTTOM;
   }
 
-  // 6. Upper Wear (Default for tops, shirts, t-shirts, kurtas)
-  if (
-    cat === 'UPPER_WEAR' ||
-    cat === 'TOPS' ||
-    ['shirt', 't-shirt', 'tshirt', 'tee', 'polo', 'top', 'blouse', 'kurta', 'sweater', 'sweatshirt'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
-  ) {
-    return SLOT_TYPES.TOP;
-  }
-
-  // Fallback check
+  // Upper Wear (Default for tops, shirts, t-shirts, kurtas)
   return SLOT_TYPES.TOP;
 };
 
 /**
- * Calculate Color Harmony Score between garments using Color Theory & Colord library
+ * Calculates Color Harmony Score using Color Theory & Colord library
  */
-const evaluateColorHarmony = (color1, color2, color3 = null) => {
+const evaluateColorHarmony = (color1, color2) => {
   const c1Str = (color1 || '').toLowerCase().trim();
   const c2Str = (color2 || '').toLowerCase().trim();
 
@@ -214,7 +170,7 @@ const evaluateColorHarmony = (color1, color2, color3 = null) => {
     return { score: 75, harmonyType: 'BALANCED', contrast: 'MEDIUM' };
   }
 
-  // Exact same color string -> Monochromatic
+  // Monochromatic exact match
   if (c1Str === c2Str) {
     return { score: 85, harmonyType: 'MONOCHROMATIC', contrast: 'LOW_TONAL' };
   }
@@ -229,38 +185,31 @@ const evaluateColorHarmony = (color1, color2, color3 = null) => {
   const isC1Neutral = isFashionNeutral(c1, c1Str);
   const isC2Neutral = isFashionNeutral(c2, c2Str);
 
-  // Rule 1: Both Neutrals (e.g. Black + White, Navy + Beige, Grey + Black) -> Timeless Elegance
+  // Both Neutrals -> Timeless Elegance
   if (isC1Neutral && isC2Neutral) {
     return { score: 98, harmonyType: 'TIMELESS_NEUTRALS', contrast: 'HIGH_ELEGANCE' };
   }
 
-  // Rule 2: Neutral + Color Pop (e.g. White + Red, Navy + Emerald, Black + Yellow) -> Guaranteed High Fashion
+  // Neutral + Color Pop
   if (isC1Neutral || isC2Neutral) {
     return { score: 95, harmonyType: 'ACCENT_POP', contrast: 'DYNAMIC' };
   }
 
-  // Rule 3: Chromatic Color Theory (Hue Angle Analysis on 360-degree Color Wheel)
+  // Hue wheel angle analysis
   const h1 = c1.toHsl().h;
   const h2 = c2.toHsl().h;
   let hueDiff = Math.abs(h1 - h2);
   if (hueDiff > 180) hueDiff = 360 - hueDiff;
 
-  // Monochromatic / Close Tonal (Hue difference <= 25 degrees)
   if (hueDiff <= 25) {
     return { score: 88, harmonyType: 'MONOCHROMATIC', contrast: 'LOW_TONAL' };
   }
-
-  // Complementary (Opposite on color wheel: 150 - 180 degrees)
   if (hueDiff >= 150 && hueDiff <= 180) {
     return { score: 94, harmonyType: 'COMPLEMENTARY', contrast: 'BOLD_CONTRAST' };
   }
-
-  // Analogous (Adjacent on color wheel: 30 - 65 degrees)
   if (hueDiff >= 30 && hueDiff <= 65) {
     return { score: 92, harmonyType: 'ANALOGOUS', contrast: 'NATURAL_FLOW' };
   }
-
-  // Triadic / Split-Complementary (110 - 140 degrees)
   if (hueDiff >= 110 && hueDiff <= 140) {
     return { score: 90, harmonyType: 'TRIADIC', contrast: 'VIBRANT_BALANCE' };
   }
@@ -269,189 +218,148 @@ const evaluateColorHarmony = (color1, color2, color3 = null) => {
 };
 
 /**
- * Occasion Appropriateness Scoring
+ * Occasion Appropriateness Scoring (Dynamic fallback)
  */
 const scoreOccasionFit = (item, targetOccasion) => {
   const occ = (targetOccasion || 'CASUAL').toUpperCase();
   const sub = (item.subCategory || '').toLowerCase();
   const name = (item.name || '').toLowerCase();
-  const color = extractColor(item);
-  const pattern = extractPattern(item);
+  const text = `${name} ${sub}`;
 
-  // Check item's existing occasion tags
   const itemOccasions = Array.isArray(item.occasion)
     ? item.occasion.map((o) => o.toUpperCase())
     : [];
 
   let score = 50;
-
   if (itemOccasions.includes(occ)) {
     score += 35;
   }
 
-  switch (occ) {
-    case 'OFFICE':
-    case 'FORMAL':
-    case 'WORK':
-      if (['shirt', 'trouser', 'trousers', 'chino', 'chinos', 'blazer', 'formal', 'loafer', 'oxford'].some((w) => sub.includes(w) || name.includes(w))) {
-        score += 30;
-      }
-      if (['t-shirt', 'tee', 'shorts', 'ripped', 'hoodie', 'joggers', 'flip'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 40;
-      }
-      if (['white', 'blue', 'navy', 'grey', 'black', 'beige', 'charcoal'].some((c) => color.includes(c))) {
-        score += 15;
-      }
-      if (pattern === 'solid' || pattern.includes('stripe')) {
-        score += 10;
-      }
-      break;
+  const isFormalOccasion = ['OFFICE', 'FORMAL', 'WORK'].includes(occ);
+  const isCasualItem = /shorts|ripped|t-shirt|tee|hoodie|jogger|flip/.test(text);
+  const isFormalItem = /shirt|trouser|chino|blazer|formal|suit|oxford|loafer/.test(text);
 
-    case 'CASUAL':
-    case 'DAILY':
-      if (['t-shirt', 'tshirt', 'tee', 'polo', 'jeans', 'chino', 'sneaker', 'hoodie', 'casual'].some((w) => sub.includes(w) || name.includes(w))) {
-        score += 25;
-      }
-      if (['tuxedo', 'sherwani', 'heavy gown', 'silk saree'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 30;
-      }
-      break;
-
-    case 'PARTY':
-    case 'NIGHT_OUT':
-    case 'EVENING':
-      if (['blazer', 'dress', 'leather', 'dark', 'black', 'heels', 'boots', 'party', 'stylish'].some((w) => sub.includes(w) || name.includes(w) || color.includes(w))) {
-        score += 30;
-      }
-      if (['formal trousers', 'pyjama', 'joggers', 'sleep'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 25;
-      }
-      break;
-
-    case 'WEDDING':
-    case 'FESTIVE':
-    case 'TRADITIONAL':
-      if (['saree', 'kurta', 'anarkali', 'lehenga', 'sherwani', 'silk', 'embroidered', 'ethnic', 'traditional', 'festive'].some((w) => sub.includes(w) || name.includes(w))) {
-        score += 45;
-      }
-      if (['t-shirt', 'jeans', 'hoodie', 'shorts', 'gym'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 40;
-      }
-      break;
-
-    case 'DATE':
-    case 'DATE_NIGHT':
-      if (['shirt', 'dress', 'blazer', 'fitted', 'polo', 'chic', 'clean jeans', 'chinos'].some((w) => sub.includes(w) || name.includes(w))) {
-        score += 25;
-      }
-      if (['sweatpants', 'oversized tee', 'gym', 'shorts'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 30;
-      }
-      break;
-
-    case 'TRAVEL':
-    case 'VACATION':
-      if (['comfort', 'cotton', 'linen', 'sneaker', 'chino', 't-shirt', 'jacket', 'travel', 'shorts', 'hoodie'].some((w) => sub.includes(w) || name.includes(w))) {
-        score += 30;
-      }
-      if (['heels', 'formal suit', 'heavy saree', 'blazer'].some((w) => sub.includes(w) || name.includes(w))) {
-        score -= 25;
-      }
-      break;
-
-    default:
-      score += 15;
-      break;
+  if (isFormalOccasion) {
+    if (isFormalItem) score += 25;
+    if (isCasualItem) score -= 35;
+  } else if (occ === 'CASUAL' || occ === 'DAILY') {
+    if (isCasualItem || /jeans|casual|polo/.test(text)) score += 20;
+    if (/tuxedo|sherwani|heavy gown/.test(text)) score -= 25;
+  } else if (['WEDDING', 'FESTIVE', 'TRADITIONAL'].includes(occ)) {
+    if (/saree|kurta|anarkali|lehenga|sherwani|silk|ethnic|festive/.test(text)) score += 35;
+    if (isCasualItem) score -= 30;
+  } else {
+    score += 15;
   }
 
   return Math.max(10, Math.min(100, score));
 };
 
 /**
- * Generate diverse styling titles based on combination
+ * Builds dynamic outfit title
  */
 const generateOutfitTitle = (archetype, top, bottom, outerwear, occasion) => {
-  const occ = (occasion || 'Casual').toUpperCase();
-  const occLabel = occ.charAt(0) + occ.slice(1).toLowerCase();
-
+  const occLabel = (occasion || 'Casual').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
   if (archetype === 'ONE_PIECE') {
-    const dressName = top.subCategory || top.name;
-    return `${dressName} Elegance • ${occLabel}`;
+    return `${occLabel} Ensemble • ${top.name || top.subCategory || 'Look'}`;
   }
-
+  const topDesc = top.name || top.subCategory || 'Top';
+  const bottomDesc = bottom?.name || bottom?.subCategory || 'Bottom';
   if (outerwear) {
-    return `Smart Layered ${occLabel} Look`;
+    return `Layered ${occLabel} • ${outerwear.name || 'Jacket'} Look`;
   }
-
-  const topColor = extractColor(top) || 'Classic';
-  const bottomName = bottom?.subCategory || 'Trouser';
-  const capTopColor = topColor.charAt(0).toUpperCase() + topColor.slice(1);
-
-  if (occ === 'OFFICE' || occ === 'FORMAL') {
-    return `Crisp Corporate • ${capTopColor} & ${bottomName}`;
-  }
-  if (occ === 'PARTY') {
-    return `Chic Evening • ${capTopColor} Statement`;
-  }
-  if (occ === 'DATE') {
-    return `Refined Charm • ${capTopColor} Ensemble`;
-  }
-  if (occ === 'WEDDING' || occ === 'FESTIVE') {
-    return `Royal Celebration • Festive Ensemble`;
-  }
-  return `Effortless ${occLabel} • ${capTopColor} & ${bottomName}`;
+  return `${occLabel} Pairing • ${topDesc} & ${bottomDesc}`;
 };
 
 /**
- * Generate actionable styling advice based on actual clothes
+ * Builds actionable styling tips for fallback outfits
  */
-const generateStylingAdvice = (archetype, top, bottom, outerwear, footwear, accessories, occasion) => {
-  const occ = (occasion || 'Casual').toUpperCase();
+const generateStylingAdvice = (archetype, top, bottom, outerwear, footwear) => {
   const tips = [];
-
   if (archetype === 'ONE_PIECE') {
-    tips.push(`Let this ${top.subCategory || 'piece'} be the hero of your look.`);
-    if (outerwear) {
-      tips.push(`Drape the ${outerwear.name} over your shoulders for a modern silhouette.`);
-    }
+    tips.push(`Highlight the silhouette of the ${top.name || 'ensemble'}.`);
   } else {
-    // Top & Bottom advice
-    const topType = (top.subCategory || top.name || '').toLowerCase();
-    const bottomType = (bottom?.subCategory || bottom?.name || '').toLowerCase();
-
-    if (topType.includes('shirt')) {
-      if (occ === 'OFFICE' || occ === 'FORMAL') {
-        tips.push(`Tuck in the ${top.name} cleanly into your ${bottom.name} for a sharp, executive line.`);
-      } else {
-        tips.push(`Roll the sleeves twice and leave the collar open for relaxed sophistication.`);
-      }
-    } else if (topType.includes('t-shirt') || topType.includes('polo')) {
-      if (bottomType.includes('chino') || bottomType.includes('trouser')) {
-        tips.push(`A subtle half-tuck at the front adds structure while keeping it relaxed.`);
-      } else {
-        tips.push(`Pair the ${top.name} naturally over the ${bottom.name} for balanced casual comfort.`);
-      }
-    }
-
-    if (outerwear) {
-      tips.push(`Keep the ${outerwear.name} unbuttoned to create vertical lengthening lines.`);
-    }
+    tips.push(`Pair the ${top.name || 'top'} with the ${bottom?.name || 'bottom'} for a clean silhouette.`);
   }
-
-  if (footwear) {
-    tips.push(`Ground the ensemble with your ${footwear.name}.`);
-  }
-
-  if (accessories) {
-    tips.push(`Accentuate with your ${accessories.name} to finish the aesthetic.`);
-  }
-
+  if (outerwear) tips.push(`Layer with ${outerwear.name} to add structure.`);
+  if (footwear) tips.push(`Ground the look with ${footwear.name}.`);
   return tips.join(' ');
 };
 
 /**
+ * Helper to construct standardized outfit object
+ */
+const buildOutfitObject = ({ archetype, primaryItems, outerwear, footwear, accessory, occasion, colorHarmony, matchScore }) => {
+  const outfitItems = primaryItems.map((it) => ({
+    itemId: it._id,
+    slot: classifySlot(it),
+    name: it.name,
+    category: it.category,
+    subCategory: it.subCategory,
+    color: extractColor(it),
+    imageUrl: getItemImageUrl(it),
+  }));
+
+  const missingSlots = [];
+  if (outerwear) {
+    outfitItems.push({
+      itemId: outerwear._id,
+      slot: SLOT_TYPES.OUTERWEAR,
+      name: outerwear.name,
+      category: outerwear.category,
+      subCategory: outerwear.subCategory,
+      color: extractColor(outerwear),
+      imageUrl: getItemImageUrl(outerwear),
+    });
+  }
+  if (footwear) {
+    outfitItems.push({
+      itemId: footwear._id,
+      slot: SLOT_TYPES.FOOTWEAR,
+      name: footwear.name,
+      category: footwear.category,
+      subCategory: footwear.subCategory,
+      color: extractColor(footwear),
+      imageUrl: getItemImageUrl(footwear),
+    });
+  } else {
+    missingSlots.push('footwear');
+  }
+  if (accessory) {
+    outfitItems.push({
+      itemId: accessory._id,
+      slot: SLOT_TYPES.ACCESSORIES,
+      name: accessory.name,
+      category: accessory.category,
+      subCategory: accessory.subCategory,
+      color: extractColor(accessory),
+      imageUrl: getItemImageUrl(accessory),
+    });
+  }
+
+  const top = primaryItems[0];
+  const bottom = primaryItems[1] || null;
+
+  return {
+    archetype: outerwear ? 'LAYERED_TWO_PIECE' : archetype,
+    title: generateOutfitTitle(archetype, top, bottom, outerwear, occasion),
+    occasion: occasion.toUpperCase(),
+    items: outfitItems,
+    colorHarmony: {
+      palette: primaryItems.map((it) => extractColor(it)).filter(Boolean),
+      harmonyType: colorHarmony.harmonyType || 'DYNAMIC_HARMONY',
+      contrast: colorHarmony.contrast || 'BALANCED',
+      score: colorHarmony.score || 85,
+    },
+    matchScore,
+    missingSlots,
+    stylingNotes: generateStylingAdvice(archetype, top, bottom, outerwear, footwear),
+  };
+};
+
+/**
  * Intelligent Personal Fashion Stylist powered by Google Gemini AI
- * Evaluates real clothes, occasion nuances, textures, silhouettes, and aesthetic trends without hardcoding.
+ * Evaluates real clothes, occasion nuances, textures, silhouettes, and aesthetic trends dynamically without hardcoding.
  */
 const generateOutfitsWithGemini = async (items, occasion, season, limit = 5, globalMissingSlots = []) => {
   if (!GEMINI_API_KEY || !items || items.length === 0) return null;
@@ -595,7 +503,7 @@ const suggestOutfits = async (userId, options = {}) => {
     limit = 5,
   } = options;
 
-  // STEP 1: Normalize selected wardrobe IDs (supports array of IDs, comma-separated string, or single ID)
+  // STEP 1: Normalize selected wardrobe IDs (multi-wardrobe checklist support)
   let selectedWardrobeIds = [];
   if (Array.isArray(wardrobeIds) && wardrobeIds.length > 0) {
     selectedWardrobeIds = wardrobeIds.map((id) => id?.toString().trim()).filter((id) => id && id !== 'all');
@@ -611,21 +519,18 @@ const suggestOutfits = async (userId, options = {}) => {
   const query = { userId };
 
   if (selectedWardrobeIds.length > 0) {
-    // Check if any of the selected wardrobes is the user's default wardrobe
     const defaultWardrobe = await Wardrobe.findOne({ userId, isDefault: true }).lean();
     const includesDefault =
       defaultWardrobe &&
       selectedWardrobeIds.some((id) => id.toString() === defaultWardrobe._id.toString());
 
     if (includesDefault) {
-      // Default wardrobe also includes items with null or omitted wardrobeId
       query.$or = [
         { wardrobeId: { $in: selectedWardrobeIds } },
         { wardrobeId: null },
         { wardrobeId: { $exists: false } },
       ];
     } else {
-      // STRICT MULTI-WARDROBE FILTER: Only fetch items whose wardrobeId is in the selected list
       query.wardrobeId = { $in: selectedWardrobeIds };
     }
   }
@@ -649,7 +554,7 @@ const suggestOutfits = async (userId, options = {}) => {
     };
   }
 
-  // STEP 2: Segregate available items into semantic slots
+  // STEP 3: Segregate items into slots
   const slots = {
     tops: [],
     bottoms: [],
@@ -669,7 +574,6 @@ const suggestOutfits = async (userId, options = {}) => {
     else if (slot === SLOT_TYPES.ACCESSORIES) slots.accessories.push(item);
   }
 
-  // Identify what slots are absent in user's wardrobe
   const globalMissingSlots = [];
   if (slots.footwear.length === 0) globalMissingSlots.push('footwear');
   if (slots.outerwear.length === 0) globalMissingSlots.push('outerwear');
@@ -677,7 +581,7 @@ const suggestOutfits = async (userId, options = {}) => {
   if (slots.tops.length === 0 && slots.one_piece.length === 0) globalMissingSlots.push('tops');
   if (slots.bottoms.length === 0 && slots.one_piece.length === 0) globalMissingSlots.push('bottoms');
 
-  // STEP 3: AI-FIRST FASHION STYLIST (Powered by Google Gemini Multi-Modal / Reasoning AI)
+  // STEP 4: PRIMARY ENGINE — Gemini AI Fashion Stylist
   if (GEMINI_API_KEY) {
     try {
       const aiOutfits = await generateOutfitsWithGemini(items, occasion, season, limit, globalMissingSlots);
@@ -696,247 +600,70 @@ const suggestOutfits = async (userId, options = {}) => {
         };
       }
     } catch (aiErr) {
-      console.warn('[OutfitStylist] Gemini AI Stylist error, engaging deterministic fallback:', aiErr.message);
+      console.warn('[OutfitStylist] Gemini AI Stylist error, engaging clean fallback:', aiErr.message);
     }
   }
 
-  // STEP 4 (FALLBACK): Deterministic Rule Engine (Zero Downtime Fallback)
+  // STEP 5: CLEAN DETERMINISTIC FALLBACK (Zero Downtime)
   const combinations = [];
+  const chosenOuterwear = slots.outerwear.length > 0
+    ? slots.outerwear.sort((a, b) => scoreOccasionFit(b, occasion) - scoreOccasionFit(a, occasion))[0]
+    : null;
+  const chosenFootwear = slots.footwear.length > 0
+    ? slots.footwear.sort((a, b) => scoreOccasionFit(b, occasion) - scoreOccasionFit(a, occasion))[0]
+    : null;
+  const chosenAccessory = slots.accessories[0] || null;
 
-  // Helper to pick best compatible accessory (if available in wardrobe)
-  const pickAccessory = (baseItems) => {
-    if (slots.accessories.length === 0) return null;
-    return slots.accessories[0]; // Available accessory from DB
-  };
-
-  // Helper to pick best compatible footwear (if available in wardrobe)
-  const pickFootwear = (occasionTarget) => {
-    if (slots.footwear.length === 0) return null;
-    // Score footwears for occasion
-    const scored = [...slots.footwear].sort(
-      (a, b) => scoreOccasionFit(b, occasionTarget) - scoreOccasionFit(a, occasionTarget)
-    );
-    return scored[0];
-  };
-
-  // STEP 3: Generate Combinations from Available Wardrobe Items
-
-  // COMBINATION TYPE 1: Top + Bottom combinations
+  // Combination A: Tops + Bottoms
   for (const top of slots.tops) {
     const topOccScore = scoreOccasionFit(top, occasion);
     const topColor = extractColor(top);
     const topPattern = extractPattern(top);
 
     for (const bottom of slots.bottoms) {
-      const bottomOccScore = scoreOccasionFit(bottom, occasion);
-      const bottomColor = extractColor(bottom);
       const bottomPattern = extractPattern(bottom);
+      if (topPattern !== 'solid' && topPattern !== 'plain' && bottomPattern !== 'solid' && bottomPattern !== 'plain') {
+        continue; // Prevent clashing busy patterns
+      }
 
-      // Pattern balance rule: Never combine two loud prints
-      const hasClashingPatterns =
-        topPattern !== 'solid' &&
-        topPattern !== 'plain' &&
-        bottomPattern !== 'solid' &&
-        bottomPattern !== 'plain';
-      if (hasClashingPatterns) continue;
-
+      const bottomColor = extractColor(bottom);
+      const bottomOccScore = scoreOccasionFit(bottom, occasion);
       const harmony = evaluateColorHarmony(topColor, bottomColor);
-      const avgOccScore = (topOccScore + bottomOccScore) / 2;
-      const totalScore = Math.round(avgOccScore * 0.5 + harmony.score * 0.5);
+      const totalScore = Math.round(((topOccScore + bottomOccScore) / 2) * 0.5 + harmony.score * 0.5);
 
-      // Check for available outerwear layer
-      const compatibleOuterwear =
-        slots.outerwear.length > 0
-          ? slots.outerwear.find((o) => scoreOccasionFit(o, occasion) >= 50) || null
-          : null;
-
-      const chosenFootwear = pickFootwear(occasion);
-      const chosenAccessory = pickAccessory([top, bottom]);
-
-      const outfitItems = [
-        {
-          itemId: top._id,
-          slot: SLOT_TYPES.TOP,
-          name: top.name,
-          category: top.category,
-          subCategory: top.subCategory,
-          color: topColor,
-          imageUrl: getItemImageUrl(top),
-        },
-        {
-          itemId: bottom._id,
-          slot: SLOT_TYPES.BOTTOM,
-          name: bottom.name,
-          category: bottom.category,
-          subCategory: bottom.subCategory,
-          color: bottomColor,
-          imageUrl: getItemImageUrl(bottom),
-        },
-      ];
-
-      const missing = [];
-      if (!chosenFootwear) missing.push('footwear');
-      if (!compatibleOuterwear && slots.outerwear.length === 0) missing.push('outerwear');
-      if (!chosenAccessory && slots.accessories.length === 0) missing.push('accessories');
-
-      if (compatibleOuterwear) {
-        outfitItems.push({
-          itemId: compatibleOuterwear._id,
-          slot: SLOT_TYPES.OUTERWEAR,
-          name: compatibleOuterwear.name,
-          category: compatibleOuterwear.category,
-          subCategory: compatibleOuterwear.subCategory,
-          color: extractColor(compatibleOuterwear),
-          imageUrl: getItemImageUrl(compatibleOuterwear),
-        });
-      }
-
-      if (chosenFootwear) {
-        outfitItems.push({
-          itemId: chosenFootwear._id,
-          slot: SLOT_TYPES.FOOTWEAR,
-          name: chosenFootwear.name,
-          category: chosenFootwear.category,
-          subCategory: chosenFootwear.subCategory,
-          color: extractColor(chosenFootwear),
-          imageUrl: getItemImageUrl(chosenFootwear),
-        });
-      }
-
-      if (chosenAccessory) {
-        outfitItems.push({
-          itemId: chosenAccessory._id,
-          slot: SLOT_TYPES.ACCESSORIES,
-          name: chosenAccessory.name,
-          category: chosenAccessory.category,
-          subCategory: chosenAccessory.subCategory,
-          color: extractColor(chosenAccessory),
-          imageUrl: getItemImageUrl(chosenAccessory),
-        });
-      }
-
-      combinations.push({
-        archetype: compatibleOuterwear ? 'LAYERED_TWO_PIECE' : 'TWO_PIECE',
-        title: generateOutfitTitle('TWO_PIECE', top, bottom, compatibleOuterwear, occasion),
-        occasion: occasion.toUpperCase(),
-        items: outfitItems,
-        colorHarmony: {
-          palette: [topColor, bottomColor].filter(Boolean),
-          harmonyType: harmony.harmonyType,
-          contrast: harmony.contrast,
-          score: harmony.score,
-        },
-        matchScore: totalScore,
-        missingSlots: missing,
-        stylingNotes: generateStylingAdvice(
-          'TWO_PIECE',
-          top,
-          bottom,
-          compatibleOuterwear,
-          chosenFootwear,
-          chosenAccessory,
-          occasion
-        ),
-      });
+      combinations.push(
+        buildOutfitObject({
+          archetype: 'TWO_PIECE',
+          primaryItems: [top, bottom],
+          outerwear: chosenOuterwear,
+          footwear: chosenFootwear,
+          accessory: chosenAccessory,
+          occasion,
+          colorHarmony: harmony,
+          matchScore: totalScore,
+        })
+      );
     }
   }
 
-  // COMBINATION TYPE 2: One-Piece Ensembles (Dresses, Sarees, Kurta Sets)
+  // Combination B: One-Piece Ensembles
   for (const piece of slots.one_piece) {
     const pieceOccScore = scoreOccasionFit(piece, occasion);
-    const pieceColor = extractColor(piece);
-
-    const compatibleOuterwear =
-      slots.outerwear.length > 0
-        ? slots.outerwear.find((o) => scoreOccasionFit(o, occasion) >= 50) || null
-        : null;
-
-    const chosenFootwear = pickFootwear(occasion);
-    const chosenAccessory = pickAccessory([piece]);
-
-    const outfitItems = [
-      {
-        itemId: piece._id,
-        slot: SLOT_TYPES.ONE_PIECE,
-        name: piece.name,
-        category: piece.category,
-        subCategory: piece.subCategory,
-        color: pieceColor,
-        imageUrl: getItemImageUrl(piece),
-      },
-    ];
-
-    const missing = [];
-    if (!chosenFootwear) missing.push('footwear');
-    if (!compatibleOuterwear && slots.outerwear.length === 0) missing.push('outerwear');
-    if (!chosenAccessory && slots.accessories.length === 0) missing.push('accessories');
-
-    if (compatibleOuterwear) {
-      outfitItems.push({
-        itemId: compatibleOuterwear._id,
-        slot: SLOT_TYPES.OUTERWEAR,
-        name: compatibleOuterwear.name,
-        category: compatibleOuterwear.category,
-        subCategory: compatibleOuterwear.subCategory,
-        color: extractColor(compatibleOuterwear),
-        imageUrl: getItemImageUrl(compatibleOuterwear),
-      });
-    }
-
-    if (chosenFootwear) {
-      outfitItems.push({
-        itemId: chosenFootwear._id,
-        slot: SLOT_TYPES.FOOTWEAR,
-        name: chosenFootwear.name,
-        category: chosenFootwear.category,
-        subCategory: chosenFootwear.subCategory,
-        color: extractColor(chosenFootwear),
-        imageUrl: getItemImageUrl(chosenFootwear),
-      });
-    }
-
-    if (chosenAccessory) {
-      outfitItems.push({
-        itemId: chosenAccessory._id,
-        slot: SLOT_TYPES.ACCESSORIES,
-        name: chosenAccessory.name,
-        category: chosenAccessory.category,
-        subCategory: chosenAccessory.subCategory,
-        color: extractColor(chosenAccessory),
-        imageUrl: getItemImageUrl(chosenAccessory),
-      });
-    }
-
-    combinations.push({
-      archetype: 'ONE_PIECE',
-      title: generateOutfitTitle('ONE_PIECE', piece, null, compatibleOuterwear, occasion),
-      occasion: occasion.toUpperCase(),
-      items: outfitItems,
-      colorHarmony: {
-        palette: [pieceColor].filter(Boolean),
-        harmonyType: 'SOLO_STATEMENT',
-        contrast: 'HARMONIOUS',
-        score: 95,
-      },
-      matchScore: Math.round(pieceOccScore * 0.7 + 95 * 0.3),
-      missingSlots: missing,
-      stylingNotes: generateStylingAdvice(
-        'ONE_PIECE',
-        piece,
-        null,
-        compatibleOuterwear,
-        chosenFootwear,
-        chosenAccessory,
-        occasion
-      ),
-    });
+    combinations.push(
+      buildOutfitObject({
+        archetype: 'ONE_PIECE',
+        primaryItems: [piece],
+        outerwear: chosenOuterwear,
+        footwear: chosenFootwear,
+        accessory: chosenAccessory,
+        occasion,
+        colorHarmony: { harmonyType: 'SOLO_STATEMENT', contrast: 'HARMONIOUS', score: 95 },
+        matchScore: Math.round(pieceOccScore * 0.7 + 95 * 0.3),
+      })
+    );
   }
 
-  // Edge Case: User has only tops or only bottoms or only single items
   if (combinations.length === 0) {
-    // Generate solo item guidance without inventing clothes
-    const anyAvailableItem = items[0];
-    const itemColor = extractColor(anyAvailableItem);
     return {
       success: true,
       count: 0,
@@ -951,79 +678,21 @@ const suggestOutfits = async (userId, options = {}) => {
     };
   }
 
-  // STEP 4: Rank combinations by match score & ensure diversity
+  // Rank and deduplicate
   combinations.sort((a, b) => b.matchScore - a.matchScore);
-
-  // Filter for unique, diverse top/bottom pairs
-  const seenPairKeys = new Set();
+  const seenKeys = new Set();
   const diverseOutfits = [];
 
   for (const combo of combinations) {
-    const itemIds = combo.items.map((i) => i.itemId.toString()).sort().join('-');
-    if (!seenPairKeys.has(itemIds)) {
-      seenPairKeys.add(itemIds);
+    const key = combo.items.map((i) => i.itemId.toString()).sort().join('-');
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
       diverseOutfits.push({
         ...combo,
         id: `outfit_${diverseOutfits.length + 1}_${Date.now().toString(36)}`,
       });
     }
     if (diverseOutfits.length >= limit) break;
-  }
-
-  // STEP 5: Fast Gemini AI Polish (Enriches descriptions & advice without changing items)
-  if (GEMINI_API_KEY && diverseOutfits.length > 0) {
-    try {
-      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-      const promptData = diverseOutfits.map((o, idx) => ({
-        index: idx,
-        title: o.title,
-        items: o.items.map((i) => `${i.name} (${i.color || ''} ${i.subCategory || i.category})`),
-      }));
-
-      const prompt = `You are an elite high-fashion stylist for Arangtik Digital Wardrobe.
-The user requested outfits for the occasion: "${occasion.toUpperCase()}".
-Here are curated outfit combinations constructed strictly from the user's closet:
-${JSON.stringify(promptData, null, 2)}
-
-For each combination, provide:
-1. A punchy, glamorous high-fashion title (e.g. "Effortless Parisian Minimalist", "Monochrome Power Casual").
-2. 2-3 sentences of practical, elevated styling advice on how to wear it (e.g. cuffing, tucking, silhouette balance, event etiquette).
-
-Respond with a raw JSON array of objects:
-[
-  {
-    "index": 0,
-    "title": "...",
-    "stylingNotes": "..."
-  }
-]
-Return ONLY JSON, no backticks or markdown.`;
-
-      // 3.5 second timeout to prevent slow network from degrading UX
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('AI Polish Timeout')), 3500)
-      );
-      const aiPromise = model.generateContent(prompt);
-
-      const result = await Promise.race([aiPromise, timeoutPromise]);
-      const responseText = result.response.text().trim();
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsedAiTips = JSON.parse(cleanJson);
-
-      if (Array.isArray(parsedAiTips)) {
-        for (const tip of parsedAiTips) {
-          if (diverseOutfits[tip.index]) {
-            if (tip.title) diverseOutfits[tip.index].title = tip.title;
-            if (tip.stylingNotes) diverseOutfits[tip.index].stylingNotes = tip.stylingNotes;
-          }
-        }
-      }
-    } catch (aiErr) {
-      // Graceful fallback to deterministic rule engine notes
-      // No failure shown to user
-    }
   }
 
   return {
@@ -1059,7 +728,6 @@ const saveOutfit = async (userId, outfitData) => {
     throw new ApiError(400, 'Title, occasion, and clothing items are required to save an outfit');
   }
 
-  // Validate that items belong to this user
   const itemIds = items.map((i) => i.itemId);
   const foundItems = await WardrobeItem.find({
     _id: { $in: itemIds },
