@@ -97,6 +97,11 @@ class FaceRecognitionController {
 
     return ApiResponse.success(res, result, message);
   });
+
+  // Direct clean method aliases
+  registerFace = this.generateReference;
+  verifyFace = this.scanImage;
+  getFaceStatus = this.getReferenceStatus;
 }
 
 module.exports = new FaceRecognitionController();

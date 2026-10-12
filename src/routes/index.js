@@ -37,4 +37,9 @@ const integrationRoutes = require('../modules/integration/integration.routes');
 router.use('/integration', integrationRoutes);
 router.use('/v1/integration', integrationRoutes);
 
+// Smart Outfit Suggestion & Styling Routes
+const outfitRoutes = require('../modules/outfit/outfit.routes');
+router.use('/outfit', outfitRoutes);
+router.use('/v1/outfit', outfitRoutes);
+
 module.exports = router;

@@ -27,76 +27,98 @@ router.post(
 router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
 
-// Unified media upload handler for item photo / camera capture
-const uploadItemMedia = upload.fields([
+// Unified media upload handler for 1 to 100 photos (camera click, single dress, or bulk gallery)
+const uploadClothMedia = upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'image', maxCount: 1 },
   { name: 'file', maxCount: 1 },
-  { name: 'photos', maxCount: 10 },
-  { name: 'images', maxCount: 10 },
-  { name: 'files', maxCount: 10 },
+  { name: 'photos', maxCount: 100 },
+  { name: 'images', maxCount: 100 },
+  { name: 'files', maxCount: 100 },
 ]);
 
-// __________________________________________________________________________
-// 2. WARDROBE ITEMS APIs (Kapde & Accessories - Add, Get, Update, Delete)
-// __________________________________________________________________________
+/* ==========================================================================
+   2. CLOTH SCAN & EXTRACTION APIs (1 Photo or up to 100 Photos)
+   ========================================================================== */
 
-// Add Item (Kapda add karein - supports JSON or direct Photo Upload with AI auto-fill)
-router.post('/add-item', uploadItemMedia, wardrobeController.addItem);
-router.post('/items', uploadItemMedia, wardrobeController.addItem);
-
-// Get All Items (Sabhi kapde dekhein - with search, filter, pagination)
-router.get('/get-items', wardrobeController.getAllItems);
-router.get('/get-all-items', wardrobeController.getAllItems);
-router.get('/items', wardrobeController.getAllItems);
-
-// Get Single Item Details (Kisi ek item ki details)
-router.get('/get-item/:id', wardrobeController.getItemDetails);
-router.get('/get-item-details/:id', wardrobeController.getItemDetails);
-router.get('/items/:id', wardrobeController.getItemDetails);
-
-// Update Item
-router.patch('/update-item/:id', wardrobeController.updateItem);
-router.patch('/items/:id', wardrobeController.updateItem);
-
-// Delete Item
-router.delete('/delete-item/:id', wardrobeController.deleteItem);
-router.delete('/items/:id', wardrobeController.deleteItem);
-
-// 3D Model Generation (Hugging Face TripoSR)
-router.post('/generate-3d/:id', wardrobeController.generateItem3D);
-router.post('/items/:id/generate-3d', wardrobeController.generateItem3D);
-
-// __________________________________________________________________________
-// 3. AI SCAN & UPLOAD APIs (Photo se automatic kapde add karna)
-// __________________________________________________________________________
-
-// Analyze Single Photo (AI se photo scan karein aur fields prefill karein)
-router.post('/analyze-photo', uploadItemMedia, wardrobeController.analyzePhoto);
-router.post('/analyze', uploadItemMedia, wardrobeController.analyzePhoto);
-
-// Scan Single Gallery Photo (Face verify + clothing extract)
+/**
+ * 1. SCAN ITEM (AI scans photo(s), detects garments, extracts colors/taxonomy, checks duplicates)
+ * @route   POST /api/wardrobe/scan-item (Supports 1 photo or up to 100 photos)
+ * @aliases POST /api/wardrobe/scan, /analyze-photo, /analyze, /scan-gallery-photo
+ */
 router.post(
-  '/scan-gallery-photo',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  wardrobeController.scanGalleryPhoto
-);
-router.post(
-  '/scan',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  wardrobeController.scanGalleryPhoto
+  ['/scan-item', '/scan', '/analyze-photo', '/analyze', '/scan-gallery-photo'],
+  uploadClothMedia,
+  wardrobeController.analyzePhoto
 );
 
-// Bulk Upload (1 se 100 kapdo ki photos ek sath add karein)
+/**
+ * 2. EXTRACT ITEM (Extracts & adds garment(s) directly to wardrobe - 1 photo, 1-100 bulk, or JSON array)
+ * @route   POST /api/wardrobe/extract-item (Supports 1 photo, 1 to 100 photos, or selected items array)
+ * @aliases POST /api/wardrobe/add-item, /items, /extract-dress, /bulk-add-photos, /ingest-gallery
+ */
+router.post(
+  ['/extract-item', '/add-item', '/items', '/extract-dress'],
+  uploadClothMedia,
+  wardrobeController.addItem
+);
+
+// Legacy bulk upload array handlers (kept for 100% backward compatibility)
 router.post('/bulk-add-photos', upload.array('photos', 100), wardrobeController.bulkAddPhotos);
-
-// Gallery Batch Ingestion (Puri gallery scan karein)
 router.post('/ingest-gallery', upload.array('photos', 100), wardrobeController.ingestGalleryPhotos);
+
+/* ==========================================================================
+   3. WARDROBE ITEMS MANAGEMENT (CRUD)
+   ========================================================================== */
+
+/**
+ * 3. GET ITEMS (List all wardrobe clothes with search, category, occasion, color, pagination)
+ * @route   GET /api/wardrobe/get-items
+ * @aliases GET /api/wardrobe/get-all-items, /items
+ */
+router.get(
+  ['/get-items', '/get-all-items', '/items'],
+  wardrobeController.getAllItems
+);
+
+/**
+ * 4. GET ITEM (Get single clothing item details by ID)
+ * @route   GET /api/wardrobe/get-item/:id
+ * @aliases GET /api/wardrobe/get-item-details/:id, /items/:id
+ */
+router.get(
+  ['/get-item/:id', '/get-item-details/:id', '/items/:id'],
+  wardrobeController.getItemDetails
+);
+
+/**
+ * 5. EDIT ITEM (Update clothing item attributes by ID)
+ * @route   PATCH /api/wardrobe/edit-item/:id
+ * @aliases PATCH /api/wardrobe/update-item/:id, /items/:id
+ */
+router.patch(
+  ['/edit-item/:id', '/update-item/:id', '/items/:id'],
+  wardrobeController.updateItem
+);
+
+/**
+ * 6. DELETE ITEM (Delete clothing item from closet)
+ * @route   DELETE /api/wardrobe/delete-item/:id
+ * @aliases DELETE /api/wardrobe/items/:id
+ */
+router.delete(
+  ['/delete-item/:id', '/items/:id'],
+  wardrobeController.deleteItem
+);
+
+/**
+ * 7. 3D GARMENT MODEL GENERATION (Hugging Face TripoSR)
+ * @route   POST /api/wardrobe/generate-3d/:id
+ * @aliases POST /api/wardrobe/items/:id/generate-3d
+ */
+router.post(
+  ['/generate-3d/:id', '/items/:id/generate-3d'],
+  wardrobeController.generateItem3D
+);
 
 module.exports = router;

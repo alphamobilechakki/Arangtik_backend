@@ -8,59 +8,51 @@ const { validateScanUpload, validateThresholdParam } = require('./faceRecognitio
 // All face recognition routes are strictly protected by authentication
 router.use(protect);
 
-/**
- * @route   POST /api/face-recognition/reference/validate
- * @desc    Validate user's existing profile photo (checks for exactly 1 high-quality face)
- */
-router.post('/reference/validate', faceRecognitionController.validateReference);
+const uploadMedia = upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+]);
 
+/**
+ * 1. REGISTER FACE
+ * @route   POST /api/face-recognition/register
+ * @alias   POST /api/face-recognition/reference
+ * @desc    Register or update user reference face from uploaded photo or existing profile photo
+ */
 router.post(
-  '/reference',
-  upload.fields([
-    { name: 'image', maxCount: 1 },
-    { name: 'photo', maxCount: 1 },
-  ]),
+  ['/register', '/reference'],
+  uploadMedia,
   faceRecognitionController.generateReference
 );
 
 /**
- * @route   GET /api/face-recognition/reference
- * @desc    Get reference face embedding metadata & status
- */
-router.get('/reference', faceRecognitionController.getReferenceStatus);
-
-/**
- * @route   DELETE /api/face-recognition/reference
- * @desc    Delete / invalidate reference face embedding
- */
-router.delete('/reference', faceRecognitionController.deleteReference);
-
-/**
- * @route   POST /api/face-recognition/scan-photo
- * @desc    Scan a single photo against user or wardrobe owner reference face
+ * 2. VERIFY FACE
+ * @route   POST /api/face-recognition/verify
+ * @alias   POST /api/face-recognition/verify-user-face, /scan-photo, /scan-gallery-photo
+ * @desc    Verify face in uploaded photo against user's registered face (or wardrobe owner's face)
  */
 router.post(
-  '/scan-photo',
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
+  ['/verify', '/verify-user-face', '/scan-photo', '/scan-gallery-photo'],
+  uploadMedia,
   validateScanUpload,
   validateThresholdParam,
   faceRecognitionController.scanImage
 );
 
-// Backward-compatibility aliases
-router.post(
-  ['/scan-gallery-photo', '/verify-user-face'],
-  upload.fields([
-    { name: 'photo', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
-  validateScanUpload,
-  validateThresholdParam,
-  faceRecognitionController.scanImage
+/**
+ * 3. GET FACE STATUS
+ * @route   GET /api/face-recognition/status
+ * @alias   GET /api/face-recognition/get, /reference
+ * @desc    Get user's registered reference face status and metadata
+ */
+router.get(
+  ['/status', '/get', '/reference'],
+  faceRecognitionController.getReferenceStatus
 );
+
+// Backward-compatibility utility routes
+router.post('/reference/validate', faceRecognitionController.validateReference);
+router.delete(['/reference', '/delete', '/'], faceRecognitionController.deleteReference);
 
 module.exports = router;
 
