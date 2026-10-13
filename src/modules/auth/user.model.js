@@ -83,6 +83,9 @@ userSchema.pre('save', function (next) {
   if (this.profileImage) {
     this.profileImage = formatUploadUrl(this.profileImage);
   }
+  if (this.referenceFace && this.referenceFace.imagePath) {
+    this.referenceFace.imagePath = formatUploadUrl(this.referenceFace.imagePath);
+  }
   next();
 });
 

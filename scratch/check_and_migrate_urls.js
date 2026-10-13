@@ -78,6 +78,8 @@ async function migrate() {
     let changed = false;
     let cover = w.coverImage;
     let face = w.ownerFaceImage;
+    let refFace = w.referenceFace;
+
     if (cover && !cover.startsWith('http')) {
       cover = toFullUrl(cover);
       changed = true;
@@ -86,10 +88,15 @@ async function migrate() {
       face = toFullUrl(face);
       changed = true;
     }
+    if (refFace && refFace.imagePath && !refFace.imagePath.startsWith('http')) {
+      refFace = { ...refFace, imagePath: toFullUrl(refFace.imagePath) };
+      changed = true;
+    }
+
     if (changed) {
       await db.collection('wardrobes').updateOne(
         { _id: w._id },
-        { $set: { coverImage: cover, ownerFaceImage: face } }
+        { $set: { coverImage: cover, ownerFaceImage: face, referenceFace: refFace } }
       );
       updatedWardrobes++;
     }
@@ -100,10 +107,23 @@ async function migrate() {
   const users = await db.collection('users').find({}).toArray();
   let updatedUsers = 0;
   for (const u of users) {
-    if (u.profileImage && !u.profileImage.startsWith('http')) {
+    let changed = false;
+    let profile = u.profileImage;
+    let refFace = u.referenceFace;
+
+    if (profile && !profile.startsWith('http')) {
+      profile = toFullUrl(profile);
+      changed = true;
+    }
+    if (refFace && refFace.imagePath && !refFace.imagePath.startsWith('http')) {
+      refFace = { ...refFace, imagePath: toFullUrl(refFace.imagePath) };
+      changed = true;
+    }
+
+    if (changed) {
       await db.collection('users').updateOne(
         { _id: u._id },
-        { $set: { profileImage: toFullUrl(u.profileImage) } }
+        { $set: { profileImage: profile, referenceFace: refFace } }
       );
       updatedUsers++;
     }

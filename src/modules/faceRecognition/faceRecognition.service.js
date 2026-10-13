@@ -189,7 +189,7 @@ class FaceRecognitionService {
                 boundingBox: face.boundingBox,
                 detectionConfidence: face.confidence,
                 lastGeneratedAt: new Date(),
-                imagePath: wardrobeFaceImg,
+                imagePath: formatUploadUrl(wardrobeFaceImg),
               };
               await wardrobe.save();
               referenceEmbedding = face.embedding;
@@ -228,7 +228,7 @@ class FaceRecognitionService {
             boundingBox: face.boundingBox,
             detectionConfidence: face.confidence,
             lastGeneratedAt: new Date(),
-            imagePath: user.profileImage,
+            imagePath: formatUploadUrl(user.profileImage),
           };
 
           await user.save();
@@ -303,7 +303,7 @@ class FaceRecognitionService {
             boundingBox: user.referenceFace.boundingBox,
             detectionConfidence: user.referenceFace.detectionConfidence,
             lastGeneratedAt: user.referenceFace.lastGeneratedAt,
-            imagePath: user.referenceFace.imagePath,
+            imagePath: formatUploadUrl(user.referenceFace.imagePath),
           }
         : null,
     };

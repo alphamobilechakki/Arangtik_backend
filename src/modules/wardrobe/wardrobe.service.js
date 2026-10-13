@@ -45,7 +45,7 @@ const createWardrobe = async (userId, data, files = null) => {
           boundingBox: face.boundingBox,
           detectionConfidence: face.confidence,
           lastGeneratedAt: new Date(),
-          imagePath: targetFaceImg,
+          imagePath: formatUploadUrl(targetFaceImg),
         };
         console.log(`[createWardrobe] Reference face generated successfully for wardrobe "${name}"`);
       }

@@ -82,6 +82,9 @@ WardrobeSchema.pre('save', function (next) {
   if (this.ownerFaceImage) {
     this.ownerFaceImage = formatUploadUrl(this.ownerFaceImage);
   }
+  if (this.referenceFace && this.referenceFace.imagePath) {
+    this.referenceFace.imagePath = formatUploadUrl(this.referenceFace.imagePath);
+  }
   next();
 });
 
