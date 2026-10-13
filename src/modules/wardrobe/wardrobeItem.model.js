@@ -56,6 +56,11 @@ const WardrobeItemSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    perceptualHash: {
+      type: String,
+      trim: true,
+      index: true,
+    },
     sourceImageIndex: {
       type: Number,
       default: 0,

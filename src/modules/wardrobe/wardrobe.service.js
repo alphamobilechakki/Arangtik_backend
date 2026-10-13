@@ -251,22 +251,76 @@ const addItem = async (userId, itemData, file = null) => {
   }
 
   // --- AUTOMATIC DUPLICATE DRESS PREVENTION ---
-  // Unless user explicitly specified allowDuplicate or forceAdd:
-  const isForceAdd = itemData.forceAdd === true || itemData.allowDuplicate === true;
-  if (!isForceAdd) {
-    // 1. Exact Source Image Duplicate Check (File Hash)
+  // Explicit override: allowDuplicate or forceAdd (set intentionally by user for a specific item)
+  const isExplicitDuplicateAllowed =
+    itemData.forceAdd === true ||
+    itemData.forceAdd === 'true' ||
+    itemData.allowDuplicate === true ||
+    itemData.allowDuplicate === 'true';
+
+  const isAutoAddAll =
+    itemData.autoAddAll === true ||
+    itemData.autoAddAll === 'true';
+
+  // Calculate perceptual hash on file if present
+  let currentPerceptualHash = null;
+  if (file?.path) {
+    const aiVisionService = require('../clothAnalysis/aiVision.service');
+    try {
+      currentPerceptualHash = await aiVisionService.calculatePerceptualHash(file.path);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // LEVEL 1: Exact Source Image Duplicate Check (File Hash & Perceptual Hash)
+  // Must ALWAYS run unless user explicitly specified allowDuplicate=true or forceAdd=true!
+  // autoAddAll does NOT allow exact duplicate photos to be added multiple times!
+  if (!isExplicitDuplicateAllowed) {
     if (sourceImageHash) {
       const existingExact = await WardrobeItem.findOne({
         userId,
         sourceImageHash,
       });
       if (existingExact) {
-        console.log(`[wardrobeService.addItem] Exact photo duplicate detected for user ${userId}: "${existingExact.name}". Returning existing item.`);
-        return existingExact;
+        console.log(`[wardrobeService.addItem] Exact photo duplicate detected for user ${userId}: "${existingExact.name}" (hash: ${sourceImageHash.slice(0, 10)}). Skipping duplicate item addition.`);
+        const doc = existingExact.toObject ? existingExact.toObject() : existingExact;
+        doc.isDuplicate = true;
+        doc.isExistingItem = true;
+        doc.duplicateReason = 'EXACT_IMAGE_HASH';
+        doc.similarityScore = 1.0;
+        doc.uploadedPhotoUrl = sourcePhotoUrl;
+        doc.uploadedDetectedGarment = detectedItem || autoFilledFields;
+        return doc;
       }
     }
 
-    // 2. AI Vision / Attribute Duplicate Match against user's existing wardrobe
+    if (currentPerceptualHash) {
+      const aiVisionService = require('../clothAnalysis/aiVision.service');
+      const recentCandidates = await WardrobeItem.find({
+        userId,
+        perceptualHash: { $exists: true, $ne: null },
+      }).limit(50);
+      for (const cand of recentCandidates) {
+        const sim = aiVisionService.calculateHashSimilarity(currentPerceptualHash, cand.perceptualHash);
+        if (sim >= 0.92) {
+          console.log(`[wardrobeService.addItem] Exact perceptual image duplicate detected for user ${userId}: "${cand.name}" (${Math.round(sim * 100)}% visual match). Skipping duplicate item addition.`);
+          const doc = cand.toObject ? cand.toObject() : cand;
+          doc.isDuplicate = true;
+          doc.isExistingItem = true;
+          doc.duplicateReason = 'PERCEPTUAL_HASH';
+          doc.similarityScore = sim;
+          doc.uploadedPhotoUrl = sourcePhotoUrl;
+          doc.uploadedDetectedGarment = detectedItem || autoFilledFields;
+          return doc;
+        }
+      }
+    }
+  }
+
+  // LEVEL 2: AI Vision / Attribute Duplicate Match against user's existing wardrobe
+  // Runs ONLY when neither explicit override nor bulk autoAddAll is active
+  if (!isExplicitDuplicateAllowed && !isAutoAddAll) {
     const existingCandidates = await WardrobeItem.find({
       userId,
       category,
@@ -293,7 +347,14 @@ const addItem = async (userId, itemData, file = null) => {
         );
         if (matchedItemDoc) {
           console.log(`[wardrobeService.addItem] Exact wardrobe duplicate detected for user ${userId}: "${matchedItemDoc.name}" (${matchResults[0].matchResult.confidenceScore * 100}% match). Returning existing item.`);
-          return matchedItemDoc;
+          const doc = matchedItemDoc.toObject ? matchedItemDoc.toObject() : matchedItemDoc;
+          doc.isDuplicate = true;
+          doc.isExistingItem = true;
+          doc.duplicateReason = 'AI_ATTRIBUTE_MATCH';
+          doc.similarityScore = matchResults[0].matchResult.confidenceScore;
+          doc.uploadedPhotoUrl = sourcePhotoUrl;
+          doc.uploadedDetectedGarment = detectedItem || autoFilledFields;
+          return doc;
         }
       }
     }
@@ -329,6 +390,7 @@ const addItem = async (userId, itemData, file = null) => {
     sourceType,
     sourcePhotoUrl,
     sourceImageHash,
+    perceptualHash: currentPerceptualHash,
     sourceImageIndex,
     images: processedImages,
     attributes,
@@ -560,6 +622,8 @@ const addItemFromDetection = async (userId, detection, extraData = {}) => {
     sourceImageHash: extraData.sourceImageHash || detection.sourceImageHash || null,
     attributes: attrs,
     tags: extraData.tags || detection.tags || autoFields.tags || [attrs.primaryColor, detection.subCategory, detection.category].filter(Boolean),
+    forceAdd: extraData.forceAdd,
+    allowDuplicate: extraData.allowDuplicate,
   };
 
   return await addItem(userId, itemPayload);

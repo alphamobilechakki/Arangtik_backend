@@ -182,6 +182,100 @@ class SegmentationService {
   }
 
   /**
+   * Refines accessory & footwear cutouts: removes white halos/fringes via color decontamination,
+   * suppresses faint alpha noise, and eliminates tiny disconnected shadow/background floaters.
+   */
+  cleanBoundaryEdges(buffer, width, height) {
+    const out = Buffer.from(buffer);
+    const total = width * height;
+
+    // 1. Suppress faint background haze / alpha noise (< 32 out of 255)
+    for (let i = 0; i < total * 4; i += 4) {
+      if (out[i + 3] < 32) {
+        out[i + 3] = 0;
+      }
+    }
+
+    // 2. Color decontamination (Defringing): blend semi-transparent boundary pixels towards solid foreground
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        const a = out[idx + 3];
+        if (a >= 32 && a <= 220) {
+          const neighbors = [
+            ((y - 1) * width + x) * 4,
+            ((y + 1) * width + x) * 4,
+            (y * width + (x - 1)) * 4,
+            (y * width + (x + 1)) * 4,
+          ];
+          let fgR = 0, fgG = 0, fgB = 0, fgCount = 0;
+          for (const nIdx of neighbors) {
+            if (out[nIdx + 3] > 220) {
+              fgR += out[nIdx];
+              fgG += out[nIdx + 1];
+              fgB += out[nIdx + 2];
+              fgCount++;
+            }
+          }
+          if (fgCount > 0) {
+            fgR = Math.round(fgR / fgCount);
+            fgG = Math.round(fgG / fgCount);
+            fgB = Math.round(fgB / fgCount);
+            const blendRatio = 0.65;
+            out[idx] = Math.round(out[idx] * (1 - blendRatio) + fgR * blendRatio);
+            out[idx + 1] = Math.round(out[idx + 1] * (1 - blendRatio) + fgG * blendRatio);
+            out[idx + 2] = Math.round(out[idx + 2] * (1 - blendRatio) + fgB * blendRatio);
+          }
+        }
+      }
+    }
+
+    // 3. Remove tiny disconnected shadow specks and margin floaters (< 100 pixels)
+    const visited = new Uint8Array(total);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const pIdx = y * width + x;
+        if (visited[pIdx] || out[pIdx * 4 + 3] < 35) continue;
+
+        const queue = [pIdx];
+        visited[pIdx] = 1;
+        const comp = [];
+        let head = 0;
+        while (head < queue.length) {
+          const curr = queue[head++];
+          comp.push(curr);
+          const cy = Math.floor(curr / width);
+          const cx = curr % width;
+          const nbrs = [
+            [cy - 1, cx],
+            [cy + 1, cx],
+            [cy, cx - 1],
+            [cy, cx + 1],
+          ];
+          for (const [ny, nx] of nbrs) {
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              const nIdx = ny * width + nx;
+              if (!visited[nIdx] && out[nIdx * 4 + 3] >= 35) {
+                visited[nIdx] = 1;
+                queue.push(nIdx);
+              }
+            }
+          }
+        }
+
+        // Only prune small detached noise components, leaving valid paired items (e.g. shoes, earrings) untouched
+        if (comp.length < Math.max(100, Math.round(total * 0.003))) {
+          for (const p of comp) {
+            out[p * 4 + 3] = 0;
+          }
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Segments a cropped clothing image to remove background and create a transparent cutout.
    * Falls back gracefully to original rectangular crop if segmentation fails or erases the image.
    * 
@@ -199,6 +293,7 @@ class SegmentationService {
       autoInpaint = false,
       excludeSkin = false,
       garmentColor = '',
+      isAccessory = false,
     } = options;
 
     let originalBuffer;
@@ -300,15 +395,24 @@ class SegmentationService {
         }
       }
 
-      // Boost fabric opacity for solid garment look (prevents faded/washed-out ghosting)
-      for (let i = 0; i < rawBytes.length; i += 4) {
-        const a = rawBytes[i + 3];
-        if (a > 64) {
-          rawBytes[i + 3] = Math.min(255, Math.round(a * 1.15 + 20));
+      // For cloth garments: Boost fabric opacity for solid garment look (prevents faded/washed-out ghosting)
+      // For accessories/footwear: Preserve smooth antialiased boundaries without harsh stair-step aliasing
+      if (!isAccessory) {
+        for (let i = 0; i < rawBytes.length; i += 4) {
+          const a = rawBytes[i + 3];
+          if (a > 64) {
+            rawBytes[i + 3] = Math.min(255, Math.round(a * 1.15 + 20));
+          }
         }
       }
 
       let finalBuffer = rawBytes;
+
+      // Accessory & Footwear Defringing & Floater Pruning
+      if (isAccessory) {
+        finalBuffer = this.cleanBoundaryEdges(finalBuffer, width, height);
+      }
+
       let transparentPixels = 0;
       let opaquePixels = 0;
       const totalPixels = width * height;
@@ -351,7 +455,8 @@ class SegmentationService {
       }
 
       // 7. Men's Wear Skin Exclusion (removes bare neck, arms, hands and isolates pure garment)
-      if (excludeSkin) {
+      // STRICT: Never run on accessories or footwear (preserves tan leather, gold, brass, specular reflections)
+      if (excludeSkin && !isAccessory) {
         try {
           finalBuffer = this.removeSkinAndIsolateGarment(finalBuffer, width, height, garmentColor);
         } catch (skinErr) {

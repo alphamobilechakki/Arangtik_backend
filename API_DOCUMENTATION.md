@@ -134,16 +134,19 @@ FLOW 3: DIRECT DRESS / CAMERA CLICK FLOW (1 TO 100 DRESS PHOTOS)
     ├─► 1. POST /api/wardrobe/scan-item
     │      Input: 1 or multiple dress photos (field: "photo" or "photos")
     │      Action: Detects dress type, colors, pattern, occasion & extracts clean cutout.
-    │      Returns: Pre-filled fields for user to inspect, edit, or adjust in UI.
+    │              Runs Multi-Tier Duplicate Check against Almari (EXACT_MATCH, AMBIGUOUS_MATCH, NEW_ITEM).
+    │      Returns: Pre-filled fields, duplicate confidenceScore, and existing matched items for comparison.
     └─► 2. POST /api/wardrobe/extract-item
            Input: Confirmed clothing details (JSON array or single object)
+                  Optional Flags: { allowDuplicate: true, forceAdd: true }
            Action: Persists confirmed clothes to Almari.
 
   Option B: 1-Click Fast Save (Batch Ingestion Mode)
     └─► POST /api/wardrobe/extract-item
         • Form-Data: photo (1 photo) or photos (up to 100 photos), wardrobeId, storagePlace
+        • Optional Flags: autoAddAll=true / allowDuplicate=true (to force add separate items with matching styles)
         • Action: AI automatically segments, extracts attributes, checks duplicate items,
-                  and saves all new garments directly into the closet in 1 shot!
+                  and saves all garments directly into the closet in 1 shot!
 
 ==================================================================================================
 FLOW 4: CLOTHES CATALOG MANAGEMENT (CRUD)
@@ -638,7 +641,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 | `wardrobeId` | `string` | *Optional* | Target wardrobe ID to scope duplicates or owner face |
 | `verifyFace` | `boolean` | *Optional* | Check if wardrobe owner face is in photo (`true` / `false`) |
 
-#### Response (`200 OK`)
+#### Response (`200 OK`) — Includes Multi-Tier Duplicate Detection Metadata
 ```json
 {
   "statusCode": 200,
@@ -648,6 +651,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
     "originalImageUrl": "/uploads/img_dress_photo.jpg",
     "sourceImageHash": "a1b2c3d4e5f6...",
     "detectedItemsCount": 1,
+    "isExactDuplicateImage": false,
     "autoFilledFields": {
       "name": "Navy Blue Formal Linen Shirt",
       "category": "UPPER_WEAR",
@@ -660,10 +664,36 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
       "sleeveLength": "FULL_SLEEVE",
       "occasion": ["OFFICE", "FORMAL"],
       "croppedImageUrl": "/uploads/crops/segmented/seg-0-1791545708048.webp"
-    }
+    },
+    "analysis": [
+      {
+        "tempDetectionId": "det_xyz123",
+        "name": "Navy Blue Formal Linen Shirt",
+        "category": "UPPER_WEAR",
+        "subCategory": "Shirt",
+        "croppedImageUrl": "/uploads/crops/segmented/seg-0-1791545708048.webp",
+        "selected": true,
+        "isDuplicate": false,
+        "isAmbiguous": false,
+        "matchType": "NEW_ITEM",
+        "matchResult": {
+          "status": "NEW_ITEM",
+          "confidenceScore": 0.0,
+          "message": "New dress detected! Ready to add to wardrobe.",
+          "matchedItem": null,
+          "candidateMatches": []
+        }
+      }
+    ]
   }
 }
 ```
+
+> [!NOTE]
+> **Duplicate Detection Schema Values:**
+> - When `matchResult.status === "EXACT_MATCH"` (confidenceScore >= 0.72): The dress already exists in the wardrobe. `isDuplicate` is `true` and `selected` is automatically `false`.
+> - When `matchResult.status === "AMBIGUOUS_MATCH"` (0.52 <= confidenceScore < 0.72): A similar dress exists in the wardrobe. `isAmbiguous` is `true`.
+> - When `matchResult.status === "NEW_ITEM"`: Brand new item detected.
 
 ---
 
@@ -680,6 +710,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 | `photo` (or `photos`) | `file` / `files` | **Yes** | 1 photo or up to 100 photos to extract & store |
 | `wardrobeId` | `string` | *Optional* | Target Almari closet container ID |
 | `storagePlace` | `string` | *Optional* | Shelf/rack location (default: `Main Closet`) |
+| `allowDuplicate` / `forceAdd` / `autoAddAll` | `boolean` / `string` | *Optional* | Set to `true` to force adding distinct items that have identical attributes (e.g. 4 different pairs of blue jeans). If not set, exact duplicate items already in the wardrobe are reused by default to prevent clutter. |
 
 #### JSON Payload (Option B: Confirm Reviewed Scan Array)
 ```json

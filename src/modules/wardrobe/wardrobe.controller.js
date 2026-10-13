@@ -88,10 +88,18 @@ const addItem = asyncHandler(async (req, res) => {
   // Bulk Add mode (if multiple photos uploaded)
   if (files.length > 1) {
     const createdItems = [];
+    const duplicateItems = [];
     for (const file of files) {
       try {
         const item = await wardrobeService.addItem(userId, req.body, file);
-        createdItems.push(item);
+        if (item) {
+          const isDup = item.isDuplicate || item.isExistingItem || createdItems.some((c) => String(c._id) === String(item._id));
+          if (isDup) {
+            duplicateItems.push(item);
+          } else {
+            createdItems.push(item);
+          }
+        }
       } catch (err) {
         console.warn(`[addItem bulk] Error adding file ${file.filename}:`, err.message);
       }
@@ -101,9 +109,15 @@ const addItem = asyncHandler(async (req, res) => {
       {
         totalPhotosReceived: files.length,
         totalItemsCreated: createdItems.length,
+        duplicateItemsSkipped: duplicateItems.length,
         items: createdItems,
+        duplicates: duplicateItems,
       },
-      `Bulk items added successfully (${createdItems.length} items added to wardrobe)`
+      duplicateItems.length > 0 && createdItems.length > 0
+        ? `Bulk processing complete: ${createdItems.length} new item(s) added, ${duplicateItems.length} duplicate dress(es) already in Almari (skipped).`
+        : duplicateItems.length > 0
+        ? `All ${duplicateItems.length} dress(es) already exist in this Almari (duplicate addition skipped).`
+        : `Bulk items added successfully (${createdItems.length} items added to wardrobe)`
     );
   }
 
@@ -181,6 +195,19 @@ const addItem = asyncHandler(async (req, res) => {
   }
 
   const item = await wardrobeService.addItem(userId, req.body, singleFile);
+
+  if (item && (item.isDuplicate || item.isExistingItem)) {
+    return ApiResponse.success(
+      res,
+      {
+        item,
+        isDuplicate: true,
+        duplicates: [item],
+        items: [],
+      },
+      `This dress already exists in your Almari as "${item.name}" (skipped duplicate addition).`
+    );
+  }
 
   return ApiResponse.created(res, item, 'Item added successfully to wardrobe store');
 });

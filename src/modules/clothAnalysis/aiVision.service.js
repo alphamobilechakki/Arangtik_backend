@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { GEMINI_API_KEY } = require('../../config/env.config');
+const { GEMINI_API_KEY, OPENAI_API_KEY } = require('../../config/env.config');
 const segmentationService = require('../../services/segmentation/segmentation.service');
 const { formatUploadUrl } = require('../../utils/url.util');
 
@@ -137,6 +137,108 @@ const calculateHashSimilarity = (hash1, hash2) => {
   } catch (e) {
     return 0;
   }
+};
+
+/**
+ * Calculate Intersection-over-Union (IoU) between two bounding boxes [ymin, xmin, ymax, xmax]
+ */
+const calculateIoU = (boxA, boxB) => {
+  if (!boxA || !boxB || boxA.length !== 4 || boxB.length !== 4) return 0;
+  const [yminA, xminA, ymaxA, xmaxA] = boxA;
+  const [yminB, xminB, ymaxB, xmaxB] = boxB;
+
+  const yMinI = Math.max(yminA, yminB);
+  const xMinI = Math.max(xminA, xminB);
+  const yMaxI = Math.min(ymaxA, yminB);
+  const xMaxI = Math.min(xmaxA, xmaxB);
+
+  const interWidth = Math.max(0, xMaxI - xMinI);
+  const interHeight = Math.max(0, Math.min(ymaxA, ymaxB) - Math.max(yminA, yminB));
+  const interArea = interWidth * interHeight;
+
+  const areaA = Math.max(0, ymaxA - yminA) * Math.max(0, xmaxA - xminA);
+  const areaB = Math.max(0, ymaxB - yminB) * Math.max(0, xmaxB - xminB);
+  const unionArea = areaA + areaB - interArea;
+
+  if (unionArea <= 0) return 0;
+  return interArea / unionArea;
+};
+
+/**
+ * Call OpenAI GPT-4o-mini Vision for deep coordinate and clothing attribute extraction
+ */
+const analyzeWithOpenAIVision = async (visionBuffer, promptText) => {
+  if (!OPENAI_API_KEY) return [];
+  try {
+    const startTime = Date.now();
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert World-Class Fashion Vision AI specialized in Digital Wardrobe Clothing Extraction. Output ONLY a valid raw JSON array of objects without markdown formatting or code blocks.',
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${visionBuffer.toString('base64')}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      console.warn('[aiVision] OpenAI Vision API error:', data.error.message);
+      return [];
+    }
+
+    const content = data.choices?.[0]?.message?.content || '';
+    const match = content.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]);
+    console.log(`[aiVision] Successfully analyzed image with OpenAI gpt-4o-mini (${parsed.length} items found in ${Date.now() - startTime}ms)`);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('[aiVision] OpenAI Vision call failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Checks whether an item is Footwear, an Accessory, or Jewelry (Gehne)
+ */
+const isFootwearOrAccessory = (it) => {
+  if (!it) return false;
+  const c = (it.category || '').toUpperCase();
+  const s = (it.subCategory || '').toLowerCase();
+  const n = (it.name || '').toLowerCase();
+  const accessoryKeywords = [
+    'sunglasses', 'glasses', 'spectacles', 'watch', 'smartwatch', 'belt', 'cap', 'hat', 'beanie',
+    'shoes', 'sneakers', 'sandals', 'heels', 'loafers', 'boots', 'slippers', 'flats', 'oxfords', 'derby', 'footwear',
+    'jewelry', 'jewellery', 'necklace', 'earrings', 'earring', 'ring', 'rings', 'bracelet', 'bangle', 'bangles', 'chain', 'pendant', 'anklet', 'gehna', 'gehne',
+    'bag', 'handbag', 'tote', 'clutch', 'purse', 'wallet', 'backpack', 'scarf', 'tie', 'bow-tie',
+  ];
+  return (
+    c === 'ACCESSORIES' ||
+    c === 'FOOTWEAR' ||
+    accessoryKeywords.some((k) => s.includes(k) || n.includes(k))
+  );
 };
 
 /**
@@ -328,6 +430,8 @@ const VISION_MODELS = [
   'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
 ].filter((model, idx, arr) => arr.indexOf(model) === idx);
 
 /**
@@ -389,8 +493,8 @@ CRITICAL EXTRACTION RULES (STRICT COMPLIANCE REQUIRED):
    - Upper wear (T-Shirt, Shirt, Polo, Top, Hoodie, Jacket, Blazer, etc.)
    - Lower wear (Jeans, Pants, Trousers, Shorts, Trackpants, Skirt, etc.)
    - Traditional / Full Body (Saree, Kurta Set, Salwar Suit, Anarkali, Lehenga Choli, One-piece Dress, Gown)
-2. STRICTLY DO NOT EXTRACT ACCESSORIES OR FOOTWEAR from this person's outfit photo:
-   - DO NOT extract sunglasses, spectacles, watches, belts, caps, hats, rings, bracelets, or shoes from a person's photo! Only extract actual garments of clothing.
+2. STRICTLY DO NOT EXTRACT ACCESSORIES, JEWELRY (GEHNE), OR FOOTWEAR from this person's outfit photo:
+   - DO NOT extract sunglasses, spectacles, watches, belts, caps, hats, rings, bracelets, necklaces, earrings, chains, or shoes from a person's photo! Only extract actual garments of clothing. Never extract accessories worn on human bodies.
 3. SEVERELY CUTOFF / HALF-VISIBLE GARMENT RULE (VERY IMPORTANT):
    - If a garment is cut off by the camera frame such that only a small portion is visible (for example: only half a T-shirt or collar is visible because the photo starts at mid-chest, but the pants/jeans are fully visible), DO NOT DETECT THE HALF T-SHIRT! Extract ONLY the fully visible pants/jeans. A garment must be prominently visible (>60% of the piece in frame) to be extracted.
 4. WOMEN'S ETHNIC / TRADITIONAL ENSEMBLE RULES (NO AWKWARD FRAGMENTATION):
@@ -424,11 +528,17 @@ You are an expert World-Class Fashion Vision AI specialized in Digital Wardrobe 
 Analyze the uploaded image (which may contain a person wearing an outfit, clothes on hangers, flat-lays, or showroom displays).
 
 CRITICAL EXTRACTION RULES (STRICT COMPLIANCE REQUIRED):
-1. IF THE PHOTO IS A PERSON WEARING AN OUTFIT:
-   - Extract ONLY the primary clothing garments (Upper Wear, Lower Wear, or Full Body / Traditional dress).
-   - DO NOT extract sunglasses, spectacles, watches, belts, caps, or shoes from a person's outfit photo!
-2. STANDALONE PRODUCT / ACCESSORY / SHOE EXCEPTION:
-   - Footwear (Shoes, Sneakers) or Accessories (Watch, Sunglasses) must ONLY be detected if the uploaded photo is specifically a DEDICATED STANDALONE product photo of that item (e.g. a flat-lay of shoes on the floor or a watch on a desk, with NO person wearing an outfit).
+1. IF THE PHOTO CONTAINS A PERSON WEARING AN OUTFIT OR HUMAN BODY:
+   - Extract ONLY the primary clothing garments (Upper Wear, Lower Wear, Traditional, Outerwear).
+   - STRICTLY NEVER EXTRACT ACCESSORIES, JEWELRY (GEHNE), OR FOOTWEAR from a person or human body!
+   - DO NOT detect shoes on human feet, watches on wrists, jewelry (necklaces, earrings, rings, bangles) on human skin/neck/ears, sunglasses on faces, or belts on waists. Only extract actual garments of clothing.
+2. DEDICATED STANDALONE PRODUCT / ACCESSORY / FOOTWEAR / JEWELRY EXCEPTION:
+   - Footwear (Shoes, Sneakers, Loafers, Heels, Boots, Sandals), Accessories (Watches, Bags, Belts, Caps, Sunglasses) and Jewelry / Gehne (Necklaces, Earrings, Rings, Bracelets, Bangles, Chains) must ONLY be detected if the uploaded photo is a DEDICATED STANDALONE product photo of that item alone (e.g. flat-lay of shoes on the floor/shelf, watch on a table/box, jewelry in a box/tray, with NO person wearing them).
+   - For standalone items, return:
+     * category: "FOOTWEAR" (for shoes, sneakers, loafers, heels, boots, sandals)
+     * category: "ACCESSORIES" (for watches, bags, belts, caps, sunglasses, and jewelry/gehne like necklaces, earrings, rings, bracelets, bangles, chains)
+     * subCategory: Exact type (e.g. "Shoes", "Sneakers", "Loafers", "Heels", "Watch", "Necklace", "Earrings", "Ring", "Bracelet", "Bag", "Belt", "Sunglasses")
+     * name: Descriptive fashion title (e.g. "Black Oxford Leather Formal Shoes", "Rose Gold Chronograph Watch", "Kundan Gold Choker Necklace", "Tan Leather Crossbody Bag")
 3. SEVERELY CUTOFF / HALF-VISIBLE GARMENT RULE (VERY IMPORTANT):
    - If a garment is cut off by the edge of the image frame such that only a partial portion is visible (for example: a photo starting below the chest showing only the bottom half of a T-shirt, but showing full pants/jeans), DO NOT DETECT THE HALF T-SHIRT! Detect ONLY the fully visible pants/jeans. A garment must be prominently visible (>60% of the item in frame) to be extracted.
 4. WOMEN'S ETHNIC / TRADITIONAL ENSEMBLE RULES (NO AWKWARD FRAGMENTATION):
@@ -438,9 +548,10 @@ CRITICAL EXTRACTION RULES (STRICT COMPLIANCE REQUIRED):
 5. NEVER detect bare skin, human face, bare neck, or mannequin stand as a clothing item!
 
 For EACH valid wearable item found, return a JSON object with:
-- "name": Highly descriptive fashion title (e.g. "White Ribbed Crewneck Short-Sleeve T-Shirt", "Black Slim-Fit Denim Jeans", "Red Banarasi Silk Saree with Blouse Ensemble")
+- "name": Highly descriptive fashion title.
+  * JEANS & PANTS SPECIAL INSTRUCTION: Carefully inspect the bounding box coordinates to identify the exact denim wash (e.g. "Vintage Acid Wash", "Bleached Light Blue Wash", "Mid Stonewash Blue", "Classic Medium Indigo", "Dark Raw Navy", "Charcoal/Black") and leg cut/fit (e.g. "Wide-Leg", "Straight-Leg", "Tapered Mom Fit", "Relaxed Baggy", "Flared", "Skinny"). NEVER label all blue jeans with the identical generic string "Light Blue Wash Denim Jeans"; make the title distinctively match its visual characteristics!
 - "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES"
-- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Saree" | "Kurta" | "Dress" | "Shoes" | "Watch"
+- "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Saree" | "Kurta" | "Dress" | "Shoes" | "Watch" | "Necklace" | "Bag"
 - "box2d": Normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) covering ONLY this specific item.
 - "polygon": Array of 24 to 48 normalized [y, x] coordinates (0 to 1000 scale) tracing ONLY the garment's outer fabric boundary contour.
 - "attributes": {
@@ -457,46 +568,62 @@ For EACH valid wearable item found, return a JSON object with:
 `;
   }
 
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   let rawList = [];
   let lastError = null;
 
-  // Multi-Model Cascade: Try working models in priority order
-  for (const modelName of VISION_MODELS) {
-    const modelStartTime = Date.now();
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: visionBuffer.toString('base64'),
-            mimeType: visionMimeType,
-          },
-        },
-      ]);
+  // Primary Provider Check: If AI_VISION_PROVIDER is explicitly set to 'openai', invoke OpenAI first
+  if (process.env.AI_VISION_PROVIDER === 'openai' && OPENAI_API_KEY) {
+    console.log('[aiVision] AI_VISION_PROVIDER is configured to openai. Engaging OpenAI gpt-4o-mini as primary vision engine...');
+    rawList = await analyzeWithOpenAIVision(visionBuffer, prompt);
+  }
 
-      const responseText = result.response.text().trim();
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
-      const duration = Date.now() - modelStartTime;
-      console.log(`[aiVision] Successfully analyzed image with model: ${modelName} (${rawList.length} items found in ${duration}ms)`);
-      lastError = null;
-      break;
-    } catch (err) {
-      const duration = Date.now() - modelStartTime;
-      const nextModel = VISION_MODELS[VISION_MODELS.indexOf(modelName) + 1] || 'none';
-      console.warn(`[aiVision] Model ${modelName} attempt failed after ${duration}ms (${err.message.slice(0, 100)}), cascading to fallback: ${nextModel}...`);
-      lastError = err;
+  // If OpenAI was not requested or returned 0, use Gemini Vision cascade
+  if (rawList.length === 0 && GEMINI_API_KEY) {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+    // Multi-Model Cascade: Try working models in priority order
+    for (const modelName of VISION_MODELS) {
+      const modelStartTime = Date.now();
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              data: visionBuffer.toString('base64'),
+              mimeType: visionMimeType,
+            },
+          },
+        ]);
+
+        const responseText = result.response.text().trim();
+        const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+        rawList = Array.isArray(parsed) ? parsed : parsed.items || [];
+        const duration = Date.now() - modelStartTime;
+        console.log(`[aiVision] Successfully analyzed image with model: ${modelName} (${rawList.length} items found in ${duration}ms)`);
+        lastError = null;
+        break;
+      } catch (err) {
+        const duration = Date.now() - modelStartTime;
+        const nextModel = VISION_MODELS[VISION_MODELS.indexOf(modelName) + 1] || 'none';
+        console.warn(`[aiVision] Model ${modelName} attempt failed after ${duration}ms (${err.message.slice(0, 100)}), cascading to fallback: ${nextModel}...`);
+        lastError = err;
+      }
     }
+  }
+
+  // Fallback: If Gemini cascade failed or returned 0, try OpenAI gpt-4o-mini
+  if (rawList.length === 0 && OPENAI_API_KEY) {
+    console.log('[aiVision] Gemini Vision models exhausted. Engaging OpenAI gpt-4o-mini as intelligent fallback...');
+    rawList = await analyzeWithOpenAIVision(visionBuffer, prompt);
   }
 
   if (rawList.length === 0) {
     if (lastError) {
-      console.error('[aiVision] All Gemini Vision models failed or quota exceeded:', lastError.message);
+      console.error('[aiVision] All Vision models failed or quota exceeded:', lastError.message);
     } else {
-      console.log('[aiVision] No garments identified by Gemini Vision in uploaded image. Engaging smart default fallback...');
+      console.log('[aiVision] No garments identified by Vision AI in uploaded image. Engaging smart default fallback...');
     }
     return getFallbackAnalysis(metadata);
   }
@@ -518,6 +645,23 @@ For EACH valid wearable item found, return a JSON object with:
     return true;
   });
 
+  // Coordinate-based Non-Maximum Suppression (IoU Deduplication)
+  // If multiple detected bounding boxes overlap >= 0.50 on the same garment category, keep the larger box and drop duplicate box
+  const deduplicatedItems = [];
+  for (const item of validItems) {
+    const isDuplicateBox = deduplicatedItems.some((existing) => {
+      const isSameCategory = (existing.category || '').toUpperCase() === (item.category || '').toUpperCase();
+      const iou = calculateIoU(existing.box2d, item.box2d);
+      return isSameCategory && iou >= 0.50;
+    });
+    if (!isDuplicateBox) {
+      deduplicatedItems.push(item);
+    } else {
+      console.log(`[aiVision] Dropped duplicate garment coordinate box for "${item.name}" (IoU overlap >= 0.50).`);
+    }
+  }
+  validItems = deduplicatedItems;
+
   if (validItems.length === 0) {
     console.log('[aiVision] Valid items resulted in 0 garments. Engaging smart default fallback...');
     return getFallbackAnalysis(metadata);
@@ -535,17 +679,6 @@ For EACH valid wearable item found, return a JSON object with:
       c === 'OUTERWEAR' ||
       c === 'FULL_BODY' ||
       ['shirt', 't-shirt', 'top', 'polo', 'hoodie', 'jacket', 'blazer', 'jeans', 'pant', 'trousers', 'shorts', 'skirt', 'saree', 'kurta', 'dress', 'gown', 'suit', 'lehenga'].some((k) => s.includes(k) || n.includes(k))
-    );
-  };
-
-  const isFootwearOrAccessory = (it) => {
-    const c = (it.category || '').toUpperCase();
-    const s = (it.subCategory || '').toLowerCase();
-    const n = (it.name || '').toLowerCase();
-    return (
-      c === 'ACCESSORIES' ||
-      c === 'FOOTWEAR' ||
-      ['sunglasses', 'glasses', 'spectacles', 'watch', 'belt', 'cap', 'hat', 'shoes', 'sneakers', 'sandals', 'heels', 'loafers', 'boots', 'jewelry', 'necklace', 'bracelet'].some((k) => s.includes(k) || n.includes(k))
     );
   };
 
@@ -758,9 +891,11 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
             );
           };
 
-          const shouldExcludeSkin = !isLadiesGarment(item);
+          const isAccessory = isFootwearOrAccessory(item);
+          // Skin exclusion is enabled strictly for men's clothing garments, NEVER for ladies garments AND NEVER for footwear/accessories/jewelry
+          const shouldExcludeSkin = !isLadiesGarment(item) && !isAccessory;
 
-          // Background Removal: Run neural segmentation by default so dress background is cleanly removed
+          // Background Removal: Run neural segmentation by default so dress/item background is cleanly removed
           const shouldSegment = options.removeBackground !== false && process.env.DISABLE_SEGMENTATION !== 'true';
           if (shouldSegment) {
             try {
@@ -771,6 +906,7 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
                 excludeSkin: shouldExcludeSkin,
                 garmentColor: item.attributes?.primaryColor || item.color || '',
                 autoInpaint: false,
+                isAccessory: isAccessory,
               });
               if (segResult && segResult.outputUrl) {
                 cropFilename = segResult.filename;
@@ -908,9 +1044,11 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
 
 module.exports = {
   analyzeImageWithGemini,
+  analyzeWithOpenAIVision,
   cropDetectedItems,
   matchAgainstWardrobe,
   calculateItemSimilarity,
   calculatePerceptualHash,
   calculateHashSimilarity,
+  calculateIoU,
 };

@@ -185,4 +185,17 @@ describe('Dress Duplicate & Ambiguity Detection Engine', () => {
     const simNear = aiVisionService.calculateHashSimilarity(hashA, hashC);
     assert.ok(simNear >= 0.98);
   });
+
+  it('correctly computes coordinate IoU to detect duplicate bounding boxes', () => {
+    // Overlapping boxes (IoU > 0.50)
+    const box1 = [100, 100, 500, 500]; // 400x400
+    const box2 = [120, 110, 500, 510]; // heavily overlapping
+    const iouHigh = aiVisionService.calculateIoU(box1, box2);
+    assert.ok(iouHigh >= 0.70);
+
+    // Completely disjoint boxes (IoU == 0)
+    const boxDisjoint = [600, 600, 900, 900];
+    const iouZero = aiVisionService.calculateIoU(box1, boxDisjoint);
+    assert.equal(iouZero, 0);
+  });
 });
