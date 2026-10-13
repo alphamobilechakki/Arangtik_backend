@@ -77,4 +77,13 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const { formatUploadUrl } = require('../../utils/url.util');
+
+userSchema.pre('save', function (next) {
+  if (this.profileImage) {
+    this.profileImage = formatUploadUrl(this.profileImage);
+  }
+  next();
+});
+
 module.exports = mongoose.model('User', userSchema);

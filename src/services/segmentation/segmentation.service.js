@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 let sharp = null;
 try {
@@ -217,7 +218,7 @@ class SegmentationService {
     const extension = outputFormat === 'image/png' ? 'png' : 'webp';
     const outputFilename = `${filenamePrefix}-${uniqueId}.${extension}`;
     const outputFilePath = path.join(segmentedCropsDir, outputFilename);
-    const outputUrl = `/uploads/crops/segmented/${outputFilename}`;
+    const outputUrl = formatUploadUrl(`/uploads/crops/segmented/${outputFilename}`);
     if (!sharp || !removeBackground) {
       fs.writeFileSync(outputFilePath, originalBuffer);
       return {

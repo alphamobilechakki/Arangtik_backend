@@ -1,6 +1,7 @@
 const authService = require('./auth.service');
 const asyncHandler = require('../../utils/asyncHandler');
 const ApiResponse = require('../../utils/apiResponse');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 class AuthController {
   /**
@@ -70,7 +71,7 @@ class AuthController {
       });
     }
 
-    const imagePath = `/uploads/${file.filename}`;
+    const imagePath = formatUploadUrl(`/uploads/${file.filename}`);
     const result = await authService.updateProfileImage(req.user.id, imagePath, file.path);
     return ApiResponse.success(res, result, 'Profile image uploaded and reference face biometric registered successfully');
   });

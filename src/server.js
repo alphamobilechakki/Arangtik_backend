@@ -1,7 +1,7 @@
 const app = require('./app');
 const connectDB = require('./config/db.config');
-const { PORT, NODE_ENV } = require('./config/env.config');
-
+const { NODE_ENV } = require('./config/env.config');
+const PORT = 8083;
 /**
  * Initialize and start Arangtik Express Backend Server
  */
@@ -11,7 +11,7 @@ const startServer = async () => {
     await connectDB();
 
     // 2. Start HTTP Listener
-    app.listen(PORT, () => {
+    app.listen(8083, () => {
       console.log('==================================================');
       console.log(`🚀 Arangtik Backend Server Running in [${NODE_ENV.toUpperCase()}] mode`);
       console.log(`📡 Local Server URL: http://localhost:${PORT}`);

@@ -4,6 +4,7 @@ const Wardrobe = require('../wardrobe/wardrobe.model');
 const WardrobeItem = require('../wardrobe/wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const aiVisionService = require('./aiVision.service');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 /**
  * Deterministic SHA-256 canonical hash of original source image
@@ -28,7 +29,7 @@ const analyzePhoto = async (userId, file, options = {}) => {
     throw new ApiError(400, 'Please upload an image to analyze');
   }
 
-  const originalImageUrl = `/uploads/${file.filename}`;
+  const originalImageUrl = formatUploadUrl(`/uploads/${file.filename}`);
   const sourceImageHash = calculateSourceImageHash(file.path);
 
   let targetWardrobeId = options.wardrobeId || null;
@@ -272,7 +273,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
           name: ex.name,
           category: ex.category,
           subCategory: ex.subCategory,
-          croppedImageUrl: ex.images?.[0]?.url || `/uploads/${file.filename}`,
+          croppedImageUrl: ex.images?.[0]?.url || formatUploadUrl(`/uploads/${file.filename}`),
           attributes: ex.attributes ? (typeof ex.attributes.toJSON === 'function' ? ex.attributes.toJSON() : ex.attributes) : {},
           matchType: 'EXISTING_ITEM',
           matchedItem: persistedGarment,
@@ -299,7 +300,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
           similarity: 1.0,
         },
         facesDetected: 1,
-        originalImageUrl: `/uploads/${file.filename}`,
+        originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
         detectedItemsCount: processedItems.length,
         items: processedItems,
       };
@@ -330,7 +331,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
       matched: false,
       reason: 'USER_NOT_FOUND',
       facesDetected: scanResult.facesDetected || 0,
-      originalImageUrl: `/uploads/${file.filename}`,
+      originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
       items: [],
     };
   }
@@ -408,12 +409,12 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
             season: rawDetection.attributes?.seasons || rawDetection.season || [],
             style: rawDetection.attributes?.styleAesthetic || rawDetection.style || '',
             sourceType: 'GALLERY_SCAN',
-            sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourcePhotoUrl: formatUploadUrl(`/uploads/${file.filename}`),
             sourceImageHash: sourceImageHash || null,
             sourceImageIndex: i,
             images: [
               {
-                url: rawDetection.croppedImageUrl || `/uploads/${file.filename}`,
+                url: formatUploadUrl(rawDetection.croppedImageUrl || `/uploads/${file.filename}`),
                 filename: rawDetection.croppedFilename || file.filename,
                 isPrimary: true,
               },
@@ -451,7 +452,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
       boundingBox: primaryMatchedFace.boundingBox,
     },
     facesDetected: scanResult.facesDetected,
-    originalImageUrl: `/uploads/${file.filename}`,
+    originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
     detectedItemsCount: processedItems.length,
     items: processedItems,
   };
@@ -582,12 +583,12 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
             season: item.attributes?.seasons || item.season || [],
             style: item.attributes?.styleAesthetic || item.style || '',
             sourceType: 'MANUAL_UPLOAD',
-            sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourcePhotoUrl: formatUploadUrl(`/uploads/${file.filename}`),
             sourceImageHash: sourceImageHash || null,
             sourceImageIndex: itemIdx,
             images: [
               {
-                url: item.croppedImageUrl || `/uploads/${file.filename}`,
+                url: formatUploadUrl(item.croppedImageUrl || `/uploads/${file.filename}`),
                 filename: item.croppedFilename || file.filename,
                 isPrimary: true,
               },
@@ -605,7 +606,7 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
       results.totalGarmentsExtracted += croppedDetections.length;
       results.details.push({
         filename: file.filename,
-        originalImageUrl: `/uploads/${file.filename}`,
+        originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
         garmentsFound: croppedDetections.length,
         createdItems: fileCreatedItems,
         matchedItems: fileMatchedItems,
@@ -715,7 +716,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
         results.details.push({
           filename: file.filename,
-          originalImageUrl: `/uploads/${file.filename}`,
+          originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
           isUserFound: true,
           isExactDuplicateImage: true,
           userFaceScore: 1.0,
@@ -726,7 +727,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
             name: ex.name,
             category: ex.category,
             subCategory: ex.subCategory,
-            croppedImageUrl: ex.images?.[0]?.url || `/uploads/${file.filename}`,
+            croppedImageUrl: ex.images?.[0]?.url || formatUploadUrl(`/uploads/${file.filename}`),
             matchType: 'EXISTING_ITEM',
             matchedItem: ex,
             status: 'EXACT_MATCH',
@@ -758,7 +759,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
         results.unmatchedImagesCount++;
         results.details.push({
           filename: file.filename,
-          originalImageUrl: `/uploads/${file.filename}`,
+          originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
           isUserFound: false,
           facesDetected: scanResult.facesDetected,
           message: 'User face not detected in this photo. Skipped wardrobe extraction.',
@@ -822,12 +823,12 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
             season: item.attributes?.seasons || item.season || [],
             style: item.attributes?.styleAesthetic || item.style || '',
             sourceType: 'GALLERY_SCAN',
-            sourcePhotoUrl: `/uploads/${file.filename}`,
+            sourcePhotoUrl: formatUploadUrl(`/uploads/${file.filename}`),
             sourceImageHash: sourceImageHash || null,
             sourceImageIndex: gIdx,
             images: [
               {
-                url: item.croppedImageUrl || `/uploads/${file.filename}`,
+                url: formatUploadUrl(item.croppedImageUrl || `/uploads/${file.filename}`),
                 filename: item.croppedFilename || file.filename,
                 isPrimary: true,
               },
@@ -850,7 +851,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 
       results.details.push({
         filename: file.filename,
-        originalImageUrl: `/uploads/${file.filename}`,
+        originalImageUrl: formatUploadUrl(`/uploads/${file.filename}`),
         isUserFound: true,
         userFaceScore: scanResult.matchedFaces?.[0]?.similarityScore || scanResult.matchedFaces?.[0]?.confidence || 1.0,
         garmentsDetected: croppedDetections.length,
@@ -862,7 +863,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
           subCategory: m.subCategory,
           color: m.attributes?.primaryColor || m.color || '',
           fabric: m.attributes?.fabric || m.fabric || '',
-          croppedImageUrl: m.croppedImageUrl || `/uploads/${file.filename}`,
+          croppedImageUrl: formatUploadUrl(m.croppedImageUrl || `/uploads/${file.filename}`),
           status: m.status || 'CREATED',
           matchStatus: m.matchResult?.status || 'NEW_ITEM',
         })),

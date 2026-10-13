@@ -28,7 +28,7 @@ test('Upload Helpers - Unit Tests', async (t) => {
 
   await t.test('getImageUrl resolves static URL cleanly', () => {
     const url = getImageUrl('test_image.jpg');
-    assert.strictEqual(url, '/api/uploads/test_image.jpg');
+    assert.match(url, /test_image\.jpg$/);
 
     const fullHttp = getImageUrl('https://example.com/image.jpg');
     assert.strictEqual(fullHttp, 'https://example.com/image.jpg');
@@ -40,7 +40,7 @@ test('Upload Helpers - Unit Tests', async (t) => {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const savedUrl = await saveBase64Image(base64Png);
     assert.ok(savedUrl);
-    assert.match(savedUrl, /\/api\/uploads\/img_/);
+    assert.match(savedUrl, /uploads\/img_/);
 
     const filename = getImageFilename(savedUrl);
     assert.ok(filename);
@@ -86,15 +86,13 @@ test('Upload API Endpoints - Integration Tests', async (t) => {
     assert.strictEqual(data.success, true);
     assert.ok(data.data.url);
 
-    // Verify static access
-    const staticUrl = data.data.url.startsWith('http')
-      ? data.data.url
-      : `${baseUrl}${data.data.url}`;
+    // Verify static access locally on the test server
+    const filename = getImageFilename(data.data.url);
+    const staticUrl = `${baseUrl}/uploads/${filename}`;
     const staticRes = await fetch(staticUrl);
     assert.strictEqual(staticRes.status, 200);
 
     // Clean up
-    const filename = getImageFilename(data.data.url);
     const delRes = await fetch(`${baseUrl}/api/upload/${filename}`, {
       method: 'DELETE',
     });

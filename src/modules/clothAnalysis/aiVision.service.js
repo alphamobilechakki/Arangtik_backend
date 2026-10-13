@@ -4,6 +4,7 @@ const sharp = require('sharp');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GEMINI_API_KEY } = require('../../config/env.config');
 const segmentationService = require('../../services/segmentation/segmentation.service');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 // Ensure crops directory exists
 const cropsDir = path.join(__dirname, '../../../uploads/crops');
@@ -731,7 +732,7 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
             .toFile(cropFilePath);
 
           cropFilename = uniqueCropName;
-          cropUrl = `/uploads/crops/${uniqueCropName}`;
+          cropUrl = formatUploadUrl(`/uploads/crops/${uniqueCropName}`);
 
           // Map polygon coordinates to crop area for ghost mannequin body exclusion
           let relativePolygon = null;

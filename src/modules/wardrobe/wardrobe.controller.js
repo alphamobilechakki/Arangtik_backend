@@ -1,6 +1,7 @@
 const asyncHandler = require('../../utils/asyncHandler');
 const ApiResponse = require('../../utils/apiResponse');
 const wardrobeService = require('./wardrobe.service');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 const extractFilesFromReq = (req) => {
   if (Array.isArray(req.files)) {
@@ -160,7 +161,7 @@ const addItem = asyncHandler(async (req, res) => {
         try {
           const item = await wardrobeService.addItemFromDetection(userId, det, {
             wardrobeId: req.body.wardrobeId,
-            sourcePhotoUrl: `/uploads/${singleFile.filename}`,
+            sourcePhotoUrl: formatUploadUrl(`/uploads/${singleFile.filename}`),
             sourceImageHash: analysisResult.sourceImageHash,
           });
           createdItems.push(item);

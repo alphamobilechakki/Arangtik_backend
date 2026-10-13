@@ -91,15 +91,8 @@ const getImageUrl = (filename, req = null) => {
     return `${base}${cleanFilename}`;
   }
 
-  if (req && typeof req.get === 'function') {
-    const host = req.get('host') || '';
-    const protocol =
-      req.headers['x-forwarded-proto'] ||
-      (host.includes('arangtik.com') ? 'https' : (req.protocol || (req.secure ? 'https' : 'http')));
-    return `${protocol}://${host}/api/uploads/${cleanFilename}`;
-  }
-
-  return `/api/uploads/${cleanFilename}`;
+  const baseUrl = (process.env.BASE_URL || 'https://api.arangtik.com').replace(/\/+$/, '');
+  return `${baseUrl}/uploads/${cleanFilename}`;
 };
 
 /**

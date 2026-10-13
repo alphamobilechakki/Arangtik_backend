@@ -4,6 +4,7 @@ const User = require('../auth/user.model');
 const faceAIService = require('../../services/faceAI/faceAI.service');
 const { ERROR_CODES } = require('./faceRecognition.constants');
 const ApiError = require('../../utils/apiError');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 /**
  * Face Recognition Business Logic Service
@@ -108,7 +109,7 @@ class FaceRecognitionService {
 
     if (file && file.filename) {
       targetImagePath = file.path;
-      relativeUrl = `/uploads/${file.filename}`;
+      relativeUrl = formatUploadUrl(`/uploads/${file.filename}`);
       user.profileImage = relativeUrl;
     } else {
       if (!user.profileImage || user.profileImage.trim() === '') {

@@ -6,6 +6,7 @@ const User = require('./user.model');
 const Otp = require('./otp.model');
 const ApiError = require('../../utils/apiError');
 const { formatPhoneNumber, sendWhatsAppOtp } = require('../../utils/whatsapp.service');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 class AuthService {
   /**
@@ -186,7 +187,7 @@ class AuthService {
 
     // Handle file upload if provided
     if (file) {
-      const imagePath = `/uploads/${file.filename}`;
+      const imagePath = formatUploadUrl(`/uploads/${file.filename}`);
       const targetPath = file.path;
 
       try {

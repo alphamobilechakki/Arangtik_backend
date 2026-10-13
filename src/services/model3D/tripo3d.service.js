@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 // Ensure models directory exists inside uploads
 const uploadsDir = path.resolve(__dirname, '../../../uploads');
@@ -24,8 +25,8 @@ const getImageBuffer = async (imagePathOrUrl) => {
     return fs.readFileSync(imagePathOrUrl);
   }
 
-  // If starts with /uploads or uploads
-  const cleanPath = imagePathOrUrl.replace(/^\/?(api\/)?uploads\//, '');
+  // If starts with /uploads, uploads or full URL ending in /uploads/
+  const cleanPath = imagePathOrUrl.replace(/^(?:https?:\/\/[^/]+)?\/?(?:api\/)?uploads\//i, '');
   const possiblePaths = [
     path.join(uploadsDir, cleanPath),
     path.join(process.cwd(), 'uploads', cleanPath),
@@ -118,7 +119,7 @@ const generate3DFromImage = async (imageInput, options = {}) => {
       console.log(`[TripoSR] 3D model successfully saved to: ${savePath} (${glbBuffer.length} bytes)`);
 
       return {
-        url: `/uploads/models/${filename}`,
+        url: formatUploadUrl(`/uploads/models/${filename}`),
         filename,
         size: glbBuffer.length,
         engine: 'TripoSR',
@@ -128,7 +129,6 @@ const generate3DFromImage = async (imageInput, options = {}) => {
       lastError = err;
     }
   }
-
   throw new Error(`Failed to generate 3D model via Hugging Face TripoSR: ${lastError?.message || 'All spaces unreachable'}`);
 };
 

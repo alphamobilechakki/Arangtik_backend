@@ -72,6 +72,19 @@ const WardrobeSchema = new mongoose.Schema(
   }
 );
 
+// Ensure cover and owner face images always have full URL
+const { formatUploadUrl } = require('../../utils/url.util');
+
+WardrobeSchema.pre('save', function (next) {
+  if (this.coverImage) {
+    this.coverImage = formatUploadUrl(this.coverImage);
+  }
+  if (this.ownerFaceImage) {
+    this.ownerFaceImage = formatUploadUrl(this.ownerFaceImage);
+  }
+  next();
+});
+
 // Indexes for high-performance user-scoped queries
 WardrobeSchema.index({ userId: 1, storeType: 1, isDefault: 1 });
 WardrobeSchema.index({ userId: 1, storeType: 1, isActive: 1 });

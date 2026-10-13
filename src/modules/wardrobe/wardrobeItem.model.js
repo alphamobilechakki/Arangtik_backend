@@ -181,6 +181,25 @@ const WardrobeItemSchema = new mongoose.Schema(
   }
 );
 
+// Ensure all image URLs are always formatted with full BASE_URL (https://api.arangtik.com)
+const { formatUploadUrl } = require('../../utils/url.util');
+
+WardrobeItemSchema.pre('save', function (next) {
+  if (this.sourcePhotoUrl) {
+    this.sourcePhotoUrl = formatUploadUrl(this.sourcePhotoUrl);
+  }
+  if (Array.isArray(this.images)) {
+    this.images.forEach((img) => {
+      if (img.url) img.url = formatUploadUrl(img.url);
+      if (img.thumbnailUrl) img.thumbnailUrl = formatUploadUrl(img.thumbnailUrl);
+    });
+  }
+  if (this.model3d && this.model3d.url) {
+    this.model3d.url = formatUploadUrl(this.model3d.url);
+  }
+  next();
+});
+
 // Compound indexes for user-scoped and wardrobe-scoped queries
 WardrobeItemSchema.index({ userId: 1, wardrobeId: 1 });
 WardrobeItemSchema.index({ userId: 1, category: 1 });

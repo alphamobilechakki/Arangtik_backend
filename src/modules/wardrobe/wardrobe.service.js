@@ -4,6 +4,7 @@ const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
 const tripo3dService = require('../../services/model3D/tripo3d.service');
+const { formatUploadUrl } = require('../../utils/url.util');
 
 /**
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
@@ -14,19 +15,19 @@ const createWardrobe = async (userId, data, files = null) => {
     throw new ApiError(400, 'Wardrobe name is required');
   }
 
-  let coverImage = data.coverImage || '';
-  let ownerFaceImage = data.ownerFaceImage || '';
+  let coverImage = data.coverImage ? formatUploadUrl(data.coverImage) : '';
+  let ownerFaceImage = data.ownerFaceImage ? formatUploadUrl(data.ownerFaceImage) : '';
 
   if (files && typeof files === 'object') {
     if (files.ownerFaceImage) {
-      ownerFaceImage = `/uploads/${files.ownerFaceImage.filename}`;
+      ownerFaceImage = formatUploadUrl(`/uploads/${files.ownerFaceImage.filename}`);
     }
     if (files.coverImage) {
-      coverImage = `/uploads/${files.coverImage.filename}`;
+      coverImage = formatUploadUrl(`/uploads/${files.coverImage.filename}`);
     }
     if (files.filename) {
-      coverImage = `/uploads/${files.filename}`;
-      ownerFaceImage = `/uploads/${files.filename}`;
+      coverImage = formatUploadUrl(`/uploads/${files.filename}`);
+      ownerFaceImage = formatUploadUrl(`/uploads/${files.filename}`);
     }
   }
 
@@ -121,7 +122,9 @@ const addItem = async (userId, itemData, file = null) => {
   let autoFilledFields = {};
   let detectedItem = null;
   let sourceImageHash = itemData.sourceImageHash || null;
-  let sourcePhotoUrl = itemData.sourcePhotoUrl || (file ? `/uploads/${file.filename}` : '');
+  let sourcePhotoUrl = itemData.sourcePhotoUrl
+    ? formatUploadUrl(itemData.sourcePhotoUrl)
+    : (file ? formatUploadUrl(`/uploads/${file.filename}`) : '');
 
   // If a dress photo is uploaded (e.g. from camera click or gallery upload), run AI dress analysis
   if (file) {
@@ -209,7 +212,7 @@ const addItem = async (userId, itemData, file = null) => {
       isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
     }));
   } else if (file) {
-    const primaryCropUrl = autoFilledFields.croppedImageUrl || `/uploads/${file.filename}`;
+    const primaryCropUrl = formatUploadUrl(autoFilledFields.croppedImageUrl || `/uploads/${file.filename}`);
     processedImages = [
       {
         url: primaryCropUrl,
