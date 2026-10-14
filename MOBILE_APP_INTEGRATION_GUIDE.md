@@ -834,6 +834,193 @@ export function getImageUrl(path?: string): string {
 - If offline, alert user: *"No internet connection. Please check your network and try again"*.
 
 ================================================================================
+## FEATURE 12: SMART LAUNDRY MANAGEMENT & WORK ORDERS
+================================================================================
+
+### 1. Overview
+The Laundry module allows mobile users to select multiple dresses from their Almaris, choose a laundry vendor (by entering a phone number or selecting from device contacts), set a **Pickup Date** and an **Expected Delivery Date**, and create a professional **Work Order**.
+
+The backend automatically:
+1. Validates and snapshots all selected garments with photos, colors, and fabrics.
+2. Identifies whether the vendor is **Registered** or **Unregistered** (saving unregistered vendors to a dedicated table).
+3. Generates a branded **Arangtik Work Order PDF** with user details, dates, and garment inventory.
+4. Dispatches a WhatsApp notification containing the Work Order details and PDF attachment to the vendor via **API24**.
+5. When an unregistered vendor later registers/logs into Arangtik, their records are automatically converted to a verified registered vendor and past work orders are linked.
+
+---
+
+### 2. Mobile Endpoints
+
+#### A. Vendor Phone Lookup (Contacts or Manual Input)
+When the user types a number or picks a contact from their device:
+- **Method:** `GET`
+- **Path:** `/api/v1/laundry/vendors/lookup?phone=919876543210`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+- **Response (200 OK — Registered Vendor):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Registered vendor found",
+  "data": {
+    "isRegistered": true,
+    "vendor": {
+      "id": "670c5e1b4f1a2c3d4e5f6a7b",
+      "vendorId": "VND-489201",
+      "name": "CleanWash Express",
+      "phone": "919876543210",
+      "businessName": "CleanWash Express Laundromat",
+      "rating": 5,
+      "totalOrdersHandled": 14,
+      "isVerified": true
+    }
+  }
+}
+```
+- **Response (200 OK — Unregistered Vendor / New Contact):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor details retrieved",
+  "data": {
+    "isRegistered": false,
+    "vendor": {
+      "id": null,
+      "vendorId": null,
+      "name": "",
+      "phone": "919876543210",
+      "businessName": "",
+      "isVerified": false
+    }
+  }
+}
+```
+> **Mobile UI Tip:** If `isRegistered === true`, automatically fill and lock the vendor name input and show a green **"Verified Vendor"** checkmark badge. If `false`, keep the vendor name field editable so the user can label their local laundry/dhobi.
+
+---
+
+#### B. Create Laundry Work Order
+- **Method:** `POST`
+- **Path:** `/api/v1/laundry/orders`
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "vendorPhone": "919876543210",
+  "vendorName": "CleanWash Express",
+  "pickupDate": "2026-10-15T10:00:00.000Z",
+  "expectedDeliveryDate": "2026-10-17T18:00:00.000Z",
+  "specialInstructions": "Please handle delicate silk items with gentle wash",
+  "items": [
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d8e",
+      "serviceType": "WASH_AND_IRON",
+      "specialInstructions": "Mild starch on collar"
+    },
+    {
+      "wardrobeItemId": "670b8a2c9e2d3f4a5b6c7d8f",
+      "serviceType": "DRY_CLEAN",
+      "specialInstructions": "Dry clean only"
+    }
+  ]
+}
+```
+> **Service Types Allowed:** `WASH` | `IRON` | `DRY_CLEAN` | `WASH_AND_IRON` | `OTHER`
+- **Response (201 Created):**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Laundry Work Order created and dispatched successfully",
+  "data": {
+    "_id": "670d8f1e2a3b4c5d6e7f8a9b",
+    "orderNumber": "WO-20261014-4821",
+    "userName": "Rahul Sharma",
+    "userPhone": "919888800001",
+    "vendorName": "CleanWash Express",
+    "vendorPhone": "919876543210",
+    "isRegisteredVendor": true,
+    "pickupDate": "2026-10-15T10:00:00.000Z",
+    "expectedDeliveryDate": "2026-10-17T18:00:00.000Z",
+    "status": "PENDING_PICKUP",
+    "totalItems": 2,
+    "pdfUrl": "https://api.arangtik.com/uploads/work-orders/WO-20261014-4821.pdf",
+    "whatsappNotification": {
+      "sent": true,
+      "templateUsed": "laundry_order_registered",
+      "status": "DELIVERED_TO_GATEWAY"
+    }
+  }
+}
+```
+
+---
+
+#### C. List Laundry Orders
+- **Method:** `GET`
+- **Path:** `/api/v1/laundry/orders?status=PENDING_PICKUP&page=1&limit=20`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "orders": [ ... ],
+    "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
+  }
+}
+```
+
+---
+
+#### D. Get Single Work Order Details
+- **Method:** `GET`
+- **Path:** `/api/v1/laundry/orders/:id`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+
+---
+
+#### E. Update Work Order Status (User Self-Service)
+- **Method:** `PATCH` *(Strict Rule: never use PUT)*
+- **Path:** `/api/v1/laundry/orders/:id/status`
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "status": "PICKED_UP",
+  "note": "Vendor collected garments from doorstep"
+}
+```
+- **Allowed Status Enum:**
+  - `PENDING_PICKUP` (Order placed, awaiting pickup)
+  - `PICKED_UP` (Garments collected by vendor)
+  - `IN_PROCESS` (Washing / dry cleaning underway)
+  - `READY_FOR_DELIVERY` (Cleaned, pressed and packed)
+  - `DELIVERED` (Handed back to user / completed)
+  - `CANCELLED` (Cancelled)
+
+---
+
+#### F. Re-Send WhatsApp PDF to Vendor
+- **Method:** `POST`
+- **Path:** `/api/v1/laundry/orders/:id/resend-whatsapp`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+
+---
+
+### 3. Mobile UI/UX Recommendations
+1. **Garment Multi-Selection:**
+   - In wardrobe Almari view, provide a floating action button **"Send to Laundry"** that enables multi-selection checkboxes on clothes.
+2. **Contact Picker Permission:**
+   - On iOS (`contacts_service` / `react-native-contacts`) and Android (`READ_CONTACTS`), request permission to let users pick their dhobi/laundry shop contact directly.
+3. **Date Pickers:**
+   - Default `pickupDate` to tomorrow morning.
+   - Restrict `expectedDeliveryDate` so it cannot be before `pickupDate`.
+4. **PDF Viewer / Share:**
+   - In the Work Order detail screen, render a **"View PDF Receipt"** button opening `order.pdfUrl` in an in-app browser or native share sheet.
+
+================================================================================
 ## 📋 QUICK INTEGRATION CHECKLIST FOR MOBILE DEVELOPERS
 ================================================================================
 
@@ -848,5 +1035,6 @@ export function getImageUrl(path?: string): string {
 - [ ] Resolve all image paths with `getImageUrl()` and enable local image caching (`FastImage` / `CachedNetworkImage`).
 - [ ] Compress camera photos client-side to maximum `1600px` before sending multipart `FormData`.
 - [ ] Render 3D garment models using `model_viewer_plus` or Three.js GLB viewer.
+- [ ] Laundry Module: Use `GET /api/v1/laundry/vendors/lookup?phone=` to auto-detect registered vs unregistered vendors.
+- [ ] Laundry Module: Use `PATCH /api/v1/laundry/orders/:id/status` for user status updates.
 
-================================================================================

@@ -101,6 +101,14 @@ class AuthService {
     // Delete OTP once successfully verified
     await Otp.deleteMany({ phone: formattedPhone });
 
+    // Check and sync if user's phone was previously logged as an unregistered vendor
+    try {
+      const vendorService = require('../vendor/vendor.service');
+      await vendorService.syncUnregisteredToRegistered(user);
+    } catch (syncErr) {
+      console.error('[Vendor Sync on Login Error]:', syncErr.message);
+    }
+
     // Generate JWT Access Token
     const token = jwt.sign(
       {

@@ -42,4 +42,14 @@ const outfitRoutes = require('../modules/outfit/outfit.routes');
 router.use('/outfit', outfitRoutes);
 router.use('/v1/outfit', outfitRoutes);
 
+// Laundry & Work Order Routes
+const laundryRoutes = require('../modules/laundry/laundry.routes');
+router.use('/laundry', laundryRoutes);
+router.use('/v1/laundry', laundryRoutes);
+
+// Vendor Management Routes
+const vendorRoutes = require('../modules/vendor/vendor.routes');
+router.use('/vendor', vendorRoutes);
+router.use('/v1/vendor', vendorRoutes);
+
 module.exports = router;

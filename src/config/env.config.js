@@ -21,6 +21,9 @@ module.exports = {
   API24_API_SECRET: process.env.API24_API_SECRET || '',
   API24_CHANNEL_ID: process.env.API24_CHANNEL_ID || '',
   API24_TEMPLATE: process.env.API24_TEMPLATE || 'otp_verify_code',
+  API24_LAUNDRY_TEMPLATE: process.env.API24_LAUNDRY_TEMPLATE || 'vendors_order_registereds',
+  API24_LAUNDRY_TEMPLATE_REG: process.env.API24_LAUNDRY_TEMPLATE_REG || 'vendors_order_registereds',
+  API24_LAUNDRY_TEMPLATE_UNREG: process.env.API24_LAUNDRY_TEMPLATE_UNREG || 'vendors_order_unregistereds',
   API24_LANGUAGE: process.env.API24_LANGUAGE || 'en_US',
   API24_PHONE_NUMBER: process.env.API24_PHONE_NUMBER || '',
 
