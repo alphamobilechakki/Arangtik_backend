@@ -20,27 +20,42 @@ class LaundryWhatsappService {
   async ensurePublicPdfUrl(pdfUrl, pdfPath) {
     if (!pdfUrl) return null;
 
-    try {
-      const check = await fetch(pdfUrl, { method: 'HEAD', timeout: 3000 }).catch(() => null);
-      if (check && check.status === 200 && check.headers.get('content-type')?.includes('pdf')) {
-        return pdfUrl;
-      }
-    } catch (_) {}
+    // If running in development / local domain, immediately mirror to CDN for Meta
+    const isLocalOrUnresolved =
+      pdfUrl.includes('localhost') ||
+      pdfUrl.includes('127.0.0.1') ||
+      pdfUrl.includes('api.arangtik.com');
+
+    if (!isLocalOrUnresolved) {
+      try {
+        const check = await fetch(pdfUrl, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(2000),
+        }).catch(() => null);
+        if (check && check.status === 200 && check.headers.get('content-type')?.includes('pdf')) {
+          return pdfUrl;
+        }
+      } catch (_) {}
+    }
 
     // If local file exists, mirror to high-speed raw stream so Meta can download authentic application/pdf
     if (pdfPath && fs.existsSync(pdfPath)) {
       try {
-        const FormData = require('form-data');
-        const form = new FormData();
-        form.append('reqtype', 'fileupload');
-        form.append('fileToUpload', fs.createReadStream(pdfPath));
+        const fileBuffer = fs.readFileSync(pdfPath);
+        const filename = pdfPath.split(/[/\\]/).pop() || 'WorkOrder.pdf';
+        const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+        const formData = new globalThis.FormData();
+        formData.append('reqtype', 'fileupload');
+        formData.append('fileToUpload', blob, filename);
+
         const res = await fetch('https://catbox.moe/user/api.php', {
           method: 'POST',
-          body: form,
-          timeout: 10000,
+          body: formData,
+          signal: AbortSignal.timeout(15000),
         });
         const directUrl = (await res.text()).trim();
         if (directUrl && directUrl.startsWith('http')) {
+          console.log(`[Laundry WhatsApp]: Public PDF mirror created for Meta: ${directUrl}`);
           return directUrl;
         }
       } catch (err) {
@@ -169,77 +184,22 @@ class LaundryWhatsappService {
         body: JSON.stringify(payload),
       });
 
-      let responseData = await response.json().catch(() => ({}));
-      let usedTemplate = templateName;
+      const responseData = await response.json().catch(() => ({}));
 
       if (!response.ok || !responseData.success) {
-        // If the new utility template is still pending Meta review (132001), fallback to approved template
-        if (responseData.errorCode === '132001' && templateName.endsWith('s')) {
-          const fallbackTemplate = templateName.slice(0, -1);
-          console.log(`[Laundry WhatsApp]: ${templateName} is still pending Meta review. Falling back to ${fallbackTemplate}`);
-          payload.templateName = fallbackTemplate;
-          const retryRes = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'X-API-Key': API24_API_KEY,
-              'X-API-Secret': API24_API_SECRET,
-              'X-Channel-Id': API24_CHANNEL_ID,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          });
-          const retryData = await retryRes.json().catch(() => ({}));
-          if (retryRes.ok && retryData.success) {
-            responseData = retryData;
-            usedTemplate = fallbackTemplate;
-          } else {
-            console.error('[API24 Laundry WhatsApp Error Response]:', retryData);
-            return {
-              sent: false,
-              templateUsed: fallbackTemplate,
-              error: retryData.error || retryData.message,
-              mode: 'live_failed',
-            };
-          }
-        } else {
-          console.error('[API24 Laundry WhatsApp Error Response]:', responseData);
-          return {
-            sent: false,
-            templateUsed: templateName,
-            error: responseData.error || responseData.message || `API24 returned status ${response.status}`,
-            mode: 'live_failed',
-          };
-        }
-      }
-
-      // If 24h customer window is open, also attempt sending the authentic media document
-      const streamUrl = accessiblePdfUrl || pdfUrl;
-      if (streamUrl) {
-        try {
-          await fetch(`${baseUrl}/messages/media`, {
-            method: 'POST',
-            headers: {
-              'X-API-Key': API24_API_KEY,
-              'X-API-Secret': API24_API_SECRET,
-              'X-Channel-Id': API24_CHANNEL_ID,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: formattedPhone,
-              mediaUrl: streamUrl,
-              mediaType: 'document',
-              caption: `Work Order ${order.orderNumber} PDF`,
-            }),
-          });
-        } catch (_) {
-          // Safely ignored if outside 24h window
-        }
+        console.error('[API24 Laundry WhatsApp Error Response]:', responseData);
+        return {
+          sent: false,
+          templateUsed: templateName,
+          error: responseData.error || responseData.message || `API24 returned status ${response.status}`,
+          mode: 'live_failed',
+        };
       }
 
       return {
         sent: true,
         mode: 'live',
-        templateUsed: usedTemplate,
+        templateUsed: templateName,
         messageId: responseData.data?.messageId || responseData.data?.id || `api24_${Date.now()}`,
         formattedPhone,
       };

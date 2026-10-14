@@ -71,9 +71,10 @@ class LaundryPdfService {
 
       if (!imageBuffer) return null;
 
-      // Convert to high-quality JPEG buffer so PDFKit can render seamlessly
+      // Resize and convert to optimized JPEG buffer for fast transmission and crisp rendering
       const jpegBuffer = await sharp(imageBuffer)
-        .jpeg({ quality: 92 })
+        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 82 })
         .toBuffer();
 
       return jpegBuffer;
