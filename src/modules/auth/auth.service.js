@@ -1,12 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
-const { JWT_SECRET, JWT_EXPIRES_IN, OTP_EXPIRY, OTP_DEV_MODE } = require('../../config/env.config');
+const { JWT_SECRET, JWT_EXPIRES_IN, OTP_EXPIRY, OTP_DEV_MODE, TEST_PHONE, TEST_OTP } = require('../../config/env.config');
 const User = require('./user.model');
 const Otp = require('./otp.model');
 const ApiError = require('../../utils/apiError');
 const { formatPhoneNumber, sendWhatsAppOtp } = require('../../utils/whatsapp.service');
 const { formatUploadUrl } = require('../../utils/url.util');
+
+/**
+ * Check if the provided phone number matches the Play Store test/review account
+ */
+const isTestAccount = (phone) => {
+  const target = (TEST_PHONE || '918949056321').replace(/\D/g, '');
+  const cleaned = String(phone || '').replace(/\D/g, '');
+  return cleaned === target || cleaned.endsWith('8949056321');
+};
 
 class AuthService {
   /**
@@ -27,9 +36,13 @@ class AuthService {
     const existingUser = await User.findOne({ phone: formattedPhone });
     const isExistingUser = !!existingUser;
 
-    // Generate 4-digit numeric OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
-    const expiresAt = new Date(Date.now() + OTP_EXPIRY * 60 * 1000);
+    const isTest = isTestAccount(formattedPhone);
+
+    // Generate 4-digit numeric OTP (fixed '1234' for Play Store review account)
+    const otp = isTest ? (TEST_OTP || '1234') : Math.floor(1000 + Math.random() * 9000).toString();
+    const expiresAt = isTest
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days expiry for test account
+      : new Date(Date.now() + OTP_EXPIRY * 60 * 1000);
 
     // Invalidate/delete any previous active OTP for this phone
     await Otp.deleteMany({ phone: formattedPhone });
@@ -42,7 +55,15 @@ class AuthService {
     });
 
     // Dispatch WhatsApp template message via API24
-    await sendWhatsAppOtp(formattedPhone, otp);
+    if (isTest) {
+      try {
+        await sendWhatsAppOtp(formattedPhone, otp);
+      } catch (waErr) {
+        console.warn(`[Play Store Review Account]: WhatsApp send skipped/warning for ${formattedPhone}:`, waErr.message);
+      }
+    } else {
+      await sendWhatsAppOtp(formattedPhone, otp);
+    }
 
     return {
       phone: formattedPhone,
@@ -63,16 +84,20 @@ class AuthService {
     const formattedPhone = formatPhoneNumber(phone);
     const trimmedOtp = String(otp).trim();
 
-    // Verify OTP record
-    const record = await Otp.findOne({ phone: formattedPhone, otp: trimmedOtp });
-    if (!record) {
-      throw new ApiError(400, 'Invalid or expired OTP');
-    }
+    const isTest = isTestAccount(formattedPhone) && trimmedOtp === (TEST_OTP || '1234');
 
-    // Check expiration timestamp
-    if (new Date() > record.expiresAt) {
-      await Otp.deleteMany({ phone: formattedPhone });
-      throw new ApiError(400, 'OTP has expired. Please request a new OTP');
+    if (!isTest) {
+      // Verify OTP record
+      const record = await Otp.findOne({ phone: formattedPhone, otp: trimmedOtp });
+      if (!record) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
+
+      // Check expiration timestamp
+      if (new Date() > record.expiresAt) {
+        await Otp.deleteMany({ phone: formattedPhone });
+        throw new ApiError(400, 'OTP has expired. Please request a new OTP');
+      }
     }
 
     let user = await User.findOne({ phone: formattedPhone });
@@ -98,8 +123,10 @@ class AuthService {
       }
     }
 
-    // Delete OTP once successfully verified
-    await Otp.deleteMany({ phone: formattedPhone });
+    // Delete OTP once successfully verified (retain test account OTP so testers/reviewers can login repeatedly)
+    if (!isTest) {
+      await Otp.deleteMany({ phone: formattedPhone });
+    }
 
     // Check and sync if user's phone was previously logged as an unregistered vendor
     try {

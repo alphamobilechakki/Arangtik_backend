@@ -14,6 +14,8 @@ module.exports = {
   // OTP Configuration
   OTP_EXPIRY: parseInt(process.env.OTP_EXPIRY, 10) || 10, // minutes
   OTP_DEV_MODE: process.env.OTP_DEV_MODE === 'true',
+  TEST_PHONE: process.env.TEST_PHONE || '918949056321',
+  TEST_OTP: process.env.TEST_OTP || '1234',
 
   // API24 WhatsApp Gateway Configuration
   API24_BASE_URL: process.env.API24_BASE_URL || 'https://api24.in/api/v1',
