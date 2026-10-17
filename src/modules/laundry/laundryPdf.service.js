@@ -245,7 +245,7 @@ class LaundryPdfService {
       doc.text('PAGE', 515, tableTop + 7, { width: 35, align: 'right' });
 
       let currentY = tableTop + 24;
-
+            
       if (Array.isArray(order.items)) {
         order.items.forEach((item, index) => {
           const itemPageNumber = index + 2;
