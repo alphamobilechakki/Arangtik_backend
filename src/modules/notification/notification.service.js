@@ -30,20 +30,7 @@ class NotificationService {
       normalizedPlatform = 'OTHER';
     }
 
-    // 1. If deviceId is provided, deactivate any previous active tokens for this user on the same hardware device
-    if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
-      await DeviceToken.updateMany(
-        {
-          userId,
-          deviceId: deviceId.trim(),
-          token: { $ne: cleanToken },
-          isActive: true,
-        },
-        { $set: { isActive: false } }
-      );
-    }
-
-    // 2. Find if this token already exists (even if belonged to another user previously)
+    // Find if this token already exists (even if belonged to another user previously)
     let deviceRecord = await DeviceToken.findOne({ token: cleanToken });
 
     if (deviceRecord) {
@@ -79,7 +66,7 @@ class NotificationService {
   }
 
   /**
-   * Remove / deactivate a device token on logout or user request
+   * Remove / delete a device token on logout or user request
    */
   async removeDeviceToken(userId, token) {
     if (!token || typeof token !== 'string') {
@@ -87,14 +74,39 @@ class NotificationService {
     }
 
     const cleanToken = token.trim();
-    const result = await DeviceToken.updateMany(
-      { userId, token: cleanToken },
-      { $set: { isActive: false } }
-    );
+    const result = await DeviceToken.deleteMany({ userId, token: cleanToken });
 
     return {
       removed: true,
-      deactivatedCount: result.modifiedCount || 0,
+      deletedCount: result.deletedCount || 0,
+      deactivatedCount: result.deletedCount || 0,
+    };
+  }
+
+  /**
+   * Permanently delete a device token for user
+   */
+  async deleteDeviceToken(userId, token) {
+    if (!token || typeof token !== 'string') {
+      return { deleted: false, deletedCount: 0 };
+    }
+    const cleanToken = token.trim();
+    const result = await DeviceToken.deleteMany({ userId, token: cleanToken });
+    return {
+      deleted: true,
+      deletedCount: result.deletedCount || 0,
+    };
+  }
+
+  /**
+   * Delete all device tokens belonging to a user on full logout
+   */
+  async deleteAllUserDeviceTokens(userId) {
+    if (!userId) return { deleted: false, deletedCount: 0 };
+    const result = await DeviceToken.deleteMany({ userId });
+    return {
+      deleted: true,
+      deletedCount: result.deletedCount || 0,
     };
   }
 
@@ -166,8 +178,10 @@ class NotificationService {
       console.error('[Notification DB Error]:', dbErr.message);
     }
 
-    // 2. Fetch all active device tokens for the user
-    const activeTokens = await DeviceToken.find({ userId, isActive: true }).select('token platform');
+    // 2. Fetch all active device tokens for the user, ordered by newest first (last created)
+    const activeTokens = await DeviceToken.find({ userId, isActive: true })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('token platform createdAt');
 
     if (!activeTokens || activeTokens.length === 0) {
       if (notificationDoc) {
@@ -182,7 +196,10 @@ class NotificationService {
       };
     }
 
-    const tokens = activeTokens.map((t) => t.token);
+    // A user can register multiple device tokens across multiple devices/sessions.
+    // Business requirement: Always dispatch push notifications to the LAST CREATED active FCM token.
+    const lastCreatedDevice = activeTokens[0];
+    const tokens = [lastCreatedDevice.token];
     const sanitizedData = this.formatDataPayload({
       ...data,
       notificationId: notificationDoc ? notificationDoc._id.toString() : '',
@@ -194,14 +211,15 @@ class NotificationService {
 
     // 3. Mock / Dry-Run Mode
     if (isMock) {
-      console.log(`[FCM Mock Delivery]: Dispatched "${title}" to User ${userId} across ${tokens.length} device(s)`);
+      console.log(`[FCM Mock Delivery]: Dispatched "${title}" to User ${userId} via last created token (${lastCreatedDevice.token.substring(0, 16)}...)`);
       if (notificationDoc) {
         notificationDoc.status = 'DELIVERED';
         await notificationDoc.save().catch(() => {});
       }
       return {
         success: true,
-        sentCount: tokens.length,
+        sentCount: 1,
+        targetToken: lastCreatedDevice.token,
         mock: true,
         notificationId: notificationDoc?._id,
       };
@@ -269,6 +287,7 @@ class NotificationService {
       return {
         success: successCount > 0,
         sentCount: successCount,
+        targetToken: lastCreatedDevice.token,
         failureCount,
         invalidTokensCleaned: invalidTokens.length,
         notificationId: notificationDoc?._id,

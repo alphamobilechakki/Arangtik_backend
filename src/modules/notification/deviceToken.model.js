@@ -53,6 +53,7 @@ const deviceTokenSchema = new mongoose.Schema(
 );
 
 deviceTokenSchema.index({ userId: 1, isActive: 1 });
+deviceTokenSchema.index({ userId: 1, createdAt: -1 });
 deviceTokenSchema.index({ deviceId: 1, userId: 1 });
 
 module.exports =

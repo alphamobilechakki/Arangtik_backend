@@ -75,10 +75,18 @@ class AuthService {
   /**
    * Verify OTP and Authenticate / Register User
    * If new user, creates account with name if provided.
+   * If deviceData / fcmToken is provided, registers the device token for FCM push notifications.
    */
-  async verifyOtp(phone, otp, name = '') {
+  async verifyOtp(phone, otp, name = '', deviceData = null) {
     if (!phone || !otp) {
       throw new ApiError(400, 'Phone number and OTP are required');
+    }
+
+    let userName = typeof name === 'string' ? name : '';
+    let devicePayload = deviceData;
+    if (typeof name === 'object' && name !== null) {
+      devicePayload = name;
+      userName = name.name || '';
     }
 
     const formattedPhone = formatPhoneNumber(phone);
@@ -107,7 +115,7 @@ class AuthService {
       // Create new user with name (gender & accountType use schema defaults: UNSPECIFIED & INDIVIDUAL)
       user = await User.create({
         phone: formattedPhone,
-        name: name ? String(name).trim() : '',
+        name: userName ? String(userName).trim() : '',
         role: 'user',
       });
       isNewUser = true;
@@ -117,8 +125,8 @@ class AuthService {
         throw new ApiError(403, 'Your account has been deactivated or blocked. Please contact support.');
       }
 
-      if ((!user.name || user.name.trim() === '') && name && name.trim()) {
-        user.name = name.trim();
+      if ((!user.name || user.name.trim() === '') && userName && userName.trim()) {
+        user.name = userName.trim();
         await user.save();
       }
     }
@@ -134,6 +142,24 @@ class AuthService {
       await vendorService.syncUnregisteredToRegistered(user);
     } catch (syncErr) {
       console.error('[Vendor Sync on Login Error]:', syncErr.message);
+    }
+
+    // Register FCM device token on login if provided
+    let registeredDevice = null;
+    const rawDeviceToken = devicePayload?.token || devicePayload?.fcmToken || devicePayload?.deviceToken;
+    if (rawDeviceToken && typeof rawDeviceToken === 'string' && rawDeviceToken.trim()) {
+      try {
+        const notificationService = require('../notification/notification.service');
+        registeredDevice = await notificationService.registerDeviceToken(user._id, {
+          token: rawDeviceToken.trim(),
+          platform: devicePayload.platform,
+          deviceId: devicePayload.deviceId,
+          deviceModel: devicePayload.deviceModel,
+          appVersion: devicePayload.appVersion,
+        });
+      } catch (tokenErr) {
+        console.warn('[FCM Token Registration on Login Warning]:', tokenErr.message);
+      }
     }
 
     // Generate JWT Access Token
@@ -163,6 +189,7 @@ class AuthService {
         status: user.status,
       },
       isNewUser,
+      ...(registeredDevice ? { fcmToken: registeredDevice.token, deviceRegistered: true } : {}),
     };
   }
 

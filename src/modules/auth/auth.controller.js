@@ -16,13 +16,24 @@ class AuthController {
   });
 
   /**
-   * @desc    Verify OTP and login or register user
+   * @desc    Verify OTP and login or register user (registers FCM device token if provided)
    * @route   POST /api/auth/verify-otp
    * @access  Public
    */
   verifyOtp = asyncHandler(async (req, res) => {
-    const { phone, otp, name } = req.body;
-    const result = await authService.verifyOtp(phone, otp, name);
+    const { phone, otp, name, fcmToken, deviceToken, platform, deviceId, deviceModel, appVersion } = req.body;
+    const tokenToRegister = fcmToken || deviceToken || req.body?.token;
+    const deviceData = tokenToRegister
+      ? {
+          token: tokenToRegister,
+          platform,
+          deviceId,
+          deviceModel,
+          appVersion,
+        }
+      : null;
+
+    const result = await authService.verifyOtp(phone, otp, name, deviceData);
     return ApiResponse.success(res, result, 'Authentication successful');
   });
 
@@ -37,17 +48,22 @@ class AuthController {
   });
 
   /**
-   * @desc    Logout user (optionally deactivates device token if provided in body)
+   * @desc    Logout user (permanently deletes device token from DB if specified, or deletes all user device tokens)
    * @route   POST /api/auth/logout
    * @access  Private
    */
   logout = asyncHandler(async (req, res) => {
-    const token = req.body?.deviceToken || req.body?.token;
-    if (token && req.user?.id) {
+    const token = req.body?.fcmToken || req.body?.deviceToken || req.body?.token;
+    if (req.user?.id) {
       try {
         const notificationService = require('../notification/notification.service');
-        await notificationService.removeDeviceToken(req.user.id, token);
+        if (token) {
+          await notificationService.deleteDeviceToken(req.user.id, token);
+        } else {
+          await notificationService.deleteAllUserDeviceTokens(req.user.id);
+        }
       } catch (tokenErr) {
+        console.warn('[Logout Token Deletion Warning]:', tokenErr.message);
         // Non-fatal, allow logout to succeed
       }
     }

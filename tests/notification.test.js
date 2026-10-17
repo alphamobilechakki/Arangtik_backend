@@ -5,6 +5,9 @@ const jwt = require('jsonwebtoken');
 
 const { MONGODB_URI, JWT_SECRET } = require('../src/config/env.config');
 const User = require('../src/modules/auth/user.model');
+const Otp = require('../src/modules/auth/otp.model');
+const authService = require('../src/modules/auth/auth.service');
+const authController = require('../src/modules/auth/auth.controller');
 const DeviceToken = require('../src/modules/notification/deviceToken.model');
 const Notification = require('../src/modules/notification/notification.model');
 const notificationService = require('../src/modules/notification/notification.service');
@@ -97,6 +100,46 @@ describe('Firebase Cloud Messaging (FCM) & Device Token Management Tests', () =>
   // SECTION 1: Device Token Management
   // ==========================================
   describe('1. Device Token Registration & Management', () => {
+    it('verifies DeviceToken schema indexes, default values, and timestamp configs', async () => {
+      // 1. Verify schema indexes defined in model
+      const indexes = DeviceToken.schema.indexes();
+      const indexKeys = indexes.map((idx) => Object.keys(idx[0]).join('_'));
+
+      assert.ok(
+        indexKeys.some((k) => k === 'userId_isActive'),
+        'Must have compound index on { userId: 1, isActive: 1 }'
+      );
+      assert.ok(
+        indexKeys.some((k) => k === 'userId_createdAt'),
+        'Must have compound index on { userId: 1, createdAt: -1 } for fast newest-token sorting'
+      );
+      assert.ok(
+        indexKeys.some((k) => k === 'deviceId_userId'),
+        'Must have compound index on { deviceId: 1, userId: 1 }'
+      );
+
+      // 2. Verify schema defaults when minimal fields provided
+      const dummyToken = new DeviceToken({
+        userId: user1._id,
+        token: 'fcm_test_defaults_check',
+      });
+
+      assert.equal(dummyToken.platform, 'ANDROID', 'Default platform should be ANDROID');
+      assert.equal(dummyToken.isActive, true, 'Default isActive should be true');
+      assert.equal(dummyToken.deviceId, '', 'Default deviceId should be empty string');
+      assert.equal(dummyToken.deviceModel, '', 'Default deviceModel should be empty string');
+      assert.equal(dummyToken.appVersion, '', 'Default appVersion should be empty string');
+      assert.ok(dummyToken.lastUsedAt instanceof Date, 'Default lastUsedAt should be Date');
+
+      // 3. Verify timestamps (createdAt & updatedAt)
+      await dummyToken.save();
+      assert.ok(dummyToken.createdAt instanceof Date, 'Mongoose timestamps must create createdAt');
+      assert.ok(dummyToken.updatedAt instanceof Date, 'Mongoose timestamps must create updatedAt');
+
+      // Clean up dummy token
+      await DeviceToken.deleteOne({ _id: dummyToken._id });
+    });
+
     it('successfully registers an FCM device token for an authenticated user', async () => {
       const result = await notificationService.registerDeviceToken(user1._id, {
         token: 'fcm_token_pixel8_abc123',
@@ -171,16 +214,174 @@ describe('Firebase Cloud Messaging (FCM) & Device Token Management Tests', () =>
       );
     });
 
-    it('successfully deactivates device token upon logout or explicit removal', async () => {
+    it('successfully deletes device token upon logout or explicit removal', async () => {
       const removeResult = await notificationService.removeDeviceToken(
         user1._id,
         'fcm_token_pixel8_abc123'
       );
       assert.equal(removeResult.removed, true);
-      assert.equal(removeResult.deactivatedCount, 1);
+      assert.equal(removeResult.deletedCount, 1);
 
       const dbRecord = await DeviceToken.findOne({ token: 'fcm_token_pixel8_abc123' });
-      assert.equal(dbRecord.isActive, false, 'Token should be marked inactive');
+      assert.equal(dbRecord, null, 'Token should be deleted from database upon logout/removal');
+    });
+
+    it('registers FCM token automatically when user verifies OTP on login', async () => {
+      const testPhone = '919777700099';
+      await User.deleteMany({ phone: testPhone });
+      await Otp.deleteMany({ phone: testPhone });
+      await DeviceToken.deleteMany({ token: 'fcm_login_test_token_111' });
+
+      // Create OTP
+      await Otp.create({
+        phone: testPhone,
+        otp: '5566',
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      });
+
+      const loginResult = await authService.verifyOtp(testPhone, '5566', 'Test Login User', {
+        token: 'fcm_login_test_token_111',
+        platform: 'ANDROID',
+        deviceId: 'device_login_001',
+      });
+
+      assert.ok(loginResult);
+      assert.ok(loginResult.token);
+      assert.equal(loginResult.fcmToken, 'fcm_login_test_token_111');
+      assert.equal(loginResult.deviceRegistered, true);
+
+      // Verify token in database
+      const deviceDoc = await DeviceToken.findOne({ token: 'fcm_login_test_token_111' });
+      assert.ok(deviceDoc);
+      assert.equal(deviceDoc.userId.toString(), loginResult.user._id.toString());
+      assert.equal(deviceDoc.isActive, true);
+
+      // Clean up
+      await User.deleteMany({ phone: testPhone });
+      await DeviceToken.deleteMany({ token: 'fcm_login_test_token_111' });
+    });
+
+    it('permanently deletes FCM token upon user logout', async () => {
+      // Register token for user1
+      await notificationService.registerDeviceToken(user1._id, {
+        token: 'fcm_logout_delete_target',
+        platform: 'ANDROID',
+      });
+
+      const beforeDoc = await DeviceToken.findOne({ token: 'fcm_logout_delete_target' });
+      assert.ok(beforeDoc, 'Token must exist before logout');
+
+      // Simulate logout controller call with specific token
+      const req = {
+        user: { id: user1._id },
+        body: { fcmToken: 'fcm_logout_delete_target' },
+      };
+      let responseBody = null;
+      await new Promise((resolve, reject) => {
+        const res = {
+          status: () => res,
+          json: (data) => {
+            responseBody = data;
+            resolve(data);
+          },
+        };
+        authController.logout(req, res, reject);
+      });
+
+      assert.ok(responseBody);
+      assert.equal(responseBody.success, true);
+
+      const afterDoc = await DeviceToken.findOne({ token: 'fcm_logout_delete_target' });
+      assert.equal(afterDoc, null, 'Token should be deleted from DB on logout');
+    });
+
+    it('deletes all user device tokens on full logout if no specific token passed', async () => {
+      // Register two tokens for user2
+      await notificationService.registerDeviceToken(user2._id, {
+        token: 'fcm_user2_token_alpha',
+        platform: 'ANDROID',
+      });
+      await notificationService.registerDeviceToken(user2._id, {
+        token: 'fcm_user2_token_beta',
+        platform: 'IOS',
+      });
+
+      const countBefore = await DeviceToken.countDocuments({ userId: user2._id });
+      assert.ok(countBefore >= 2);
+
+      // Simulate logout controller call with empty body
+      const req = {
+        user: { id: user2._id },
+        body: {},
+      };
+      let responseBody = null;
+      await new Promise((resolve, reject) => {
+        const res = {
+          status: () => res,
+          json: (data) => {
+            responseBody = data;
+            resolve(data);
+          },
+        };
+        authController.logout(req, res, reject);
+      });
+
+      assert.ok(responseBody);
+      assert.equal(responseBody.success, true);
+
+      const countAfter = await DeviceToken.countDocuments({ userId: user2._id });
+      assert.equal(countAfter, 0, 'All tokens for user2 should be deleted on full logout');
+    });
+
+    it('dispatches notifications strictly to the LAST CREATED active FCM token when user has multiple tokens', async () => {
+      // Clean tokens for user1
+      await DeviceToken.deleteMany({ userId: user1._id });
+
+      // Create older token 1
+      await DeviceToken.create({
+        userId: user1._id,
+        token: 'fcm_user1_device_older_1',
+        platform: 'ANDROID',
+        isActive: true,
+        createdAt: new Date(Date.now() - 60000), // 1 min ago
+      });
+
+      // Create older token 2
+      await DeviceToken.create({
+        userId: user1._id,
+        token: 'fcm_user1_device_older_2',
+        platform: 'IOS',
+        isActive: true,
+        createdAt: new Date(Date.now() - 30000), // 30 sec ago
+      });
+
+      // Create newest / last created token 3
+      await DeviceToken.create({
+        userId: user1._id,
+        token: 'fcm_user1_device_newest_3',
+        platform: 'ANDROID',
+        isActive: true,
+        createdAt: new Date(), // Now
+      });
+
+      // Total active tokens for user1 is 3 (multiple tokens supported per user)
+      const allActive = await DeviceToken.find({ userId: user1._id, isActive: true });
+      assert.equal(allActive.length, 3, 'User must have 3 active device tokens');
+
+      // Send push notification
+      const sendResult = await notificationService.sendToUser(user1._id, {
+        title: 'Multi-Device Test',
+        body: 'Message for latest device',
+        type: 'SYSTEM',
+      });
+
+      assert.ok(sendResult);
+      assert.ok(sendResult.sentCount === 1 || sendResult.failureCount === 1);
+      assert.equal(
+        sendResult.targetToken,
+        'fcm_user1_device_newest_3',
+        'Notification must be dispatched specifically to the LAST CREATED token'
+      );
     });
   });
 

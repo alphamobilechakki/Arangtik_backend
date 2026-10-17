@@ -73,9 +73,17 @@ Secure passwordless authentication using mobile phone numbers and 6-digit WhatsA
 ```json
 {
   "phone": "919876543210",
-  "otp": "123456"
+  "otp": "123456",
+  "name": "Rahul Sharma",
+  "fcmToken": "dK_3f9z...fcm_device_token...",
+  "platform": "ANDROID",
+  "deviceId": "unique_hardware_uuid",
+  "deviceModel": "Google Pixel 8",
+  "appVersion": "1.2.0"
 }
 ```
+> **Note on FCM Token Flow:** Passing `fcmToken` (or `deviceToken`) in `verify-otp` automatically registers the device token upon login and returns `fcmToken: "..."` and `deviceRegistered: true` in the response.
+
 - **Response (200 OK):**
 ```json
 {
@@ -92,7 +100,9 @@ Secure passwordless authentication using mobile phone numbers and 6-digit WhatsA
       "profileImage": "/uploads/avatar_123.jpg",
       "hasReferenceFace": true,
       "defaultWardrobeId": "6ac8e4471dd51c1c79a52e6d"
-    }
+    },
+    "fcmToken": "dK_3f9z...",
+    "deviceRegistered": true
   }
 }
 ```
@@ -100,7 +110,15 @@ Secure passwordless authentication using mobile phone numbers and 6-digit WhatsA
 #### C. User Logout
 - **Method:** `POST`
 - **Path:** `/api/auth/logout`
-- **Headers:** `Authorization: Bearer <TOKEN>`
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Request Body (Optional):**
+```json
+{
+  "fcmToken": "dK_3f9z...fcm_device_token..."
+}
+```
+> **Token Deletion on Logout:** If `fcmToken` (or `deviceToken`) is provided, that specific token is permanently deleted from the database. If omitted, all device tokens associated with this user session are deleted.
+
 - **Response (200 OK):**
 ```json
 {
@@ -1035,17 +1053,25 @@ Arangtik mobile app receives real-time push notifications for key lifecycle even
 
 ### 2. Device Token Registration Lifecycle
 
+#### Rule & Architecture Principles:
+1. **Login Registration:** Mobile app can pass `fcmToken` (or `deviceToken`, `platform`, `deviceId`) directly in `POST /api/auth/verify-otp`. The backend immediately registers the token.
+2. **Multiple Tokens Per User:** A user can be logged in across multiple devices (e.g. Android phone, iPad tablet). All active tokens are stored in the database.
+3. **Dispatch to Last Created Token:** When sending a push notification to a user, the backend queries active tokens ordered by creation timestamp (`createdAt: -1`) and sends the message specifically to the **LAST CREATED FCM token**.
+4. **Permanent Token Deletion on Logout:** When the user logs out (`POST /api/auth/logout`), the token is permanently deleted from MongoDB.
+
 #### Step 1: Obtain FCM Token on Mobile Client
 - **Flutter:** `String? token = await FirebaseMessaging.instance.getToken();`
 - **React Native:** `const token = await messaging().getToken();`
 - **Native Android (Kotlin):** `FirebaseMessaging.getInstance().token.addOnCompleteListener { ... }`
 - **Native iOS (Swift):** `Messaging.messaging().token { token, error in ... }`
 
-#### Step 2: Register Token with Backend (Immediately upon Login & Token Refresh)
-- **Method:** `POST`
-- **Path:** `/api/notifications/device-token` *(also available as `/api/auth/device-token`)*
-- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
-- **Payload:**
+#### Step 2: Register Token with Backend
+- **Option A (Recommended — During Login):** Include `fcmToken` directly in `POST /api/auth/verify-otp`.
+- **Option B (Token Refresh / Post-Login):**
+  - **Method:** `POST`
+  - **Path:** `/api/notifications/device-token` *(also available as `/api/auth/device-token`)*
+  - **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+  - **Payload:**
 ```json
 {
   "token": "dK_3f9z...fcm_registration_token...",
@@ -1055,7 +1081,7 @@ Arangtik mobile app receives real-time push notifications for key lifecycle even
   "appVersion": "1.2.0"
 }
 ```
-- **Response (200 OK):**
+  - **Response (200 OK):**
 ```json
 {
   "success": true,
@@ -1069,17 +1095,15 @@ Arangtik mobile app receives real-time push notifications for key lifecycle even
 }
 ```
 
-#### Step 3: Remove Token on Logout
+#### Step 3: Delete Token on Logout
 When the user logs out, include the device token in `POST /api/auth/logout`:
 ```json
 {
-  "deviceToken": "dK_3f9z...fcm_registration_token..."
+  "fcmToken": "dK_3f9z...fcm_registration_token..."
 }
 ```
-Or call:
-- **Method:** `DELETE`
-- **Path:** `/api/notifications/device-token`
-- **Body:** `{ "token": "dK_3f9z..." }`
+> The backend permanently deletes this device token from MongoDB. If no token is provided in the body, all device tokens for that user session are permanently deleted.
+> You can also call `DELETE /api/notifications/device-token` with `{ "token": "..." }`.
 
 ---
 
