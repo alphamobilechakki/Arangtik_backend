@@ -53,6 +53,7 @@ const unregisteredVendorSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    collection: 'unregisteredvendors',
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
@@ -60,4 +61,4 @@ const unregisteredVendorSchema = new mongoose.Schema(
 
 module.exports =
   mongoose.models.UnregisteredVendor ||
-  mongoose.model('UnregisteredVendor', unregisteredVendorSchema);
+  mongoose.model('UnregisteredVendor', unregisteredVendorSchema, 'unregisteredvendors');

@@ -1,4 +1,5 @@
-const Vendor = require('./vendor.model');
+const RegisteredVendor = require('./registeredVendor.model');
+const Vendor = RegisteredVendor;
 const UnregisteredVendor = require('./unregisteredVendor.model');
 const { formatPhoneNumber } = require('../../utils/whatsapp.service');
 const ApiError = require('../../utils/apiError');
@@ -18,29 +19,41 @@ class VendorService {
       throw new ApiError(400, 'Invalid phone number format');
     }
 
-    // 1. Check in Registered Vendors
-    const registeredVendor = await Vendor.findOne({
+    // 1. Check in Unified Vendor Table
+    const existingVendor = await Vendor.findOne({
       phone: formattedPhone,
       status: 'ACTIVE',
-    }).select('vendorId name phone businessName rating totalOrdersHandled isVerified');
+    }).select('vendorId name phone category categoryCode isRegistered businessName rating totalOrdersHandled isVerified addedByUsers');
 
-    if (registeredVendor) {
+    if (existingVendor) {
+      let preferredName = existingVendor.name || '';
+      if (!existingVendor.isRegistered && currentUserId && Array.isArray(existingVendor.addedByUsers)) {
+        const userEntry = existingVendor.addedByUsers.find(
+          (u) => u.userId && u.userId.toString() === currentUserId.toString()
+        );
+        if (userEntry && userEntry.nameGiven) {
+          preferredName = userEntry.nameGiven;
+        }
+      }
+
       return {
-        isRegistered: true,
+        isRegistered: existingVendor.isRegistered === true,
         vendor: {
-          id: registeredVendor._id,
-          vendorId: registeredVendor.vendorId,
-          name: registeredVendor.name,
-          phone: registeredVendor.phone,
-          businessName: registeredVendor.businessName || '',
-          rating: registeredVendor.rating,
-          totalOrdersHandled: registeredVendor.totalOrdersHandled,
-          isVerified: registeredVendor.isVerified,
+          id: existingVendor._id,
+          vendorId: existingVendor.vendorId,
+          name: preferredName,
+          phone: existingVendor.phone,
+          category: existingVendor.category || 'Dhobi',
+          categoryCode: existingVendor.categoryCode || 'DHOBI',
+          businessName: existingVendor.businessName || '',
+          rating: existingVendor.rating,
+          totalOrdersHandled: existingVendor.totalOrdersHandled,
+          isVerified: existingVendor.isVerified,
         },
       };
     }
 
-    // 2. Check in Unregistered Vendors database
+    // 2. Check in Unregistered Vendors database (fallback)
     const unregVendor = await UnregisteredVendor.findOne({
       phone: formattedPhone,
     });
@@ -63,6 +76,7 @@ class VendorService {
           vendorId: null,
           name: preferredName,
           phone: unregVendor.phone,
+          category: 'Dhobi',
           businessName: '',
           isVerified: false,
         },
@@ -77,6 +91,7 @@ class VendorService {
         vendorId: null,
         name: '',
         phone: formattedPhone,
+        category: 'Dhobi',
         businessName: '',
         isVerified: false,
       },
@@ -85,6 +100,9 @@ class VendorService {
 
   /**
    * Record or update vendor when creating a laundry order
+   * Uses separate collections:
+   * - Registered vendors updated in 'Vendor' collection
+   * - Unregistered contact-based vendors stored in 'UnregisteredVendor' collection
    */
   async recordOrderVendor({ phone, name, userId }) {
     const formattedPhone = formatPhoneNumber(phone);
@@ -92,30 +110,27 @@ class VendorService {
       throw new ApiError(400, 'Invalid phone number format');
     }
 
-    // Check if registered
-    const registeredVendor = await Vendor.findOne({
-      phone: formattedPhone,
-      status: 'ACTIVE',
-    });
+    const trimmedName = name ? String(name).trim() : '';
 
-    if (registeredVendor) {
-      registeredVendor.totalOrdersHandled = (registeredVendor.totalOrdersHandled || 0) + 1;
-      await registeredVendor.save();
+    // 1. Check if vendor is already registered in Vendor collection
+    let regVendor = await Vendor.findOne({ phone: formattedPhone });
+    if (regVendor) {
+      regVendor.totalOrdersHandled = (regVendor.totalOrdersHandled || 0) + 1;
+      await regVendor.save();
       return {
         isRegistered: true,
-        vendor: registeredVendor,
+        vendor: regVendor,
       };
     }
 
-    // Handle Unregistered Vendor
+    // 2. Unregistered vendor stored in UnregisteredVendor collection
     let unreg = await UnregisteredVendor.findOne({ phone: formattedPhone });
-    const trimmedName = name ? String(name).trim() : '';
-
     if (!unreg) {
       unreg = await UnregisteredVendor.create({
         phone: formattedPhone,
         name: trimmedName,
         totalOrders: 1,
+        isConvertedToRegistered: false,
         addedByUsers: userId
           ? [
               {
@@ -131,7 +146,7 @@ class VendorService {
       if (!unreg.name && trimmedName) {
         unreg.name = trimmedName;
       }
-      if (userId) {
+      if (userId && Array.isArray(unreg.addedByUsers)) {
         const exists = unreg.addedByUsers.some(
           (u) => u.userId && u.userId.toString() === userId.toString()
         );
@@ -155,14 +170,14 @@ class VendorService {
   /**
    * Sync hook called on user login / signup:
    * Checks if an unregistered vendor exists with this user's phone.
-   * If found, transfers / creates a registered Vendor profile and updates existing Work Orders.
+   * If found, sets isRegistered: true and updates existing Work Orders.
    */
   async syncUnregisteredToRegistered(user) {
     if (!user || !user.phone) return null;
 
     const formattedPhone = formatPhoneNumber(user.phone);
 
-    // Check if user is already a registered vendor
+    // Check in unified Vendor table
     let vendor = await Vendor.findOne({ phone: formattedPhone });
 
     // Check if there are unregistered records for this phone
@@ -171,29 +186,36 @@ class VendorService {
       isConvertedToRegistered: false,
     });
 
-    if (!unreg && vendor) {
+    if (!unreg && vendor && vendor.isRegistered) {
       return { converted: false, vendor };
     }
 
-    if (unreg) {
+    if (unreg || (vendor && !vendor.isRegistered)) {
       if (!vendor) {
-        const vendorName = user.name || unreg.name || 'Laundry Vendor';
+        const vendorName = user.name || unreg?.name || 'Laundry Vendor';
         vendor = await Vendor.create({
           name: vendorName,
           phone: formattedPhone,
+          category: 'Dhobi',
+          categoryCode: 'DHOBI',
+          isRegistered: true,
           userId: user._id || user.id,
           status: 'ACTIVE',
-          totalOrdersHandled: unreg.totalOrders || 0,
+          totalOrdersHandled: unreg?.totalOrders || 0,
         });
-      } else if (!vendor.userId) {
+      } else {
+        vendor.isRegistered = true;
         vendor.userId = user._id || user.id;
+        if (user.name) vendor.name = user.name;
         await vendor.save();
       }
 
-      unreg.isConvertedToRegistered = true;
-      unreg.convertedVendorId = vendor._id;
-      unreg.convertedAt = new Date();
-      await unreg.save();
+      if (unreg) {
+        unreg.isConvertedToRegistered = true;
+        unreg.convertedVendorId = vendor._id;
+        unreg.convertedAt = new Date();
+        await unreg.save();
+      }
 
       // Update past laundry orders linked to this vendor phone
       const LaundryOrder = require('../laundry/laundryOrder.model');

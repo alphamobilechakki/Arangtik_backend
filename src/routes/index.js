@@ -57,4 +57,9 @@ const notificationRoutes = require('../modules/notification/notification.routes'
 router.use('/notifications', notificationRoutes);
 router.use('/v1/notifications', notificationRoutes);
 
+// Admin Module Routes
+const adminRoutes = require('../modules/admin/admin.routes');
+router.use('/admin', adminRoutes);
+router.use('/v1/admin', adminRoutes);
+
 module.exports = router;

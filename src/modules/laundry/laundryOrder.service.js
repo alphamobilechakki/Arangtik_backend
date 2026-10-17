@@ -227,7 +227,7 @@ class LaundryOrderService {
         .catch((err) => console.warn('[FCM Customer Order Notification Warning]:', err.message));
 
       // B. If vendor has an active user account in Arangtik, notify the vendor
-      const VendorModel = require('../vendor/vendor.model');
+      const VendorModel = require('../vendor/registeredVendor.model');
       let vendorUserTargetId = null;
       if (order.vendorId) {
         const vDoc = await VendorModel.findById(order.vendorId).select('userId');

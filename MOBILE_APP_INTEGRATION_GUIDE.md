@@ -1152,6 +1152,239 @@ All push notifications sent by Arangtik include structured `data` fields with `t
 - **Path:** `/api/notifications/read-all`
 - **Headers:** `Authorization: Bearer <TOKEN>`
 
+---
+
+================================================================================
+## 11. VENDOR REGISTRATION, CATEGORY SELECTION & PASSWORD AUTHENTICATION
+================================================================================
+
+Arangtik provides a unified database architecture for vendors (both registered and unregistered in the single `vendors` table) with dynamic category selection and secure password-based authentication.
+
+### 1. Fetch Service Categories (For Registration Screen)
+
+**Where in Mobile App:**
+- **Screen:** Vendor Registration / Signup Screen (`VendorRegisterScreen`).
+- **Trigger:** Call on screen mount (`initState()` in Flutter / `useEffect()` in React Native) to render the category selection cards or dropdown.
+- **Purpose:** Lets the vendor choose whether they are a **Dhobi (Laundry)**, **Doodh Wala (Milk Delivery)**, **Press / Ironing**, **Tailor**, etc.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/categories` *(or `/api/vendor/auth/categories`)*
+- **Access:** Public (No Token Required)
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor categories retrieved successfully",
+  "data": [
+    {
+      "id": "dhobi",
+      "name": "Dhobi",
+      "code": "DHOBI",
+      "icon": "🧺",
+      "description": "Laundry, Dry Cleaning & Garment Care"
+    },
+    {
+      "id": "doodh_wala",
+      "name": "Doodh Wala",
+      "code": "DOODH_WALA",
+      "icon": "🥛",
+      "description": "Fresh Milk & Dairy Delivery"
+    },
+    {
+      "id": "press_ironing",
+      "name": "Press / Ironing",
+      "code": "PRESS_IRONING",
+      "icon": "👔",
+      "description": "Clothes Pressing & Fold Delivery"
+    },
+    {
+      "id": "tailor",
+      "name": "Tailor",
+      "code": "TAILOR",
+      "icon": "✂️",
+      "description": "Stitching & Garment Alteration"
+    }
+  ]
+}
+```
+
+---
+
+### 2. Vendor Registration (Category Selection + Direct Password Login)
+
+During registration, the vendor selects their category, enters their mobile number, password, and profile details.
+Upon registration, the vendor is **automatically logged in** and a JWT token is returned directly.
+
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/register`
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "name": "Ramesh Patel",
+  "phone": "919876543210",
+  "password": "VendorSecretPassword123",
+  "category": "Dhobi",
+  "businessName": "Ramesh Super Dry Cleaners",
+  "address": {
+    "street": "12 Linking Road",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400050"
+  }
+}
+```
+> **Tip:** You can send `"category": "Dhobi"` (Category Name) or `"categoryId": "dhobi"` (Category ID). Both are accepted by the backend.
+
+- **Response (201 Created):**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Vendor registered and logged in successfully",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "vendor": {
+      "_id": "67b3f890b1234567890abcde",
+      "vendorId": "VND-482910",
+      "name": "Ramesh Patel",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "isRegistered": true,
+      "businessName": "Ramesh Super Dry Cleaners",
+      "rating": 5.0,
+      "totalOrdersHandled": 0,
+      "status": "ACTIVE"
+    }
+  }
+}
+```
+
+---
+
+### 3. Vendor Password Login
+
+Vendors log in with their registered 10-digit mobile number and password (no OTP required).
+
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/login`
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "phone": "919876543210",
+  "password": "VendorSecretPassword123"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "vendor": {
+      "_id": "67b3f890b1234567890abcde",
+      "vendorId": "VND-482910",
+      "name": "Ramesh Patel",
+      "phone": "919876543210",
+      "category": "Dhobi (Laundry & Dry Cleaning)",
+      "categoryCode": "DHOBI",
+      "isRegistered": true,
+      "businessName": "Ramesh Super Dry Cleaners",
+      "status": "ACTIVE"
+    }
+  }
+}
+```
+
+---
+
+### 4. Forgot Password & WhatsApp OTP Reset Flow
+
+#### Step 1: Send Reset OTP
+Vendor requests an OTP to their registered WhatsApp number:
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/forgot-password`
+- **Body:**
+```json
+{
+  "phone": "919876543210"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Password reset OTP sent successfully to your WhatsApp number",
+  "data": {
+    "phone": "919876543210",
+    "expiresInMinutes": 10
+  }
+}
+```
+
+#### Step 2: Verify OTP
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/verify-reset-otp`
+- **Body:**
+```json
+{
+  "phone": "919876543210",
+  "otp": "4819"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "OTP verified successfully",
+  "data": {
+    "phone": "919876543210",
+    "verified": true
+  }
+}
+```
+
+#### Step 3: Set New Password
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/reset-password`
+- **Body:**
+```json
+{
+  "phone": "919876543210",
+  "otp": "4819",
+  "newPassword": "NewSecureVendorPassword456"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Password reset successfully. You can now login with your new password.",
+  "data": {
+    "phone": "919876543210",
+    "success": true
+  }
+}
+```
+
+---
+
+---
+
+### 5. Fetch Vendor Profile (Protected)
+- **Method:** `GET`
+- **Path:** `/api/vendor/auth/me`
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+
+---
+
 ================================================================================
 ## 📋 QUICK INTEGRATION CHECKLIST FOR MOBILE DEVELOPERS
 ================================================================================
