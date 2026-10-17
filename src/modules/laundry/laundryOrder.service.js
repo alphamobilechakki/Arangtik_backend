@@ -206,6 +206,58 @@ class LaundryOrderService {
       }
     }
 
+    // 9. Dispatch FCM Push Notifications
+    try {
+      const notificationService = require('../notification/notification.service');
+
+      // A. Notify Customer
+      await notificationService
+        .sendToUser(user._id, {
+          title: `Laundry Work Order Placed #${order.orderNumber}`,
+          body: `Your work order for ${order.totalItems} garment(s) has been sent to ${order.vendorName}.`,
+          data: {
+            type: 'LAUNDRY_ORDER_NEW',
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            vendorName: order.vendorName,
+            totalItems: String(order.totalItems),
+          },
+          type: 'LAUNDRY_ORDER_NEW',
+        })
+        .catch((err) => console.warn('[FCM Customer Order Notification Warning]:', err.message));
+
+      // B. If vendor has an active user account in Arangtik, notify the vendor
+      const VendorModel = require('../vendor/vendor.model');
+      let vendorUserTargetId = null;
+      if (order.vendorId) {
+        const vDoc = await VendorModel.findById(order.vendorId).select('userId');
+        if (vDoc && vDoc.userId) vendorUserTargetId = vDoc.userId;
+      }
+      if (!vendorUserTargetId) {
+        const vUser = await User.findOne({ phone: order.vendorPhone }).select('_id');
+        if (vUser) vendorUserTargetId = vUser._id;
+      }
+
+      if (vendorUserTargetId && String(vendorUserTargetId) !== String(user._id)) {
+        await notificationService
+          .sendToUser(vendorUserTargetId, {
+            title: `New Laundry Work Order #${order.orderNumber}`,
+            body: `${order.userName} requested laundry service for ${order.totalItems} garment(s).`,
+            data: {
+              type: 'LAUNDRY_ORDER_NEW',
+              orderId: order._id.toString(),
+              orderNumber: order.orderNumber,
+              customerName: order.userName,
+              totalItems: String(order.totalItems),
+            },
+            type: 'LAUNDRY_ORDER_NEW',
+          })
+          .catch((err) => console.warn('[FCM Vendor Order Notification Warning]:', err.message));
+      }
+    } catch (fcmErr) {
+      console.warn('[FCM Dispatch Notice]:', fcmErr.message);
+    }
+
     return order;
   }
 
@@ -309,6 +361,37 @@ class LaundryOrderService {
     });
 
     await order.save();
+
+    // Dispatch FCM status update notification to customer
+    try {
+      const notificationService = require('../notification/notification.service');
+      const statusLabels = {
+        PENDING_PICKUP: 'Awaiting Pickup',
+        PICKED_UP: 'Clothes Picked Up by Vendor',
+        IN_PROCESS: 'Processing (Washing / Dry Cleaning)',
+        READY_FOR_DELIVERY: 'Ready for Delivery',
+        DELIVERED: 'Delivered',
+        CANCELLED: 'Cancelled',
+      };
+      const label = statusLabels[status] || status;
+
+      await notificationService
+        .sendToUser(order.userId, {
+          title: `Laundry Order Update #${order.orderNumber}`,
+          body: `Your work order is now: ${label}.`,
+          data: {
+            type: 'LAUNDRY_ORDER_STATUS',
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            status,
+          },
+          type: 'LAUNDRY_ORDER_STATUS',
+        })
+        .catch((err) => console.warn('[FCM Status Notification Warning]:', err.message));
+    } catch (fcmErr) {
+      console.warn('[FCM Dispatch Notice]:', fcmErr.message);
+    }
+
     return order;
   }
 

@@ -635,6 +635,27 @@ const bulkAddDressPhotos = async (userId, files = [], options = {}) => {
   }
   results.summaryMessage = summaryMessage;
 
+  // Dispatch FCM Push Notification if items were added
+  if (results.newItemsCreated && results.newItemsCreated.length > 0) {
+    try {
+      const notificationService = require('../notification/notification.service');
+      notificationService
+        .sendToUser(userId, {
+          title: 'Wardrobe Digitization Complete ',
+          body: `Successfully extracted and added ${results.newItemsCreated.length} garment(s) to ${almariLabel}.`,
+          data: {
+            type: 'WARDROBE_DIGITIZED',
+            count: String(results.newItemsCreated.length),
+            wardrobeId: String(targetWardrobeId || ''),
+          },
+          type: 'WARDROBE_DIGITIZED',
+        })
+        .catch((err) => console.warn('[FCM Digitization Notification Warning]:', err.message));
+    } catch (fcmErr) {
+      console.warn('[FCM Digitization Notification Warning]:', fcmErr.message);
+    }
+  }
+
   return results;
 };
 
@@ -901,6 +922,27 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
   }
 
   results.summaryMessage = summaryMessage;
+
+  // Dispatch FCM Push Notification if items were added
+  if (results.newWardrobeItemsCreated && results.newWardrobeItemsCreated.length > 0) {
+    try {
+      const notificationService = require('../notification/notification.service');
+      notificationService
+        .sendToUser(userId, {
+          title: 'Gallery Ingestion Complete 📸',
+          body: `Digitized and added ${results.newWardrobeItemsCreated.length} garment(s) to ${almariLabel}.`,
+          data: {
+            type: 'WARDROBE_DIGITIZED',
+            count: String(results.newWardrobeItemsCreated.length),
+            wardrobeId: String(targetWardrobeId || ''),
+          },
+          type: 'WARDROBE_DIGITIZED',
+        })
+        .catch((err) => console.warn('[FCM Ingest Notification Warning]:', err.message));
+    } catch (fcmErr) {
+      console.warn('[FCM Ingest Notification Warning]:', fcmErr.message);
+    }
+  }
 
   return results;
 };

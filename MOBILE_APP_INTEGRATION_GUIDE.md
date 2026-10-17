@@ -1021,11 +1021,123 @@ When the user types a number or picks a contact from their device:
    - In the Work Order detail screen, render a **"View PDF Receipt"** button opening `order.pdfUrl` in an in-app browser or native share sheet.
 
 ================================================================================
+## FEATURE 11: FIREBASE CLOUD MESSAGING (FCM) PUSH NOTIFICATIONS
+================================================================================
+
+### 1. Overview
+Arangtik mobile app receives real-time push notifications for key lifecycle events:
+- **Laundry Work Orders:** Order placed confirmation, vendor notifications, and real-time status updates (`PENDING_PICKUP` -> `PICKED_UP` -> `IN_PROCESS` -> `READY_FOR_DELIVERY` -> `DELIVERED`).
+- **3D Garment Models:** Notified as soon as TripoSR finishes 3D mesh reconstruction (`GARMENT_3D_COMPLETED`).
+- **Wardrobe Digitization:** Notified when bulk photo digitization or gallery ingestion finishes adding garments (`WARDROBE_DIGITIZED`).
+- **Vendor Hub:** Newly converted vendors notified when their profile is activated (`VENDOR_ACTIVATED`).
+
+---
+
+### 2. Device Token Registration Lifecycle
+
+#### Step 1: Obtain FCM Token on Mobile Client
+- **Flutter:** `String? token = await FirebaseMessaging.instance.getToken();`
+- **React Native:** `const token = await messaging().getToken();`
+- **Native Android (Kotlin):** `FirebaseMessaging.getInstance().token.addOnCompleteListener { ... }`
+- **Native iOS (Swift):** `Messaging.messaging().token { token, error in ... }`
+
+#### Step 2: Register Token with Backend (Immediately upon Login & Token Refresh)
+- **Method:** `POST`
+- **Path:** `/api/notifications/device-token` *(also available as `/api/auth/device-token`)*
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Payload:**
+```json
+{
+  "token": "dK_3f9z...fcm_registration_token...",
+  "platform": "ANDROID", // or "IOS"
+  "deviceId": "unique_hardware_uuid",
+  "deviceModel": "Google Pixel 8",
+  "appVersion": "1.2.0"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Device token registered successfully",
+  "data": {
+    "token": "dK_3f9z...",
+    "platform": "ANDROID",
+    "isActive": true
+  }
+}
+```
+
+#### Step 3: Remove Token on Logout
+When the user logs out, include the device token in `POST /api/auth/logout`:
+```json
+{
+  "deviceToken": "dK_3f9z...fcm_registration_token..."
+}
+```
+Or call:
+- **Method:** `DELETE`
+- **Path:** `/api/notifications/device-token`
+- **Body:** `{ "token": "dK_3f9z..." }`
+
+---
+
+### 3. Notification Handling & Deep Linking Routing
+
+All push notifications sent by Arangtik include structured `data` fields with `type` for client deep linking:
+
+| `data.type` | Target Screen / Deep Link | Key Data Fields |
+|---|---|---|
+| `LAUNDRY_ORDER_NEW` | Work Order Detail Screen | `orderId`, `orderNumber`, `totalItems` |
+| `LAUNDRY_ORDER_STATUS` | Work Order Detail Screen | `orderId`, `orderNumber`, `status` |
+| `GARMENT_3D_COMPLETED` | 3D Garment Interactive Viewer | `itemId`, `modelUrl` |
+| `GARMENT_3D_FAILED` | Garment Detail Screen (Retry) | `itemId` |
+| `WARDROBE_DIGITIZED` | Almari Closet Screen | `wardrobeId`, `count` |
+| `VENDOR_ACTIVATED` | Laundry Vendor Dashboard | `vendorId` |
+
+---
+
+### 4. In-App Notification Inbox APIs
+
+#### A. Fetch User Notifications
+- **Method:** `GET`
+- **Path:** `/api/notifications?page=1&limit=20&unreadOnly=false`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+- **Response:**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Notifications retrieved successfully",
+  "data": {
+    "notifications": [ ... ],
+    "unreadCount": 3,
+    "pagination": { "total": 12, "page": 1, "limit": 20, "pages": 1 }
+  }
+}
+```
+
+#### B. Mark Single as Read
+- **Method:** `PATCH`
+- **Path:** `/api/notifications/:id/read`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+
+#### C. Mark All as Read
+- **Method:** `PATCH`
+- **Path:** `/api/notifications/read-all`
+- **Headers:** `Authorization: Bearer <TOKEN>`
+
+================================================================================
 ## 📋 QUICK INTEGRATION CHECKLIST FOR MOBILE DEVELOPERS
 ================================================================================
 
 - [ ] Store Bearer Token in secure hardware keychain (`flutter_secure_storage` / `react-native-keychain`).
 - [ ] Attach `Authorization: Bearer <TOKEN>` header to all requests except `/auth/send-otp` and `/auth/verify-otp`.
+- [ ] Register FCM device token via `POST /api/notifications/device-token` upon login and on token refresh.
+- [ ] Deactivate device token on logout via `POST /api/auth/logout` with `{ deviceToken }`.
+- [ ] Listen to foreground notifications (`FirebaseMessaging.onMessage`) and display in-app toast / banner.
+- [ ] Handle notification click / background tap (`FirebaseMessaging.onMessageOpenedApp`) and navigate according to `data.type`.
 - [ ] Add 401 response interceptor to auto-logout on expired token.
 - [ ] Use `GET /api/wardrobe/get-wardrobes` on app start and persist active Almari.
 - [ ] Implement single primary button `"Extract & Add to Almari"` for camera/gallery photo digitization.

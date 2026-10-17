@@ -17,4 +17,14 @@ router.put('/profile', protect, upload.fields([{ name: 'image', maxCount: 1 }, {
 router.post('/profile-image', protect, upload.single('image'), authController.uploadProfileImage);
 router.post('/logout', protect, authController.logout);
 
+// FCM Device Token Registration & Removal (Convenience Auth Endpoints)
+const notificationController = require('../notification/notification.controller');
+const {
+  validateRegisterToken,
+  validateRemoveToken,
+} = require('../notification/notification.validation');
+
+router.post('/device-token', protect, validateRegisterToken, notificationController.registerDeviceToken);
+router.delete('/device-token', protect, validateRemoveToken, notificationController.removeDeviceToken);
+
 module.exports = router;

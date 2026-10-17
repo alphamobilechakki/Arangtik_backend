@@ -675,6 +675,26 @@ const generateItem3DModel = async (userId, itemId) => {
       error: null,
     };
     await item.save();
+
+    // Dispatch FCM Notification
+    try {
+      const notificationService = require('../notification/notification.service');
+      notificationService
+        .sendToUser(userId, {
+          title: '3D Garment Ready ✨',
+          body: `Your 3D model for "${item.name}" has been generated and is ready to view!`,
+          data: {
+            type: 'GARMENT_3D_COMPLETED',
+            itemId: item._id.toString(),
+            modelUrl: result.url || '',
+          },
+          type: 'GARMENT_3D_COMPLETED',
+        })
+        .catch((err) => console.warn('[FCM 3D Notification Warning]:', err.message));
+    } catch (fcmErr) {
+      console.warn('[FCM 3D Notification Warning]:', fcmErr.message);
+    }
+
     return item;
   } catch (err) {
     console.error(`[generateItem3DModel] Failed for item ${itemId}:`, err.message);
@@ -687,6 +707,22 @@ const generateItem3DModel = async (userId, itemId) => {
       error: err.message,
     };
     await item.save();
+
+    try {
+      const notificationService = require('../notification/notification.service');
+      notificationService
+        .sendToUser(userId, {
+          title: '3D Generation Failed',
+          body: `Could not generate 3D model for "${item.name}". Please try again.`,
+          data: {
+            type: 'GARMENT_3D_FAILED',
+            itemId: item._id.toString(),
+          },
+          type: 'GARMENT_3D_FAILED',
+        })
+        .catch(() => {});
+    } catch (fcmErr) {}
+
     throw new ApiError(500, `3D Model generation failed: ${err.message}`);
   }
 };

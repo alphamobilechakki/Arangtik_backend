@@ -1302,6 +1302,123 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 | **28** | Admin | `GET` | `/api/integration/stats` | **x-api-key** | System Inventory & AI Metrics |
 | **29** | Admin | `GET` | `/api/integration/users` | **x-api-key** | Synchronize System Users |
 | **30** | Admin | `GET` | `/api/integration/users/:identifier` | **x-api-key** | Get Detailed User Record |
+| **31** | Notifications | `POST` | `/api/notifications/device-token` | **Yes (Bearer)** | Register / Update FCM Device Token |
+| **32** | Notifications | `DELETE`| `/api/notifications/device-token` | **Yes (Bearer)** | Remove FCM Device Token |
+| **33** | Notifications | `GET` | `/api/notifications` | **Yes (Bearer)** | Get Notification History / Inbox |
+| **34** | Notifications | `PATCH` | `/api/notifications/:id/read` | **Yes (Bearer)** | Mark Notification as Read |
+| **35** | Notifications | `PATCH` | `/api/notifications/read-all` | **Yes (Bearer)** | Mark All Notifications as Read |
+
+---
+
+## SERIES 11: Push Notifications & Device Token Management (`/api/notifications`)
+
+### 11.1 POST /api/notifications/device-token — Register FCM Device Token
+Registers or refreshes the FCM device token for the authenticated user's mobile device (Android / iOS).
+
+- **Headers:** `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "token": "dK_3f9z...fcm_registration_token...",
+  "platform": "ANDROID",
+  "deviceId": "uuid_device_hardware_id",
+  "deviceModel": "Google Pixel 8",
+  "appVersion": "1.2.0"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Device token registered successfully",
+  "data": {
+    "id": "67a3f890b1234567890abcdef",
+    "userId": "67a3f890b1234567890abc11",
+    "token": "dK_3f9z...fcm_registration_token...",
+    "platform": "ANDROID",
+    "isActive": true,
+    "lastUsedAt": "2026-10-17T11:00:00.000Z"
+  }
+}
+```
+
+### 11.2 DELETE /api/notifications/device-token — Remove FCM Device Token
+Deactivates a device token upon user logout or notification disable.
+
+- **Headers:** `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "token": "dK_3f9z...fcm_registration_token..."
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Device token removed successfully",
+  "data": {
+    "removed": true,
+    "deactivatedCount": 1
+  }
+}
+```
+
+### 11.3 GET /api/notifications — User Notification Inbox
+Retrieves in-app notification history and unread badge count for the user.
+
+- **Headers:** `Authorization: Bearer <JWT>`
+- **Query Params:** `?page=1&limit=20&unreadOnly=false`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Notifications retrieved successfully",
+  "data": {
+    "notifications": [
+      {
+        "_id": "67b0c1...",
+        "title": "Laundry Order Update #WO-20261017-1058",
+        "body": "Your work order is now: Ready for Delivery.",
+        "type": "LAUNDRY_ORDER_STATUS",
+        "data": {
+          "orderId": "67b0c0...",
+          "orderNumber": "WO-20261017-1058",
+          "status": "READY_FOR_DELIVERY"
+        },
+        "isRead": false,
+        "createdAt": "2026-10-17T11:00:00.000Z"
+      }
+    ],
+    "unreadCount": 1,
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+### 11.4 PATCH /api/notifications/:id/read — Mark Notification as Read
+- **Headers:** `Authorization: Bearer <JWT>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Notification marked as read",
+  "data": {
+    "_id": "67b0c1...",
+    "isRead": true,
+    "readAt": "2026-10-17T11:05:00.000Z"
+  }
+}
+```
 
 ---
 

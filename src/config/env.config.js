@@ -39,4 +39,12 @@ module.exports = {
   FACE_MIN_SIZE: parseInt(process.env.FACE_MIN_SIZE, 10) || 45, // Minimum face bounding box width/height in pixels
   FACE_AI_SERVICE_URL: process.env.FACE_AI_SERVICE_URL || '', // Optional external Python microservice
   FACE_AI_TIMEOUT_MS: parseInt(process.env.FACE_AI_TIMEOUT_MS, 10) || 15000,
+
+  // Firebase Cloud Messaging (FCM) Configuration
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || '',
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
+  FIREBASE_SERVICE_ACCOUNT_PATH: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
+  FIREBASE_SERVICE_ACCOUNT_BASE64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || '',
+  FCM_DEV_MODE: process.env.FCM_DEV_MODE === 'true',
 };

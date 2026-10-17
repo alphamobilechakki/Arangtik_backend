@@ -210,6 +210,24 @@ class VendorService {
         );
       }
 
+      // Dispatch FCM Push Notification to newly activated vendor
+      try {
+        const notificationService = require('../notification/notification.service');
+        notificationService
+          .sendToUser(user._id || user.id, {
+            title: 'Vendor Hub Activated 🧺',
+            body: `Your phone number has been linked to your laundry vendor profile "${vendor.name}". Past work orders are now in your dashboard!`,
+            data: {
+              type: 'VENDOR_ACTIVATED',
+              vendorId: vendor._id.toString(),
+            },
+            type: 'VENDOR_ACTIVATED',
+          })
+          .catch((err) => console.warn('[FCM Vendor Sync Warning]:', err.message));
+      } catch (fcmErr) {
+        console.warn('[FCM Vendor Sync Warning]:', fcmErr.message);
+      }
+
       return { converted: true, vendor };
     }
 

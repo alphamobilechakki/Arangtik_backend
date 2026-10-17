@@ -52,4 +52,9 @@ const vendorRoutes = require('../modules/vendor/vendor.routes');
 router.use('/vendor', vendorRoutes);
 router.use('/v1/vendor', vendorRoutes);
 
+// Notification & FCM Routes
+const notificationRoutes = require('../modules/notification/notification.routes');
+router.use('/notifications', notificationRoutes);
+router.use('/v1/notifications', notificationRoutes);
+
 module.exports = router;

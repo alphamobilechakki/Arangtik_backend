@@ -37,11 +37,20 @@ class AuthController {
   });
 
   /**
-   * @desc    Logout user
+   * @desc    Logout user (optionally deactivates device token if provided in body)
    * @route   POST /api/auth/logout
    * @access  Private
    */
   logout = asyncHandler(async (req, res) => {
+    const token = req.body?.deviceToken || req.body?.token;
+    if (token && req.user?.id) {
+      try {
+        const notificationService = require('../notification/notification.service');
+        await notificationService.removeDeviceToken(req.user.id, token);
+      } catch (tokenErr) {
+        // Non-fatal, allow logout to succeed
+      }
+    }
     return ApiResponse.success(res, null, 'Logged out successfully');
   });
 
