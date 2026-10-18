@@ -825,9 +825,15 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 | `occasion` | `string` | `CASUAL`, `OFFICE`, `PARTY`, `WEDDING`, `DATE`, `TRAVEL` |
 | `season` | `string` | `SUMMER`, `WINTER`, `ALL_SEASON` |
 | `favorite` | `boolean` | Filter favorite items (`true` / `false`) |
+| `status` | `string` | Filter by garment availability: `ACTIVE` or `INACTIVE` (Default: returns all) |
 | `search` | `string` | Keyword search query |
 | `page` | `number` | Page number (Default: `1`) |
 | `limit` | `number` | Items per page (Default: `20`) |
+
+> 🏷️ **Garment Status Architecture:**
+> Wardrobe items support strictly **2 statuses**:
+> - `ACTIVE` *(default)*: Garment is present in wardrobe and available for AI Outfit Suggestions.
+> - `INACTIVE`: Garment is currently sent to laundry or temporarily unavailable. It is automatically excluded from AI Outfit Suggestions and cannot be submitted to another laundry order until returned.
 
 #### Response (`200 OK`)
 ```json
@@ -843,6 +849,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
         "category": "UPPER_WEAR",
         "subCategory": "Shirt",
         "color": "Navy Blue",
+        "status": "ACTIVE",
         "images": [{ "url": "/uploads/crops/shirt.webp", "isPrimary": true }],
         "isFavorite": false
       }
@@ -879,6 +886,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
     "color": "Navy Blue",
     "fabric": "LINEN",
     "fit": "SLIM_FIT",
+    "status": "ACTIVE",
     "occasion": ["OFFICE", "FORMAL"],
     "images": [{ "url": "/uploads/crops/shirt.webp", "isPrimary": true }]
   }
@@ -888,7 +896,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 ---
 
 ### 7.3 PATCH /api/wardrobe/edit-item/:id — Edit Item Attributes
-- **Description:** Modifies existing garment attributes (name, color, fabric, fit, tags, favorite state).
+- **Description:** Modifies existing garment attributes (name, color, fabric, fit, tags, status, favorite state).
 - **Method:** `PATCH`
 - **Endpoint:** `/api/wardrobe/edit-item/:id` *(Aliases: `/update-item/:id`, `/items/:id`)*
 - **Authentication:** `Bearer <TOKEN>`
@@ -899,9 +907,11 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 {
   "name": "Navy Blue Royal Linen Shirt (Updated)",
   "isFavorite": true,
-  "fabric": "PURE_LINEN"
+  "fabric": "PURE_LINEN",
+  "status": "ACTIVE"
 }
 ```
+> **Validation Rule:** `status` strictly accepts only `"ACTIVE"` or `"INACTIVE"`. Any other string returns **HTTP 400 Bad Request**.
 
 #### Response (`200 OK`)
 ```json
@@ -912,6 +922,7 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
   "data": {
     "_id": "6aba317270f26b72d852616f",
     "name": "Navy Blue Royal Linen Shirt (Updated)",
+    "status": "ACTIVE",
     "isFavorite": true
   }
 }
@@ -946,6 +957,8 @@ FLOW 6: SMART OUTFIT SUGGESTION & STYLIST ENGINE (MULTI-STEP WIZARD)
 - **Description:** Analyzes garments strictly available in the user's selected wardrobe (or across All Wardrobes) and generates multiple coordinated, color-harmonized outfit combinations.
   - **Zero Hallucination Guarantee:** Never invents or assumes missing items. If user has no shoes, outfits are suggested without shoes and `missingSlots: ["footwear"]` is reported transparently.
   - **Fashion Compatibility Engine:** Evaluates color harmony (Neutrals, Complementary, Monochromatic), contrast, pattern balance (solid + print), and occasion appropriateness.
+  - **Active Garment Guarantee:** Strictly filters out garments with `status: 'INACTIVE'` (e.g. garments currently sent to laundry). Only `ACTIVE` clothes are suggested to ensure recommendations are instantly wearable.
+  - **Strict Anatomical Slot Enforcement:** Enforces strict boundary verification between Upper Wear (Shirts, T-shirts, Polos, Kurtas) and Lower Wear (Pants, Trousers, Jeans, Chinos, Shorts). Upper wear is never inverted or suggested as lower wear, and 2-piece outfits strictly consist of 1 Upper Wear + 1 Lower Wear.
 - **Method:** `POST`
 - **Endpoint:** `/api/outfit/suggest` *(Alias: `/api/outfit/generate`)*
 - **Authentication:** `Bearer <TOKEN>`
@@ -1488,6 +1501,19 @@ Creates a new work order from selected closet garments, generates a PDF receipt,
 }
 ```
 - **Allowed Service Types:** `WASH` | `IRON` | `DRY_CLEAN` | `WASH_AND_IRON` | `OTHER`
+
+#### 🧺 Garment Status Lifecycle & Duplicate Prevention Rules
+1. **Automatic Inactive Transition:** Upon successful work order creation, all included wardrobe garments (`wardrobeItemId`) automatically transition to status `INACTIVE`.
+2. **Duplicate Laundry Order Prevention (Strict HTTP 400):** If any selected dress is already `INACTIVE` (e.g. already in another active laundry order), the request is rejected immediately with **HTTP 400**:
+   ```json
+   {
+     "statusCode": 400,
+     "success": false,
+     "message": "Garment \"Silk Kurta\" is already in laundry (status: Inactive) and cannot be sent again until returned."
+   }
+   ```
+3. **Outfit Suggestions Exclusion:** Inactive garments are excluded from AI Outfit Suggestions until returned.
+
 - **Response (201 Created):**
 ```json
 {
@@ -1563,6 +1589,10 @@ Users can cancel their pending orders or record progression.
 - **Strict Role Rules for Customer Status Update:**
   - ✅ **Customer CAN CANCEL (`CANCELLED`):** While awaiting pickup or before delivery. Triggers push notification to vendor.
   - ❌ **Customer CANNOT REJECT (`REJECTED`):** Sending `status: "REJECTED"` returns **HTTP 400** (`"Customers cannot reject orders. Please use CANCELLED if you wish to cancel this order."`).
+- **🔄 Garment Status Reversion:**
+  - When order status transitions to **`DELIVERED`** (garments delivered back to user) or **`CANCELLED`** (by customer), all wardrobe garments in the order automatically revert to **`ACTIVE`** and reappear in AI Outfit Suggestions.
+  - In-progress statuses (`PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`) keep the garments **`INACTIVE`**.
+
 - **Response (200 OK):**
 ```json
 {
@@ -1831,6 +1861,8 @@ Advances the order through the streamlined 4-step process or declines/rejects th
    - **Step 4:** `DELIVERED` (Returned to customer / completed)
 4. **Auto-Increment Counter:**  
    Marking an order as `DELIVERED` automatically increments the vendor's `totalOrdersHandled` in the database.
+5. **Wardrobe Items Status Reversion to ACTIVE:**  
+   When the vendor updates status to `DELIVERED` (clean garments returned) or `REJECTED` (order declined), all associated wardrobe garments automatically revert to `ACTIVE` in the user's Almari and become available for AI Outfit Suggestions.
 
 - **Response (200 OK):**
 ```json

@@ -439,6 +439,25 @@ class VendorService {
 
     await order.save();
 
+    // Sync wardrobe items status: DELIVERED/REJECTED => ACTIVE, in-progress => INACTIVE
+    const WardrobeItem = require('../wardrobe/wardrobeItem.model');
+    const itemIds = (order.items || []).map((it) => it.wardrobeItemId).filter(Boolean);
+    if (itemIds.length > 0) {
+      if (status === 'DELIVERED' || status === 'REJECTED') {
+        await WardrobeItem.updateMany(
+          { _id: { $in: itemIds } },
+          { $set: { status: 'ACTIVE' } }
+        );
+      } else if (
+        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(status)
+      ) {
+        await WardrobeItem.updateMany(
+          { _id: { $in: itemIds } },
+          { $set: { status: 'INACTIVE' } }
+        );
+      }
+    }
+
     // Dispatch FCM status notification to the customer
     try {
       const notificationService = require('../notification/notification.service');

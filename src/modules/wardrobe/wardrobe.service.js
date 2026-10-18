@@ -414,12 +414,20 @@ const getAllItems = async (userId, queryParams = {}) => {
     season,
     favorite,
     search,
+    status,
     page = 1,
     limit = 20,
     sort = '-createdAt',
   } = queryParams;
 
   const andClauses = [{ userId }];
+
+  if (status) {
+    const normStatus = String(status).toUpperCase();
+    if (normStatus === 'ACTIVE' || normStatus === 'INACTIVE') {
+      andClauses.push({ status: normStatus });
+    }
+  }
 
   if (storeType && storeType !== 'ALL') {
     const matchingStores = await Wardrobe.find({ userId, storeType }).select('_id');
@@ -544,6 +552,7 @@ const updateItem = async (userId, itemId, updateData) => {
     'subCategory',
     'images',
     'attributes',
+    'status',
     'currentStatus',
     'storageLocation',
     'laundryCare',
@@ -553,7 +562,13 @@ const updateItem = async (userId, itemId, updateData) => {
 
   for (const field of allowedFields) {
     if (updateData[field] !== undefined) {
-      if (field === 'attributes' && typeof updateData.attributes === 'object') {
+      if (field === 'status') {
+        const normalized = String(updateData.status).toUpperCase();
+        if (!['ACTIVE', 'INACTIVE'].includes(normalized)) {
+          throw new ApiError(400, "Garment status must be either 'ACTIVE' or 'INACTIVE'");
+        }
+        item.status = normalized;
+      } else if (field === 'attributes' && typeof updateData.attributes === 'object') {
         for (const [attrKey, attrVal] of Object.entries(updateData.attributes)) {
           item.attributes.set(attrKey, attrVal);
         }

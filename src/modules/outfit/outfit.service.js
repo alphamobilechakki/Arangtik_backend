@@ -97,66 +97,105 @@ const getItemImageUrl = (item) => {
 
 /**
  * Categorizes a wardrobe item into a semantic outfit slot
+ * Strictly prevents Upper Wear (shirts, t-shirts, kurtas) from ever being misclassified as Lower Wear.
  */
 const classifySlot = (item) => {
-  const cat = (item.category || '').toUpperCase();
-  const sub = (item.subCategory || '').toLowerCase();
-  const name = (item.name || '').toLowerCase();
+  if (!item) return SLOT_TYPES.TOP;
 
-  // One-Piece Ensembles (Dresses, Gowns, Sarees, Kurta Sets)
-  if (
-    cat === 'TRADITIONAL' ||
-    cat === 'DRESS' ||
-    cat === 'ONE_PIECE' ||
-    ['dress', 'gown', 'saree', 'sari', 'anarkali', 'lehenga', 'jumpsuit', 'romper', 'kurta set', 'salwar suit'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
-  ) {
-    return SLOT_TYPES.ONE_PIECE;
-  }
+  const cat = (item.category || '').toUpperCase().trim();
+  const sub = (item.subCategory || '').toLowerCase().trim();
+  const name = (item.name || '').toLowerCase().trim();
+  const text = `${name} ${sub}`;
 
-  // Outerwear (Blazers, Jackets, Coats, Shrugs)
-  if (
-    cat === 'OUTERWEAR' ||
-    ['jacket', 'blazer', 'coat', 'shrug', 'cardigan', 'hoodie', 'overshirt', 'bomber'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
-  ) {
-    return SLOT_TYPES.OUTERWEAR;
-  }
-
-  // Footwear (Shoes, Sneakers, Loafers, Heels, Boots)
+  // 1. Direct Footwear Check
   if (
     cat === 'FOOTWEAR' ||
-    ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'heel', 'heels', 'boot', 'boots', 'sandal', 'sandals', 'flat', 'flats'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
+    cat === 'SHOES' ||
+    /\b(shoes?|sneakers?|loafers?|heels?|boots?|sandals?|flats?|slippers?|oxfords?|brogues?|moccasins?|slides?|flip\s*flops?)\b/i.test(text)
   ) {
     return SLOT_TYPES.FOOTWEAR;
   }
 
-  // Accessories (Belts, Bags, Watches, Sunglasses)
+  // 2. Direct Accessories Check
   if (
     cat === 'ACCESSORIES' ||
-    ['belt', 'bag', 'handbag', 'watch', 'sunglasses', 'scarf', 'tie', 'cap', 'hat', 'jewellery', 'jewelry'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
+    cat === 'ACCESSORY' ||
+    /\b(belts?|handbags?|bags?|watch(es)?|sunglasses?|scarf|scarves|ties?|caps?|hats?|jewell?ery|necklaces?|bracelets?|rings?|earrings?|wallets?|clutch|mufflers?|cufflinks?)\b/i.test(text)
   ) {
     return SLOT_TYPES.ACCESSORIES;
   }
 
-  // Lower Wear (Jeans, Trousers, Chinos, Pants, Shorts, Skirts)
+  // 3. Outerwear (Blazers, Jackets, Coats, Shrugs, Overcoats)
   if (
-    cat === 'LOWER_WEAR' ||
-    cat === 'BOTTOMS' ||
-    ['jean', 'jeans', 'trouser', 'trousers', 'pant', 'pants', 'chino', 'chinos', 'short', 'shorts', 'skirt', 'palazzo', 'salwar', 'jogger', 'joggers'].some(
-      (k) => sub.includes(k) || name.includes(k)
-    )
+    cat === 'OUTERWEAR' ||
+    /\b(jackets?|blazers?|coats?|shrugs?|overcoats?|trench\s*coats?|bombers?|windbreakers?|cardigans?)\b/i.test(text)
   ) {
+    return SLOT_TYPES.OUTERWEAR;
+  }
+
+  // 4. Explicit UPPER_WEAR / TOPS Category (ABSOLUTE PRIORITY: CAN NEVER BE LOWER_WEAR)
+  if (cat === 'UPPER_WEAR' || cat === 'TOPS' || cat === 'TOP' || cat === 'UPPERWEAR') {
+    // Check if it's outerwear (e.g. blazer/jacket filed under upper wear)
+    if (/\b(jackets?|blazers?|coats?|shrugs?|overcoats?|bombers?)\b/i.test(text)) {
+      return SLOT_TYPES.OUTERWEAR;
+    }
+    return SLOT_TYPES.TOP;
+  }
+
+  // 5. Explicit LOWER_WEAR / BOTTOMS Category (ABSOLUTE PRIORITY: CAN NEVER BE UPPER_WEAR)
+  if (cat === 'LOWER_WEAR' || cat === 'BOTTOMS' || cat === 'BOTTOM' || cat === 'LOWERWEAR') {
     return SLOT_TYPES.BOTTOM;
   }
 
-  // Upper Wear (Default for tops, shirts, t-shirts, kurtas)
+  // 6. Explicit ONE_PIECE / DRESS Category
+  if (cat === 'ONE_PIECE' || cat === 'DRESS' || cat === 'DRESSES') {
+    return SLOT_TYPES.ONE_PIECE;
+  }
+
+  // 7. Traditional / Ethnic Wear Category Nuances
+  if (cat === 'TRADITIONAL') {
+    // One-Piece / Full Sets (Sarees, Lehengas, Anarkalis, Kurta Sets, Salwar Suits, Sherwani Sets)
+    if (/\b(sarees?|saris?|lehengas?|anarkalis?|kurta\s*sets?|salwar\s*suits?|suit\s*sets?|sherwani\s*sets?|gowns?|dresses?)\b/i.test(text)) {
+      return SLOT_TYPES.ONE_PIECE;
+    }
+    // Traditional Lower Wear (Dhotis, Salwars, Pajamas, Churidars, Shararas, Ghararas)
+    if (/\b(dhoti|dhotis|salwars?|pajamas?|pyjamas?|churidars?|shararas?|ghararas?|lungi)\b/i.test(text)) {
+      return SLOT_TYPES.BOTTOM;
+    }
+    // Traditional Outerwear / Layer (Nehru Jacket, Bandhgala, Koti)
+    if (/\b(nehru\s*jackets?|bandhgalas?|koti|waistcoats?)\b/i.test(text)) {
+      return SLOT_TYPES.OUTERWEAR;
+    }
+    // Standalone Traditional Upper Wear (Kurtas, Kurtis, Tunics, Sherwanis) -> MUST be paired with lower wear!
+    if (/\b(kurtas?|kurtis?|tunics?|sherwanis?)\b/i.test(text)) {
+      return SLOT_TYPES.TOP;
+    }
+    // Default for TRADITIONAL: One-piece if dressy, else Top
+    return SLOT_TYPES.ONE_PIECE;
+  }
+
+  // 8. One-Piece Ensembles by Keywords (Dresses, Gowns, Sarees, Jumpsuits)
+  if (/\b(dres(s|ses)|gowns?|sarees?|saris?|anarkalis?|lehengas?|jumpsuits?|rompers?|kurta\s*sets?|salwar\s*suits?|co-?ords?)\b/i.test(text)) {
+    return SLOT_TYPES.ONE_PIECE;
+  }
+
+  // 9. Upper Wear (Tops, Shirts, T-Shirts, Kurtas, Polos, Blouses, Sweaters) — MUST CHECK BEFORE LOWER WEAR
+  // Word boundary matching ensures "short sleeve shirt" or "short kurta" matches Upper Wear
+  if (/\b(shirts?|t-?shirts?|tees?|polos?|kurtas?|kurtis?|tops?|blouses?|sweaters?|sweatshirts?|hoodies?|tanks?|tank\s*tops?|camisoles?|tunics?|vests?|henleys?)\b/i.test(text)) {
+    return SLOT_TYPES.TOP;
+  }
+
+  // 10. Lower Wear (Jeans, Trousers, Chinos, Pants, Shorts, Skirts)
+  // Strict word boundaries prevent "short" in "short sleeve" from matching.
+  // We also explicitly rule out "short sleeve" or "short kurta".
+  const hasShorts = /\bshorts\b/i.test(text) && !/\bshort\s*(sleeve|sleeved|cut|collar|kurta|shirt|top|tee)\b/i.test(text);
+  const isLowerWearWord = /\b(jeans?|trousers?|pants?|chinos?|skirts?|palazzos?|salwars?|joggers?|sweatpants?|cargos?|cargo\s*pants?|leggings?|jeggings?|dhotis?|pajamas?|pyjamas?|churidars?|culottes?|bermudas?|boxers?|trunks?)\b/i.test(text);
+
+  if (hasShorts || isLowerWearWord) {
+    return SLOT_TYPES.BOTTOM;
+  }
+
+  // Default fallback for tops
   return SLOT_TYPES.TOP;
 };
 
@@ -382,7 +421,7 @@ const generateOutfitsWithGemini = async (items, occasion, season, limit = 5, glo
 
   const clientVibe =
     userGender === 'MALE'
-      ? 'The client profile is MALE (Gentleman). Focus on sharp, tailored, flattering menswear silhouettes (shirts, t-shirts, polo, blazers, trousers, jeans, sneakers, loafers).'
+      ? 'The client profile is MALE (Gentleman). Focus on sharp, tailored, flattering menswear silhouettes (shirts, t-shirts, polo, kurtas, blazers, trousers, jeans, chinos, shorts, sneakers, loafers).'
       : userGender === 'FEMALE'
       ? 'The client profile is FEMALE (Lady). Focus on chic, elegant, flattering womenswear aesthetics (tops, kurti, sarees, dresses, skirts, jeans, trousers, elegant footwear).'
       : 'Focus on versatile, modern, high-aesthetic styling combinations.';
@@ -394,13 +433,27 @@ ${clientVibe}
 Here is the user's REAL wardrobe inventory (DO NOT INVENT ANY ITEMS OUTSIDE THIS LIST):
 ${JSON.stringify(inventory, null, 2)}
 
-STRICT RULES:
-1. ONLY use "id" values that exist in the inventory above. NEVER invent imaginary clothes.
-2. An outfit MUST consist of either:
-   - Upper Wear + Lower Wear (optionally layered with Outerwear, Footwear, Accessories if available in inventory)
-   - OR a One-Piece Ensemble (Dress, Saree, Kurta Set) (optionally with Outerwear, Footwear, Accessories)
-3. Do not combine two loud clashing patterns. Prioritize modern fashion aesthetics, flattering proportions, and harmonious color theory.
-4. Curate up to ${limit} distinct, highly creative, occasion-perfect outfit combinations.
+CRITICAL CLOTHING COMBINATION & ANATOMICAL RULES (STRICT COMPLIANCE REQUIRED):
+1. RESPECT CLOTHING SLOTS & ANATOMY:
+   - "UPPER_WEAR" items (Shirts, T-Shirts, Polos, Kurtas, Tops, Hoodies, Sweaters) MUST ONLY be used as Upper Wear / Top.
+   - "LOWER_WEAR" items (Pants, Trousers, Jeans, Chinos, Shorts, Joggers, Skirts) MUST ONLY be used as Lower Wear / Bottom.
+   - STRICTLY FORBIDDEN: NEVER assign an UPPER_WEAR item as lower wear!
+   - STRICTLY FORBIDDEN: NEVER assign a LOWER_WEAR item as upper wear!
+   - STRICTLY FORBIDDEN: NEVER pair two Upper Wear items together (e.g. NEVER pair Shirt + Shirt, T-Shirt + Shirt, or Kurta + Shirt as Top and Bottom).
+   - STRICTLY FORBIDDEN: NEVER pair two Lower Wear items together (e.g. NEVER pair Jeans + Pants or Jeans + Shorts).
+2. OUTFIT STRUCTURE:
+   - Standard Two-Piece Outfit: MUST have EXACTLY 1 Upper Wear (slot: "UPPER_WEAR") + EXACTLY 1 Lower Wear (slot: "LOWER_WEAR").
+   - Layered Outfit: EXACTLY 1 Upper Wear + EXACTLY 1 Lower Wear + optionally 1 Outerwear (slot: "OUTERWEAR", e.g. blazer, jacket, coat).
+   - One-Piece Ensemble: EXACTLY 1 One-Piece item (slot: "ONE_PIECE", e.g. Dress, Saree, Kurta Set) + optional Outerwear.
+   - Optional Polish: You may include 1 Footwear (slot: "FOOTWEAR") and 1 Accessory (slot: "ACCESSORIES") if available in the inventory.
+3. MENSWEAR RULES:
+   - For men, always pair an appropriate Upper Wear (Shirt, T-Shirt, Polo, Kurta) with a matching Lower Wear (Trousers, Jeans, Chinos, Shorts).
+   - A Kurta is an Upper Wear garment; it MUST be paired with a Lower Wear bottom (Pajama, Chinos, Jeans, Trousers).
+4. COLOR THEORY & HARMONY:
+   - Do not combine two loud clashing patterns.
+   - Balance colors using Complementary, Analogous, Monochromatic, or Neutral + Pop contrast.
+5. ONLY use "id" values that exist in the inventory above. NEVER invent imaginary clothes.
+6. Curate up to ${limit} distinct, highly creative, occasion-perfect outfit combinations.
 
 Return ONLY a raw JSON array of objects (no markdown, no backticks):
 [
@@ -438,17 +491,62 @@ Return ONLY a raw JSON array of objects (no markdown, no backticks):
           const combo = parsed[idx];
           if (!Array.isArray(combo.itemIds) || combo.itemIds.length === 0) continue;
 
-          const resolvedItems = combo.itemIds
-            .map((id) => itemsById.get(id?.toString()))
-            .filter(Boolean);
+          // Deduplicate item IDs in combination
+          const seenIds = new Set();
+          const resolvedItems = [];
+          for (const rawId of combo.itemIds) {
+            const idStr = rawId?.toString().trim();
+            if (idStr && !seenIds.has(idStr) && itemsById.has(idStr)) {
+              seenIds.add(idStr);
+              resolvedItems.push(itemsById.get(idStr));
+            }
+          }
 
-          const hasTop = resolvedItems.some((it) => classifySlot(it) === SLOT_TYPES.TOP);
-          const hasBottom = resolvedItems.some((it) => classifySlot(it) === SLOT_TYPES.BOTTOM);
-          const hasOnePiece = resolvedItems.some((it) => classifySlot(it) === SLOT_TYPES.ONE_PIECE);
+          if (resolvedItems.length === 0) continue;
 
-          if (!hasOnePiece && (!hasTop || !hasBottom)) continue;
+          const tops = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.TOP);
+          const bottoms = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.BOTTOM);
+          const onePieces = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.ONE_PIECE);
+          const outerwears = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.OUTERWEAR);
+          const footwears = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.FOOTWEAR);
+          const accessories = resolvedItems.filter((it) => classifySlot(it) === SLOT_TYPES.ACCESSORIES);
 
-          const outfitItems = resolvedItems.map((it) => ({
+          let finalItems = [];
+          let archetype = 'TWO_PIECE';
+
+          if (onePieces.length > 0) {
+            archetype = 'ONE_PIECE';
+            finalItems = [
+              onePieces[0],
+              ...outerwears.slice(0, 1),
+              ...footwears.slice(0, 1),
+              ...accessories.slice(0, 1),
+            ];
+          } else {
+            // STRICT VALIDATION: MUST have AT LEAST 1 Top AND AT LEAST 1 Bottom
+            if (tops.length === 0 || bottoms.length === 0) {
+              console.warn(`[OutfitStylist] Discarding invalid AI combo #${idx + 1}: missing top (${tops.length}) or bottom (${bottoms.length})`);
+              continue;
+            }
+
+            const chosenTop = tops[0];
+            const chosenBottom = bottoms[0];
+
+            // STRICT SANITY CHECK: Ensure top and bottom are distinct and not cross-assigned
+            if (chosenTop._id.toString() === chosenBottom._id.toString()) continue;
+            if (chosenTop.category === 'LOWER_WEAR' || chosenBottom.category === 'UPPER_WEAR') continue;
+
+            archetype = outerwears.length > 0 ? 'LAYERED_TWO_PIECE' : 'TWO_PIECE';
+            finalItems = [
+              chosenTop,
+              chosenBottom,
+              ...outerwears.slice(0, 1),
+              ...footwears.slice(0, 1),
+              ...accessories.slice(0, 1),
+            ];
+          }
+
+          const outfitItems = finalItems.map((it) => ({
             itemId: it._id,
             slot: classifySlot(it),
             name: it.name,
@@ -459,29 +557,25 @@ Return ONLY a raw JSON array of objects (no markdown, no backticks):
           }));
 
           const missing = [];
-          if (!resolvedItems.some((it) => classifySlot(it) === SLOT_TYPES.FOOTWEAR) && globalMissingSlots.includes('footwear')) {
+          if (!finalItems.some((it) => classifySlot(it) === SLOT_TYPES.FOOTWEAR) && globalMissingSlots.includes('footwear')) {
             missing.push('footwear');
           }
 
           curatedOutfits.push({
-            id: `outfit_${idx + 1}_${Date.now().toString(36)}`,
-            archetype: hasOnePiece
-              ? 'ONE_PIECE'
-              : resolvedItems.some((it) => classifySlot(it) === SLOT_TYPES.OUTERWEAR)
-              ? 'LAYERED_TWO_PIECE'
-              : 'TWO_PIECE',
-            title: combo.title || `Curated Look #${idx + 1}`,
+            id: `outfit_${curatedOutfits.length + 1}_${Date.now().toString(36)}`,
+            archetype,
+            title: combo.title || generateOutfitTitle(archetype, finalItems[0], finalItems[1], outerwears[0], occasion),
             occasion: occasion.toUpperCase(),
             items: outfitItems,
             colorHarmony: {
-              palette: combo.colorHarmony?.palette || resolvedItems.map((it) => extractColor(it)).filter(Boolean),
+              palette: combo.colorHarmony?.palette || finalItems.map((it) => extractColor(it)).filter(Boolean),
               harmonyType: combo.colorHarmony?.harmonyType || 'DYNAMIC_HARMONY',
               description: combo.colorHarmony?.description || '',
               score: combo.matchScore || 90,
             },
             matchScore: combo.matchScore || 92,
             missingSlots: missing,
-            stylingNotes: combo.stylingNotes || '',
+            stylingNotes: combo.stylingNotes || generateStylingAdvice(archetype, finalItems[0], finalItems[1], outerwears[0], footwears[0]),
           });
 
           if (curatedOutfits.length >= limit) break;
@@ -525,7 +619,11 @@ const suggestOutfits = async (userId, options = {}) => {
   }
 
   // STEP 2: Query Wardrobe Items strictly scoped to user & selected wardrobe(s)
-  const query = { userId };
+  // Strictly filter out INACTIVE garments (e.g. garments currently sent to laundry)
+  const query = {
+    userId,
+    status: { $ne: 'INACTIVE' },
+  };
 
   if (selectedWardrobeIds.length > 0) {
     const defaultWardrobe = await Wardrobe.findOne({ userId, isDefault: true }).lean();
@@ -673,6 +771,10 @@ const suggestOutfits = async (userId, options = {}) => {
     const topPattern = extractPattern(top);
 
     for (const bottom of slots.bottoms) {
+      // Guard against identical item or cross-categorized inversion
+      if (top._id && bottom._id && top._id.toString() === bottom._id.toString()) continue;
+      if (top.category === 'LOWER_WEAR' || bottom.category === 'UPPER_WEAR') continue;
+
       const bottomPattern = extractPattern(bottom);
       if (topPattern !== 'solid' && topPattern !== 'plain' && bottomPattern !== 'solid' && bottomPattern !== 'plain') {
         continue; // Prevent clashing busy patterns

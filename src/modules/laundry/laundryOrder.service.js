@@ -87,6 +87,14 @@ class LaundryOrderService {
         );
       }
 
+      // Garment already in laundry check: Cannot send inactive dresses to laundry again
+      if (wardrobeItem.status === 'INACTIVE') {
+        throw new ApiError(
+          400,
+          `Garment "${wardrobeItem.name}" is already in laundry (status: Inactive) and cannot be sent again until returned.`
+        );
+      }
+
       // Pick best primary image
       let primaryImg = wardrobeItem.sourcePhotoUrl || '';
       if (Array.isArray(wardrobeItem.images) && wardrobeItem.images.length > 0) {
@@ -165,6 +173,15 @@ class LaundryOrderService {
     });
 
     await order.save();
+
+    // 6.1. Mark wardrobe garments as INACTIVE (sent to laundry)
+    const wardrobeItemIds = processedItems.map((it) => it.wardrobeItemId);
+    if (wardrobeItemIds.length > 0) {
+      await WardrobeItem.updateMany(
+        { _id: { $in: wardrobeItemIds }, userId: user._id },
+        { $set: { status: 'INACTIVE' } }
+      );
+    }
 
     // 7. Generate PDF Work Order
     try {
@@ -386,6 +403,24 @@ class LaundryOrderService {
     });
 
     await order.save();
+
+    // Sync wardrobe items status: DELIVERED/CANCELLED => ACTIVE, in-progress => INACTIVE
+    const itemIds = (order.items || []).map((it) => it.wardrobeItemId).filter(Boolean);
+    if (itemIds.length > 0) {
+      if (status === 'DELIVERED' || status === 'CANCELLED') {
+        await WardrobeItem.updateMany(
+          { _id: { $in: itemIds } },
+          { $set: { status: 'ACTIVE' } }
+        );
+      } else if (
+        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(status)
+      ) {
+        await WardrobeItem.updateMany(
+          { _id: { $in: itemIds } },
+          { $set: { status: 'INACTIVE' } }
+        );
+      }
+    }
 
     // Dispatch FCM status update notification to customer
     try {

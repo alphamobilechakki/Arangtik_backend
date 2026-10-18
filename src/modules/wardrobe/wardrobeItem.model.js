@@ -137,6 +137,13 @@ const WardrobeItemSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Garment Status: Only ACTIVE or INACTIVE
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'INACTIVE'],
+      default: 'ACTIVE',
+      index: true,
+    },
     // Usage & Favorite State
     isFavorite: {
       type: Boolean,
@@ -210,6 +217,7 @@ WardrobeItemSchema.index({ userId: 1, wardrobeId: 1 });
 WardrobeItemSchema.index({ userId: 1, category: 1 });
 WardrobeItemSchema.index({ userId: 1, sourceImageHash: 1 });
 WardrobeItemSchema.index({ userId: 1, isFavorite: 1 });
+WardrobeItemSchema.index({ userId: 1, status: 1 });
 WardrobeItemSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.models.WardrobeItem || mongoose.model('WardrobeItem', WardrobeItemSchema);

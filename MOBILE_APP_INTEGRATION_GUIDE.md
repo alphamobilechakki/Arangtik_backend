@@ -541,8 +541,11 @@ Browse all clothing items stored across the user's Almaris. Supports text search
   - `season`: `SUMMER` | `WINTER` | `MONSOON` | `ALL_SEASON` (optional)
   - `search`: Keyword search on name, tags, fabric (optional)
   - `favorite`: `true` | `false` (optional)
+  - `status`: `ACTIVE` | `INACTIVE` (optional, filter garments by status)
   - `page`: Page number (Integer, default: 1)
   - `limit`: Items per page (Integer, default: 20, max: 100)
+
+> 🏷️ **Garment Status Architecture:** Each wardrobe item supports strictly 2 statuses: `ACTIVE` *(default, available in closet & for outfit suggestions)* and `INACTIVE` *(currently in laundry, excluded from suggestions)*.
 
 - **Response (200 OK):**
 ```json
@@ -562,6 +565,7 @@ Browse all clothing items stored across the user's Almaris. Supports text search
         "color": "Navy Blue",
         "fabric": "Cotton",
         "pattern": "Solid",
+        "status": "ACTIVE",
         "isFavorite": true,
         "wearCount": 4,
         "lastWornAt": "2026-10-10T14:30:00.000Z",
@@ -607,7 +611,7 @@ View garment specs, update fields (favorite status, times worn, color, storage p
 - **Method:** `GET`
 - **Path:** `/api/wardrobe/get-item/:id` *(or `/api/wardrobe/get-item-details/:id`)*
 - **Headers:** `Authorization: Bearer <TOKEN>`
-- **Response (200 OK):** Returns full garment document.
+- **Response (200 OK):** Returns full garment document including `"status": "ACTIVE" | "INACTIVE"`.
 
 #### B. Update Item Attributes (STRICT: PATCH ONLY, NEVER PUT)
 - **Method:** `PATCH`
@@ -617,18 +621,21 @@ View garment specs, update fields (favorite status, times worn, color, storage p
 ```json
 {
   "name": "Navy Blue Linen Casual Shirt",
+  "status": "ACTIVE",
   "isFavorite": true,
   "storagePlace": "Drawer 3",
   "wearCount": 5,
   "lastWornAt": "2026-10-13T18:00:00.000Z"
 }
 ```
+> **Validation Rule:** `status` strictly accepts only `"ACTIVE"` or `"INACTIVE"`. Invalid values return **HTTP 400 Bad Request**.
+
 - **Response (200 OK):**
 ```json
 {
   "success": true,
   "message": "Wardrobe item updated successfully",
-  "data": { /* updated item object */ }
+  "data": { /* updated item object with status */ }
 }
 ```
 
@@ -703,6 +710,8 @@ When `COMPLETED`, `item.model3d.glbUrl` contains the downloadable 3D asset (e.g.
 ### 1. Overview
 The stylist engine analyses clothes from the user's Almari(s) to create coordinated outfit combinations (Top + Bottom + Footwear or One-piece Dress + Shoes) based on occasion, weather, and color harmony.
 
+> 🔒 **Active Garment Availability Guarantee:** The styling engine automatically filters out all clothes marked as `INACTIVE` (such as garments currently out for laundry). Only `ACTIVE` clothes are styled so recommendations are 100% available to wear right now.
+
 ### 2. Endpoints
 
 #### A. Generate Outfit Suggestions
@@ -721,6 +730,11 @@ The stylist engine analyses clothes from the user's Almari(s) to create coordina
 ```
 - **Allowed Occasion Enum:**
   `CASUAL` | `FORMAL` | `PARTY` | `WEDDING` | `SPORTS` | `ETHNIC` | `DATE_NIGHT` | `TRAVEL`
+- **Strict Anatomical Slot Rules:**
+  - `UPPER_WEAR` items (Shirts, T-Shirts, Polos, Kurtas) strictly occupy the Top slot.
+  - `LOWER_WEAR` items (Jeans, Trousers, Chinos, Shorts) strictly occupy the Bottom slot.
+  - Upper wear items (including Short Sleeve Shirts and Kurtas) are never inverted into lower wear.
+  - 2-Piece outfits strictly consist of 1 Upper Wear + 1 Lower Wear.
 - **Response (200 OK):**
 ```json
 {
@@ -864,6 +878,7 @@ The backend automatically:
 3. Generates a branded **Arangtik Work Order PDF** with user details, dates, and garment inventory.
 4. Dispatches a WhatsApp notification containing the Work Order details and PDF attachment to the vendor via **API24**.
 5. When an unregistered vendor later registers/logs into Arangtik, their records are automatically converted to a verified registered vendor and past work orders are linked.
+6. **Garment Status Lifecycle Synchronization:** Automatically transitions sent garments to `INACTIVE` (excluding them from AI Outfit Suggestions & preventing duplicate laundry submissions). When returned (`DELIVERED`) or cancelled (`CANCELLED`/`REJECTED`), status reverts to `ACTIVE`.
 
 ---
 
@@ -945,6 +960,12 @@ When the user types a number or picks a contact from their device:
 }
 ```
 > **Service Types Allowed:** `WASH` | `IRON` | `DRY_CLEAN` | `WASH_AND_IRON` | `OTHER`
+> 
+> 🧺 **Garment Status & Duplicate Prevention Rules:**
+> 1. **Automatic Inactive Transition:** When order is created, all included garments (`wardrobeItemId`) automatically become `INACTIVE`.
+> 2. **Duplicate Order Rejection (HTTP 400):** If an item is already `INACTIVE` (already out for laundry), creating another order returns **HTTP 400** (`"Garment '<name>' is already in laundry (status: Inactive) and cannot be sent again until returned."`).
+> 3. **Excluded from Outfits:** Inactive garments are hidden from AI Outfit Suggestions until returned.
+
 - **Response (201 Created):**
 ```json
 {
@@ -1018,6 +1039,8 @@ When the user types a number or picks a contact from their device:
 - **Terminal Actions & Role Distinction (Strict Business Rules):**
   - `CANCELLED`: **Customer Only** can cancel an order (vendors cannot cancel).
   - `REJECTED`: **Vendor Only** can reject/decline an order (customers cannot reject).
+- **🔄 Automatic Garment Status Reversion:**
+  - When status becomes `DELIVERED`, `CANCELLED`, or `REJECTED`, all wardrobe garments in this order automatically revert to `ACTIVE` and become eligible for AI Outfit Suggestions.
 
 ---
 
@@ -1029,8 +1052,9 @@ When the user types a number or picks a contact from their device:
 ---
 
 ### 3. Mobile UI/UX Recommendations
-1. **Garment Multi-Selection:**
+1. **Garment Multi-Selection & Inactive Guardrails:**
    - In wardrobe Almari view, provide a floating action button **"Send to Laundry"** that enables multi-selection checkboxes on clothes.
+   - For clothes with `status === 'INACTIVE'`, disable the selection checkbox, apply 50% opacity, and display a badge **"🧺 In Laundry"**. If clicked, show a toast: *"This dress is already in laundry and cannot be sent again until returned."*
 2. **Contact Picker Permission:**
    - On iOS (`contacts_service` / `react-native-contacts`) and Android (`READ_CONTACTS`), request permission to let users pick their dhobi/laundry shop contact directly.
 3. **Date Pickers:**
