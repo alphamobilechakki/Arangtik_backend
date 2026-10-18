@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const RegisteredVendor = require('./registeredVendor.model');
 const Vendor = RegisteredVendor;
 const UnregisteredVendor = require('./unregisteredVendor.model');
@@ -254,6 +255,229 @@ class VendorService {
     }
 
     return null;
+  }
+
+  /**
+   * Fetch all laundry work orders assigned to this vendor
+   * (Matched by either vendorId OR vendorPhone)
+   */
+  async getVendorOrders(vendor, query = {}) {
+    if (!vendor) {
+      throw new ApiError(401, 'Vendor authentication required');
+    }
+
+    const { status, page = 1, limit = 20, search } = query;
+    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const formattedPhone = formatPhoneNumber(vendor.phone);
+
+    const filter = {
+      $or: [
+        { vendorId: vendor._id },
+        { vendorPhone: formattedPhone },
+      ],
+    };
+
+    if (status && status !== 'ALL') {
+      filter.status = status;
+    }
+
+    if (search && String(search).trim()) {
+      const searchRegex = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$and = [
+        {
+          $or: [
+            { orderNumber: searchRegex },
+            { userName: searchRegex },
+            { userPhone: searchRegex },
+          ],
+        },
+      ];
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [orders, totalCount] = await Promise.all([
+      LaundryOrder.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      LaundryOrder.countDocuments(filter),
+    ]);
+
+    return {
+      orders,
+      pagination: {
+        total: totalCount,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(totalCount / limitNum),
+      },
+    };
+  }
+
+  /**
+   * Get single work order details by ID for vendor
+   */
+  async getVendorOrderById(vendor, orderId) {
+    if (!vendor) {
+      throw new ApiError(401, 'Vendor authentication required');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      throw new ApiError(400, 'Invalid Order ID format');
+    }
+
+    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const formattedPhone = formatPhoneNumber(vendor.phone);
+
+    const order = await LaundryOrder.findOne({
+      _id: orderId,
+      $or: [
+        { vendorId: vendor._id },
+        { vendorPhone: formattedPhone },
+      ],
+    }).populate('items.wardrobeItemId', 'name category images attributes');
+
+    if (!order) {
+      throw new ApiError(404, 'Work order not found or not assigned to this vendor');
+    }
+
+    return order;
+  }
+
+  /**
+   * Update order status by vendor (self-service PATCH)
+   */
+  async updateVendorOrderStatus(vendor, orderId, { status, note }) {
+    if (!vendor) {
+      throw new ApiError(401, 'Vendor authentication required');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      throw new ApiError(400, 'Invalid Order ID format');
+    }
+
+    // Strict Business Rule: Vendors can REJECT orders, but CANNOT CANCEL
+    if (status === 'CANCELLED') {
+      throw new ApiError(
+        400,
+        'Vendors cannot cancel orders. Please use REJECTED if you wish to decline this order.'
+      );
+    }
+
+    const validStatuses = [
+      'PENDING_PICKUP',
+      'PICKED_UP',
+      'IN_PROCESS',
+      'READY_FOR_DELIVERY',
+      'DELIVERED',
+      'REJECTED',
+    ];
+
+    if (!status || !validStatuses.includes(status)) {
+      throw new ApiError(
+        400,
+        `Invalid status. Allowed values are: ${validStatuses.join(', ')}`
+      );
+    }
+
+    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const formattedPhone = formatPhoneNumber(vendor.phone);
+
+    const order = await LaundryOrder.findOne({
+      _id: orderId,
+      $or: [
+        { vendorId: vendor._id },
+        { vendorPhone: formattedPhone },
+      ],
+    });
+
+    if (!order) {
+      throw new ApiError(404, 'Work order not found or not assigned to this vendor');
+    }
+
+    // Validation for REJECTED: cannot reject already finalized orders
+    if (status === 'REJECTED') {
+      if (order.status === 'DELIVERED') {
+        throw new ApiError(400, 'Cannot reject an order that has already been delivered');
+      }
+      if (order.status === 'CANCELLED') {
+        throw new ApiError(400, 'Cannot reject an order that was cancelled by customer');
+      }
+      if (order.status === 'REJECTED') {
+        throw new ApiError(400, 'Order is already marked as rejected');
+      }
+    }
+
+    const previousStatus = order.status;
+    order.status = status;
+    order.statusHistory.push({
+      status,
+      changedBy: 'VENDOR',
+      changedAt: new Date(),
+      note: note
+        ? String(note).trim()
+        : status === 'REJECTED'
+        ? `Order rejected by vendor ${vendor.name}`
+        : `Status changed to ${status} by vendor ${vendor.name}`,
+    });
+
+    // If marked as DELIVERED and wasn't before, update vendor totalOrdersHandled
+    if (status === 'DELIVERED' && previousStatus !== 'DELIVERED') {
+      try {
+        const VendorModel = require('./registeredVendor.model');
+        await VendorModel.findByIdAndUpdate(vendor._id, {
+          $inc: { totalOrdersHandled: 1 },
+        });
+      } catch (incErr) {
+        console.warn('[Vendor Order Count Inc Warning]:', incErr.message);
+      }
+    }
+
+    await order.save();
+
+    // Dispatch FCM status notification to the customer
+    try {
+      const notificationService = require('../notification/notification.service');
+      const statusLabels = {
+        PENDING_PICKUP: 'Awaiting Pickup',
+        PICKED_UP: 'Clothes Picked Up by Vendor',
+        IN_PROCESS: 'Processing (Washing / Dry Cleaning)',
+        READY_FOR_DELIVERY: 'Ready for Delivery',
+        DELIVERED: 'Delivered',
+        REJECTED: 'Rejected by Vendor',
+      };
+      const label = statusLabels[status] || status;
+      const title =
+        status === 'REJECTED'
+          ? `Order #${order.orderNumber} Rejected`
+          : `Laundry Order Update #${order.orderNumber}`;
+      const body =
+        status === 'REJECTED'
+          ? `Vendor ${vendor.name} has rejected your work order.${note ? ` Reason: ${note}` : ''}`
+          : `Vendor ${vendor.name} updated your work order to: ${label}.`;
+
+      await notificationService
+        .sendToUser(order.userId, {
+          title,
+          body,
+          data: {
+            type: 'LAUNDRY_ORDER_STATUS',
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            status,
+          },
+          type: 'LAUNDRY_ORDER_STATUS',
+        })
+        .catch((err) => console.warn('[FCM Status Notification Warning]:', err.message));
+    } catch (fcmErr) {
+      console.warn('[FCM Dispatch Notice]:', fcmErr.message);
+    }
+
+    return order;
   }
 }
 

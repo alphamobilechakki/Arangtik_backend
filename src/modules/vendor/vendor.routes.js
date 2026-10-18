@@ -32,4 +32,11 @@ router.get('/profile', protectVendor, vendorAuthController.getMe);
 // ==========================================
 router.get('/lookup', protect, vendorController.lookupVendor);
 
+// ==========================================
+// 4. Vendor Work Orders (Protected by Vendor JWT)
+// ==========================================
+router.get('/orders', protectVendor, vendorController.getVendorOrders);
+router.get('/orders/:id', protectVendor, vendorController.getVendorOrderDetails);
+router.patch('/orders/:id/status', protectVendor, vendorController.updateVendorOrderStatus);
+
 module.exports = router;

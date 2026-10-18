@@ -19,6 +19,40 @@ class VendorController {
         : 'Vendor details retrieved'
     );
   });
+
+  /**
+   * @desc    Get all work orders assigned to currently authenticated vendor
+   * @route   GET /api/vendor/orders
+   * @access  Private (Vendor)
+   */
+  getVendorOrders = asyncHandler(async (req, res) => {
+    const result = await vendorService.getVendorOrders(req.vendor, req.query);
+    return ApiResponse.success(res, result, 'Vendor work orders retrieved successfully');
+  });
+
+  /**
+   * @desc    Get details of a specific work order for vendor
+   * @route   GET /api/vendor/orders/:id
+   * @access  Private (Vendor)
+   */
+  getVendorOrderDetails = asyncHandler(async (req, res) => {
+    const order = await vendorService.getVendorOrderById(req.vendor, req.params.id);
+    return ApiResponse.success(res, order, 'Vendor work order details retrieved');
+  });
+
+  /**
+   * @desc    Update status of an assigned work order (Vendor self-service per Rule 4 using PATCH)
+   * @route   PATCH /api/vendor/orders/:id/status
+   * @access  Private (Vendor)
+   */
+  updateVendorOrderStatus = asyncHandler(async (req, res) => {
+    const order = await vendorService.updateVendorOrderStatus(
+      req.vendor,
+      req.params.id,
+      req.body
+    );
+    return ApiResponse.success(res, order, 'Work order status updated successfully by vendor');
+  });
 }
 
 module.exports = new VendorController();

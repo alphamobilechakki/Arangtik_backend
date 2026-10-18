@@ -327,6 +327,14 @@ class LaundryOrderService {
       throw new ApiError(400, 'Invalid Order ID format');
     }
 
+    // Strict Business Rule: Customers can CANCEL orders, but CANNOT REJECT
+    if (status === 'REJECTED') {
+      throw new ApiError(
+        400,
+        'Customers cannot reject orders. Please use CANCELLED if you wish to cancel this order.'
+      );
+    }
+
     const validStatuses = [
       'PENDING_PICKUP',
       'PICKED_UP',
@@ -352,12 +360,29 @@ class LaundryOrderService {
       throw new ApiError(404, 'Laundry Work Order not found');
     }
 
+    // Validation for CANCELLED: cannot cancel already finalized or rejected orders
+    if (status === 'CANCELLED') {
+      if (order.status === 'DELIVERED') {
+        throw new ApiError(400, 'Cannot cancel an order that has already been delivered');
+      }
+      if (order.status === 'REJECTED') {
+        throw new ApiError(400, 'This order was already rejected by the vendor');
+      }
+      if (order.status === 'CANCELLED') {
+        throw new ApiError(400, 'Order is already marked as cancelled');
+      }
+    }
+
     order.status = status;
     order.statusHistory.push({
       status,
       changedBy: 'USER',
       changedAt: new Date(),
-      note: note ? String(note).trim() : `Status changed to ${status}`,
+      note: note
+        ? String(note).trim()
+        : status === 'CANCELLED'
+        ? 'Order cancelled by customer'
+        : `Status changed to ${status}`,
     });
 
     await order.save();
@@ -388,6 +413,36 @@ class LaundryOrderService {
           type: 'LAUNDRY_ORDER_STATUS',
         })
         .catch((err) => console.warn('[FCM Status Notification Warning]:', err.message));
+
+      // If user cancelled, notify vendor if vendor has an active account
+      if (status === 'CANCELLED') {
+        const VendorModel = require('../vendor/registeredVendor.model');
+        let vendorUserTargetId = null;
+        if (order.vendorId) {
+          const vDoc = await VendorModel.findById(order.vendorId).select('userId');
+          if (vDoc && vDoc.userId) vendorUserTargetId = vDoc.userId;
+        }
+        if (!vendorUserTargetId) {
+          const vUser = await User.findOne({ phone: order.vendorPhone }).select('_id');
+          if (vUser) vendorUserTargetId = vUser._id;
+        }
+
+        if (vendorUserTargetId) {
+          await notificationService
+            .sendToUser(vendorUserTargetId, {
+              title: `Order #${order.orderNumber} Cancelled`,
+              body: `Customer ${order.userName} has cancelled their work order.${note ? ` Reason: ${note}` : ''}`,
+              data: {
+                type: 'LAUNDRY_ORDER_STATUS',
+                orderId: order._id.toString(),
+                orderNumber: order.orderNumber,
+                status: 'CANCELLED',
+              },
+              type: 'LAUNDRY_ORDER_STATUS',
+            })
+            .catch((err) => console.warn('[FCM Vendor Cancel Notification Warning]:', err.message));
+        }
+      }
     } catch (fcmErr) {
       console.warn('[FCM Dispatch Notice]:', fcmErr.message);
     }

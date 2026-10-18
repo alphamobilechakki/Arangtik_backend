@@ -136,6 +136,7 @@ const laundryOrderSchema = new mongoose.Schema(
         'READY_FOR_DELIVERY', // Cleaned and packed, ready to return
         'DELIVERED', // Handed over to user / completed
         'CANCELLED', // Cancelled by user
+        'REJECTED', // Rejected by vendor
       ],
       default: 'PENDING_PICKUP',
       index: true,

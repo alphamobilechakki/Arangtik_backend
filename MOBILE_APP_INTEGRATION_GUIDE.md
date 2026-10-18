@@ -1010,13 +1010,14 @@ When the user types a number or picks a contact from their device:
   "note": "Vendor collected garments from doorstep"
 }
 ```
-- **Allowed Status Enum:**
-  - `PENDING_PICKUP` (Order placed, awaiting pickup)
-  - `PICKED_UP` (Garments collected by vendor)
-  - `IN_PROCESS` (Washing / dry cleaning underway)
-  - `READY_FOR_DELIVERY` (Cleaned, pressed and packed)
-  - `DELIVERED` (Handed back to user / completed)
-  - `CANCELLED` (Cancelled)
+- **Streamlined 4-Step Progressive Workflow:**
+  - `PENDING_PICKUP` (Step 1: Order placed, awaiting pickup)
+  - `PICKED_UP` (Step 2: Garments collected by vendor)
+  - `IN_PROCESS` (Step 3: Washing / dry cleaning underway)
+  - `DELIVERED` (Step 4: Cleaned garments returned / completed)
+- **Terminal Actions & Role Distinction (Strict Business Rules):**
+  - `CANCELLED`: **Customer Only** can cancel an order (vendors cannot cancel).
+  - `REJECTED`: **Vendor Only** can reject/decline an order (customers cannot reject).
 
 ---
 
@@ -1379,9 +1380,228 @@ Vendor requests an OTP to their registered WhatsApp number:
 ---
 
 ### 5. Fetch Vendor Profile (Protected)
+
+Vendors can retrieve their complete profile, business details, metrics, and verification status.
+
 - **Method:** `GET`
-- **Path:** `/api/vendor/auth/me`
+- **Path:** `/api/vendor/profile` *(Alias: `/api/vendor/auth/me` or `/api/v1/vendor/profile`)*
 - **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor profile retrieved successfully",
+  "data": {
+    "_id": "67b3f890b1234567890abcde",
+    "vendorId": "VND-482910",
+    "name": "Ramesh Patel",
+    "phone": "919876543210",
+    "category": "Dhobi (Laundry & Dry Cleaning)",
+    "categoryCode": "DHOBI",
+    "businessName": "Ramesh Super Dry Cleaners",
+    "address": {
+      "street": "Shop 4, Gandhi Market",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "rating": 5.0,
+    "totalOrdersHandled": 14,
+    "isVerified": true,
+    "isRegistered": true,
+    "status": "ACTIVE",
+    "createdAt": "2026-10-18T10:00:00.000Z",
+    "updatedAt": "2026-10-18T10:30:00.000Z"
+  }
+}
+```
+
+---
+
+### 6. Vendor Work Orders & Laundry Management (Protected by Vendor JWT)
+
+Vendors can access their digital work order pipeline, review visual garment snapshots, download/share work order PDFs, and advance orders through the streamlined 4-step process.
+
+#### A. List Assigned Work Orders
+Fetch all work orders assigned to the authenticated vendor, with multi-status filtering, text search, and pagination.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/orders` *(or `/api/v1/vendor/orders`)*
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Query Parameters:**
+  - `status`: Optional filter (`ALL`, `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `REJECTED`)
+  - `page`: Page number (default: `1`)
+  - `limit`: Items per page (default: `20`, max: `100`)
+  - `search`: Search string (matches against order number, customer name, or customer phone)
+- **Example Request:** `GET /api/vendor/orders?status=PENDING_PICKUP&page=1&limit=20`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor work orders retrieved successfully",
+  "data": {
+    "orders": [
+      {
+        "_id": "67b0c0f81234567890abcdef",
+        "orderNumber": "WO-20261018-4921",
+        "userId": "67a3f890b1234567890abcdef",
+        "userName": "Rahul Sharma",
+        "userPhone": "919876543210",
+        "vendorId": "67b3f890b1234567890abcde",
+        "vendorPhone": "919876543210",
+        "vendorName": "Ramesh Patel",
+        "isRegisteredVendor": true,
+        "pickupDate": "2026-10-19T09:00:00.000Z",
+        "expectedDeliveryDate": "2026-10-21T18:00:00.000Z",
+        "specialInstructions": "Handle silk kurta with care. Starch cotton shirt collar.",
+        "totalItems": 2,
+        "status": "PENDING_PICKUP",
+        "pdfUrl": "/uploads/laundry_pdfs/WO-20261018-4921.pdf",
+        "whatsappNotification": {
+          "sent": true,
+          "sentAt": "2026-10-18T10:05:00.000Z",
+          "status": "DELIVERED_TO_GATEWAY"
+        },
+        "items": [
+          {
+            "wardrobeItemId": "67a4d1001234567890abcdef",
+            "name": "Navy Blue Kurta",
+            "category": "Ethnic",
+            "color": "Navy Blue",
+            "fabric": "Silk Blend",
+            "imageUrl": "/uploads/wardrobe/kurta_cutout.png",
+            "serviceType": "DRY_CLEAN",
+            "specialInstructions": "Dry clean only"
+          }
+        ],
+        "createdAt": "2026-10-18T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+---
+
+#### B. Get Work Order Details by ID
+Fetch complete metadata for a single work order assigned to this vendor.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/orders/:id` *(or `/api/v1/vendor/orders/:id`)*
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor work order details retrieved",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "userName": "Rahul Sharma",
+    "userPhone": "919876543210",
+    "pickupDate": "2026-10-19T09:00:00.000Z",
+    "expectedDeliveryDate": "2026-10-21T18:00:00.000Z",
+    "specialInstructions": "Handle silk kurta with care.",
+    "status": "PENDING_PICKUP",
+    "pdfUrl": "/uploads/laundry_pdfs/WO-20261018-4921.pdf",
+    "items": [ ... ],
+    "statusHistory": [
+      {
+        "status": "PENDING_PICKUP",
+        "changedBy": "USER",
+        "changedAt": "2026-10-18T10:00:00.000Z",
+        "note": "Work Order created"
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### C. Update Work Order Status (Vendor Self-Service PATCH)
+Vendors can advance the order through the 4-step progressive lifecycle or decline/reject the order.
+
+- **Method:** `PATCH` *(Never use PUT per Arangtik Rule 4)*
+- **Path:** `/api/vendor/orders/:id/status` *(or `/api/v1/vendor/orders/:id/status`)*
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`, `Content-Type: application/json`
+- **Request Body (Step Forward):**
+```json
+{
+  "status": "PICKED_UP",
+  "note": "Garments collected from customer doorstep"
+}
+```
+- **Request Body (Decline / Reject Order):**
+```json
+{
+  "status": "REJECTED",
+  "note": "Shop closed today / Capacity full"
+}
+```
+
+##### 🚦 Strict Business Rules for Vendor Status Updates:
+1. **Vendor CANNOT Cancel:**  
+   If a vendor attempts to send `"status": "CANCELLED"`, the backend strictly rejects the request with **HTTP 400**:
+   ```json
+   {
+     "success": false,
+     "statusCode": 400,
+     "message": "Vendors cannot cancel orders. Please use REJECTED if you wish to decline this order."
+   }
+   ```
+2. **Vendor CAN Reject (`REJECTED`):**  
+   Vendors can decline orders (e.g. when order is in `PENDING_PICKUP`). When rejected:
+   - Status transitions to `REJECTED`.
+   - History records `changedBy: "VENDOR"` and the reason note.
+   - An instant FCM push notification is dispatched to the customer:
+     - **Title:** `Order #WO-XXXX Rejected`
+     - **Body:** `Vendor [Name] has rejected your work order. Reason: [Note]`
+3. **Streamlined 4-Step Progressive Workflow:**
+   - **Step 1:** `PENDING_PICKUP` (Awaiting pickup from customer)
+   - **Step 2:** `PICKED_UP` (Garments collected by vendor)
+   - **Step 3:** `IN_PROCESS` (Washing, ironing, or dry cleaning in progress)
+   - **Step 4:** `DELIVERED` (Returned to customer / order completed)
+4. **Automated Order Counter:**  
+   When status transitions to `DELIVERED`, the vendor's `totalOrdersHandled` metric is automatically incremented in the database.
+
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Work order status updated successfully by vendor",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "status": "PICKED_UP",
+    "statusHistory": [
+      {
+        "status": "PENDING_PICKUP",
+        "changedBy": "USER",
+        "changedAt": "2026-10-18T10:00:00.000Z",
+        "note": "Work Order created"
+      },
+      {
+        "status": "PICKED_UP",
+        "changedBy": "VENDOR",
+        "changedAt": "2026-10-18T11:00:00.000Z",
+        "note": "Garments collected from customer doorstep"
+      }
+    ],
+    "updatedAt": "2026-10-18T11:00:00.000Z"
+  }
+}
+```
 
 ---
 
@@ -1389,21 +1609,29 @@ Vendor requests an OTP to their registered WhatsApp number:
 ## 📋 QUICK INTEGRATION CHECKLIST FOR MOBILE DEVELOPERS
 ================================================================================
 
-- [ ] Store Bearer Token in secure hardware keychain (`flutter_secure_storage` / `react-native-keychain`).
-- [ ] Attach `Authorization: Bearer <TOKEN>` header to all requests except `/auth/send-otp` and `/auth/verify-otp`.
+### User / Customer App Checklist:
+- [ ] Store Customer Bearer Token in secure hardware keychain (`flutter_secure_storage` / `react-native-keychain`).
+- [ ] Attach `Authorization: Bearer <TOKEN>` header to all customer requests.
 - [ ] Register FCM device token via `POST /api/notifications/device-token` upon login and on token refresh.
 - [ ] Deactivate device token on logout via `POST /api/auth/logout` with `{ deviceToken }`.
-- [ ] Listen to foreground notifications (`FirebaseMessaging.onMessage`) and display in-app toast / banner.
 - [ ] Handle notification click / background tap (`FirebaseMessaging.onMessageOpenedApp`) and navigate according to `data.type`.
-- [ ] Add 401 response interceptor to auto-logout on expired token.
 - [ ] Use `GET /api/wardrobe/get-wardrobes` on app start and persist active Almari.
 - [ ] Implement single primary button `"Extract & Add to Almari"` for camera/gallery photo digitization.
-- [ ] Render duplicate cards with **"Compare"** button to open the side-by-side resolution modal.
 - [ ] When user clicks *"Different Dress"*, call `/api/wardrobe/add-item` with `forceAdd: true`.
 - [ ] Never send `PUT` requests for updates; strictly use `PATCH`.
 - [ ] Resolve all image paths with `getImageUrl()` and enable local image caching (`FastImage` / `CachedNetworkImage`).
 - [ ] Compress camera photos client-side to maximum `1600px` before sending multipart `FormData`.
 - [ ] Render 3D garment models using `model_viewer_plus` or Three.js GLB viewer.
-- [ ] Laundry Module: Use `GET /api/v1/laundry/vendors/lookup?phone=` to auto-detect registered vs unregistered vendors.
-- [ ] Laundry Module: Use `PATCH /api/v1/laundry/orders/:id/status` for user status updates.
+- [ ] **Laundry Module (Customer):** Use `GET /api/v1/vendor/lookup?phone=` to auto-detect partner details.
+- [ ] **Laundry Status (Customer):** Customers can cancel orders using `PATCH /api/v1/laundry/orders/:id/status` with `status: "CANCELLED"`. Customers CANNOT use `"REJECTED"`.
+
+### Partner / Vendor App Checklist:
+- [ ] Store Vendor Bearer Token separately from customer token (e.g. `vendor_jwt_token`).
+- [ ] Use `GET /api/vendor/profile` to load partner profile, verified badge, and rating.
+- [ ] Use `GET /api/vendor/orders` with tab filters (`ALL`, `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `REJECTED`).
+- [ ] **Order Progression (Vendor):** Advance orders step-by-step: `PENDING_PICKUP` -> `PICKED_UP` -> `IN_PROCESS` -> `DELIVERED`.
+- [ ] **Order Decline (Vendor):** Provide a **"Reject"** action dialog with quick reasons (`Shop closed today`, `Capacity full`, etc.) calling `PATCH /api/vendor/orders/:id/status` with `status: "REJECTED"`.
+- [ ] **Strict Rule (Vendor):** Never render or send `"CANCELLED"` from the vendor app; vendors can only `REJECT`.
+- [ ] Open order PDF receipts via `order.pdfUrl` in in-app webview or native document viewer.
+
 

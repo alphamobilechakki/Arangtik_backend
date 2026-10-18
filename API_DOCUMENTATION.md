@@ -49,7 +49,28 @@
   - [10.1 GET /api/integration/stats — System Inventory & Biometric Analytics](#101-get-apiintegrationstats---system-inventory--biometric-analytics)
   - [10.2 GET /api/integration/users — Synchronize System Users](#102-get-apiintegrationusers---synchronize-system-users)
   - [10.3 GET /api/integration/users/:identifier — Get Detailed User Record](#103-get-apiintegrationusersidentifier---get-detailed-user-record)
-- [SERIES 11: Complete Master Endpoint Reference Table](#series-11-complete-master-endpoint-reference-table)
+- [SERIES 11: Push Notifications & Device Tokens (`/api/notifications`)](#series-11-push-notifications--device-tokens-apinotifications)
+  - [11.1 POST /api/notifications/device-token — Register FCM Device Token](#111-post-apinotificationsdevice-token---register-fcm-device-token)
+  - [11.2 DELETE /api/notifications/device-token — Remove Device Token](#112-delete-apinotificationsdevice-token---remove-device-token)
+  - [11.3 GET /api/notifications — User Notification Inbox](#113-get-apinotifications---user-notification-inbox)
+  - [11.4 PATCH /api/notifications/:id/read — Mark Notification as Read](#114-patch-apinotificationsidread---mark-notification-as-read)
+- [SERIES 12: Laundry & Work Order Dispatch (`/api/laundry`)](#series-12-laundry--work-order-dispatch-apilaundry)
+  - [12.1 GET /api/v1/laundry/vendors/lookup — Lookup Partner / Dhobi](#121-get-apiv1laundryvendorslookup---lookup-partner--dhobi)
+  - [12.2 POST /api/v1/laundry/orders — Create Laundry Work Order](#122-post-apiv1laundryorders---create-laundry-work-order)
+  - [12.3 GET /api/v1/laundry/orders — List User Work Orders](#123-get-apiv1laundryorders---list-user-work-orders)
+  - [12.4 GET /api/v1/laundry/orders/:id — Work Order Detailed Breakdown](#124-get-apiv1laundryordersid---work-order-detailed-breakdown)
+  - [12.5 PATCH /api/v1/laundry/orders/:id/status — User Order Status Update](#125-patch-apiv1laundryordersidstatus---user-order-status-update)
+  - [12.6 POST /api/v1/laundry/orders/:id/resend-whatsapp — Re-send WhatsApp PDF](#126-post-apiv1laundryordersidresend-whatsapp---re-send-whatsapp-pdf)
+- [SERIES 13: Vendor Partner Network & Order Management (`/api/vendor`)](#series-13-vendor-partner-network--order-management-apivendor)
+  - [13.1 GET /api/vendor/categories — Public Service Categories](#131-get-apivendorcategories---public-service-categories)
+  - [13.2 POST /api/vendor/auth/register — Vendor Partner Registration](#132-post-apivendorauthregister---vendor-partner-registration)
+  - [13.3 POST /api/vendor/auth/login — Vendor Password Login](#133-post-apivendorauthlogin---vendor-password-login)
+  - [13.4 POST /api/vendor/auth/forgot-password, verify, reset — Password Reset Flow](#134-vendor-password-reset-flow)
+  - [13.5 GET /api/vendor/profile — Fetch Vendor Profile](#135-get-apivendorprofile---fetch-vendor-profile)
+  - [13.6 GET /api/vendor/orders — List Assigned Work Orders](#136-get-apivendororders---list-assigned-work-orders)
+  - [13.7 GET /api/vendor/orders/:id — Work Order Details by ID](#137-get-apivendorordersid---work-order-details-by-id)
+  - [13.8 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update](#138-patch-apivendorordersidstatus---vendor-order-status-update)
+- [SERIES 14: Complete Master Endpoint Reference Table](#series-14-complete-master-endpoint-reference-table)
 
 ---
 
@@ -57,7 +78,7 @@
 
 ### 📊 Codebase API Overview (Total: 30 Core Unified Endpoints)
 
-Currently in the codebase, all functionalities are grouped into **10 logical series (30 unified endpoints)**, eliminating confusion while preserving 100% backward compatibility:
+Currently in the codebase, all functionalities are grouped into **13 logical series (48 unified endpoints)**, eliminating confusion while preserving 100% backward compatibility:
 
 | Series | Module | Endpoints Count | Key Endpoints | Primary Purpose |
 |---|---|:---:|---|---|
@@ -71,7 +92,10 @@ Currently in the codebase, all functionalities are grouped into **10 logical ser
 | **Series 8** | Outfit Stylist AI | **4** | `/suggest`, `/save`, `/saved`, `/saved/:id` | Smart occasion styling, color harmony & closet bookmarks |
 | **Series 9** | Media Uploads | **3** | `/single`, `/multiple`, `/:filename` | Direct static image storage & CDN serving |
 | **Series 10** | Admin & Integration | **3** | `/stats`, `/users`, `/users/:identifier` | Syncs metrics & user records across external systems |
-| **TOTAL** | **Full System** | **30** | — | **Complete production digital wardrobe pipeline** |
+| **Series 11** | Push Notifications | **4** | `/device-token`, `/notifications`, `/:id/read` | FCM device token management & in-app notification inbox |
+| **Series 12** | Laundry Work Orders | **6** | `/vendors/lookup`, `/orders`, `/orders/:id`, `/status`, `/resend-whatsapp` | Multi-dress Almari laundry orders, PDF generation & WhatsApp dispatch |
+| **Series 13** | Vendor Partner Hub | **8** | `/categories`, `/register`, `/login`, `/profile`, `/orders`, `/orders/:id/status` | Partner registration, business profile & 4-step work order fulfillment |
+| **TOTAL** | **Full System** | **48** | — | **Complete production digital wardrobe & partner network platform** |
 
 ---
 
@@ -1404,18 +1428,421 @@ Retrieves in-app notification history and unread badge count for the user.
 }
 ```
 
-### 11.4 PATCH /api/notifications/:id/read — Mark Notification as Read
+---
+
+## SERIES 12: Laundry & Work Order Dispatch (`/api/laundry` & `/api/v1/laundry`)
+
+Digital work order pipeline bridging user wardrobe clothes with local laundry, dhobi, and garment care services. Generates automated high-resolution PDF work orders with visual dress cutouts and dispatches them directly to the vendor's WhatsApp.
+
+### 12.1 GET /api/v1/laundry/vendors/lookup — Lookup Partner / Dhobi
+Checks whether a vendor phone number is an Arangtik registered partner or direct contact.
+
+- **Headers:** `Authorization: Bearer <JWT>`
+- **Query Params:** `?phone=919876543210`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Registered vendor found",
+  "data": {
+    "isRegistered": true,
+    "vendor": {
+      "id": "67b3f890b1234567890abcde",
+      "vendorId": "VND-482910",
+      "name": "Ramesh Patel",
+      "phone": "919876543210",
+      "businessName": "Ramesh Super Dry Cleaners",
+      "rating": 5.0,
+      "totalOrdersHandled": 14,
+      "isVerified": true
+    }
+  }
+}
+```
+
+### 12.2 POST /api/v1/laundry/orders — Create Laundry Work Order
+Creates a new work order from selected closet garments, generates a PDF receipt, and dispatches via WhatsApp.
+
+- **Headers:** `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "vendorPhone": "919876543210",
+  "vendorName": "Ramesh Patel",
+  "pickupDate": "2026-10-19T09:00:00.000Z",
+  "expectedDeliveryDate": "2026-10-21T18:00:00.000Z",
+  "specialInstructions": "Handle silk kurta with care.",
+  "items": [
+    {
+      "wardrobeItemId": "67a4d1001234567890abcdef",
+      "serviceType": "DRY_CLEAN",
+      "specialInstructions": "Dry clean only"
+    },
+    {
+      "wardrobeItemId": "67a4d1001234567890abcdeg",
+      "serviceType": "WASH_AND_IRON",
+      "specialInstructions": "Starch collar"
+    }
+  ]
+}
+```
+- **Allowed Service Types:** `WASH` | `IRON` | `DRY_CLEAN` | `WASH_AND_IRON` | `OTHER`
+- **Response (201 Created):**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Laundry Work Order created and dispatched successfully",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "userId": "67a3f890b1234567890abcdef",
+    "userName": "Rahul Sharma",
+    "userPhone": "919876543210",
+    "vendorName": "Ramesh Patel",
+    "vendorPhone": "919876543210",
+    "isRegisteredVendor": true,
+    "totalItems": 2,
+    "status": "PENDING_PICKUP",
+    "pdfUrl": "/uploads/laundry_pdfs/WO-20261018-4921.pdf",
+    "whatsappNotification": {
+      "sent": true,
+      "status": "DELIVERED_TO_GATEWAY"
+    },
+    "createdAt": "2026-10-18T10:00:00.000Z"
+  }
+}
+```
+
+### 12.3 GET /api/v1/laundry/orders — List User Work Orders
+- **Headers:** `Authorization: Bearer <JWT>`
+- **Query Params:** `?status=PENDING_PICKUP&page=1&limit=20`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Laundry Work Orders retrieved successfully",
+  "data": {
+    "orders": [ ... ],
+    "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
+  }
+}
+```
+
+### 12.4 GET /api/v1/laundry/orders/:id — Work Order Detailed Breakdown
 - **Headers:** `Authorization: Bearer <JWT>`
 - **Response (200 OK):**
 ```json
 {
   "success": true,
   "statusCode": 200,
-  "message": "Notification marked as read",
+  "message": "Work Order details retrieved",
   "data": {
-    "_id": "67b0c1...",
-    "isRead": true,
-    "readAt": "2026-10-17T11:05:00.000Z"
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "status": "PENDING_PICKUP",
+    "items": [ ... ],
+    "statusHistory": [ ... ]
+  }
+}
+```
+
+### 12.5 PATCH /api/v1/laundry/orders/:id/status — User Order Status Update
+Users can cancel their pending orders or record progression.
+
+- **Headers:** `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body (Cancel Order):**
+```json
+{
+  "status": "CANCELLED",
+  "note": "Plans changed, cancelling order"
+}
+```
+- **Strict Role Rules for Customer Status Update:**
+  - ✅ **Customer CAN CANCEL (`CANCELLED`):** While awaiting pickup or before delivery. Triggers push notification to vendor.
+  - ❌ **Customer CANNOT REJECT (`REJECTED`):** Sending `status: "REJECTED"` returns **HTTP 400** (`"Customers cannot reject orders. Please use CANCELLED if you wish to cancel this order."`).
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Work Order status updated successfully",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "status": "CANCELLED"
+  }
+}
+```
+
+### 12.6 POST /api/v1/laundry/orders/:id/resend-whatsapp — Re-send WhatsApp PDF
+- **Headers:** `Authorization: Bearer <JWT>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "WhatsApp Work Order re-dispatched successfully",
+  "data": {
+    "orderId": "67b0c0f81234567890abcdef",
+    "whatsappNotification": { "sent": true, "status": "DELIVERED_TO_GATEWAY" }
+  }
+}
+```
+
+---
+
+## SERIES 13: Vendor Partner Network & Order Management (`/api/vendor` & `/api/v1/vendor`)
+
+Dedicated service provider ecosystem for local partners (Dhobis, Tailors, Ironing pros, Milkmen). Includes dedicated partner authentication, business profile management, and live order pipeline fulfillment.
+
+### 13.1 GET /api/vendor/categories — Public Service Categories
+Returns registered operational partner categories with icons and descriptions.
+
+- **Headers:** Public (No Auth Required)
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor categories retrieved successfully",
+  "data": {
+    "categories": [
+      { "id": "dhobi", "name": "Dhobi", "icon": "🧺", "description": "Laundry, Dry Cleaning & Garment Care" },
+      { "id": "press_ironing", "name": "Press / Ironing", "icon": "👔", "description": "Clothes Pressing & Fold Delivery" },
+      { "id": "tailor", "name": "Tailor", "icon": "✂️", "description": "Stitching & Garment Alteration" },
+      { "id": "doodh_wala", "name": "Doodh Wala", "icon": "🥛", "description": "Fresh Milk & Dairy Delivery" }
+    ]
+  }
+}
+```
+
+### 13.2 POST /api/vendor/auth/register — Vendor Partner Registration
+Registers a new verified partner with automatic unique Vendor ID (`VND-XXXXXX`).
+
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "name": "Ramesh Patel",
+  "phone": "919876543210",
+  "password": "VendorSecretPassword123",
+  "category": "Dhobi",
+  "businessName": "Ramesh Super Dry Cleaners",
+  "address": {
+    "street": "Shop 4, Gandhi Market",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001"
+  }
+}
+```
+- **Response (201 Created):**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Vendor registered successfully",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "vendor": {
+      "_id": "67b3f890b1234567890abcde",
+      "vendorId": "VND-482910",
+      "name": "Ramesh Patel",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "businessName": "Ramesh Super Dry Cleaners",
+      "rating": 5.0,
+      "totalOrdersHandled": 0,
+      "isVerified": true,
+      "isRegistered": true,
+      "status": "ACTIVE"
+    }
+  }
+}
+```
+
+### 13.3 POST /api/vendor/auth/login — Vendor Password Login
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "phone": "919876543210",
+  "password": "VendorSecretPassword123"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "vendor": {
+      "_id": "67b3f890b1234567890abcde",
+      "vendorId": "VND-482910",
+      "name": "Ramesh Patel",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "businessName": "Ramesh Super Dry Cleaners",
+      "isVerified": true
+    }
+  }
+}
+```
+
+### 13.4 Vendor Password Reset Flow
+1. **Request Reset OTP:** `POST /api/vendor/auth/forgot-password` with `{ "phone": "919876543210" }`
+2. **Verify Reset OTP:** `POST /api/vendor/auth/verify-reset-otp` with `{ "phone": "919876543210", "otp": "1234" }`
+3. **Set New Password:** `POST /api/vendor/auth/reset-password` with `{ "phone": "919876543210", "otp": "1234", "newPassword": "NewPassword123" }`
+
+### 13.5 GET /api/vendor/profile — Fetch Vendor Profile
+Returns authenticated vendor's full profile, metrics, rating, and address details.
+
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor profile retrieved successfully",
+  "data": {
+    "_id": "67b3f890b1234567890abcde",
+    "vendorId": "VND-482910",
+    "name": "Ramesh Patel",
+    "phone": "919876543210",
+    "category": "Dhobi",
+    "businessName": "Ramesh Super Dry Cleaners",
+    "address": {
+      "street": "Shop 4, Gandhi Market",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "rating": 5.0,
+    "totalOrdersHandled": 14,
+    "isVerified": true,
+    "isRegistered": true,
+    "status": "ACTIVE"
+  }
+}
+```
+*(Alias: `GET /api/vendor/auth/me`)*
+
+### 13.6 GET /api/vendor/orders — List Assigned Work Orders
+Lists all work orders assigned to this partner, with multi-status filtering, text search, and pagination.
+
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Query Params:**
+  - `status`: Optional filter (`ALL`, `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `REJECTED`)
+  - `page`: Page number (default: `1`)
+  - `limit`: Items per page (default: `20`, max: `100`)
+  - `search`: Search string (matches orderNumber, customer name, or phone)
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor work orders retrieved successfully",
+  "data": {
+    "orders": [
+      {
+        "_id": "67b0c0f81234567890abcdef",
+        "orderNumber": "WO-20261018-4921",
+        "userName": "Rahul Sharma",
+        "userPhone": "919876543210",
+        "pickupDate": "2026-10-19T09:00:00.000Z",
+        "expectedDeliveryDate": "2026-10-21T18:00:00.000Z",
+        "totalItems": 2,
+        "status": "PENDING_PICKUP",
+        "pdfUrl": "/uploads/laundry_pdfs/WO-20261018-4921.pdf"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+### 13.7 GET /api/vendor/orders/:id — Work Order Details by ID
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor work order details retrieved",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "userName": "Rahul Sharma",
+    "userPhone": "919876543210",
+    "pickupDate": "2026-10-19T09:00:00.000Z",
+    "expectedDeliveryDate": "2026-10-21T18:00:00.000Z",
+    "status": "PENDING_PICKUP",
+    "items": [ ... ],
+    "statusHistory": [ ... ]
+  }
+}
+```
+
+### 13.8 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update
+Advances the order through the streamlined 4-step process or declines/rejects the order.
+
+- **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`, `Content-Type: application/json`
+- **Request Body (Step Forward):**
+```json
+{
+  "status": "PICKED_UP",
+  "note": "Garments picked up from customer"
+}
+```
+- **Request Body (Decline / Reject Order):**
+```json
+{
+  "status": "REJECTED",
+  "note": "Shop closed today / Over capacity"
+}
+```
+
+#### 🚦 Strict Business Rules for Vendor Status Updates:
+1. **Vendors CANNOT CANCEL:**  
+   Sending `"status": "CANCELLED"` returns **HTTP 400**:
+   ```json
+   {
+     "success": false,
+     "statusCode": 400,
+     "message": "Vendors cannot cancel orders. Please use REJECTED if you wish to decline this order."
+   }
+   ```
+2. **Vendors CAN REJECT (`REJECTED`):**  
+   Vendors can decline orders (when in `PENDING_PICKUP`). Records `changedBy: "VENDOR"` and sends instant FCM notification to customer (`Vendor [Name] has rejected your work order. Reason: [Note]`).
+3. **4-Step Progressive Workflow:**
+   - **Step 1:** `PENDING_PICKUP` (Awaiting pickup)
+   - **Step 2:** `PICKED_UP` (Garments collected)
+   - **Step 3:** `IN_PROCESS` (Washing / Ironing / Dry cleaning underway)
+   - **Step 4:** `DELIVERED` (Returned to customer / completed)
+4. **Auto-Increment Counter:**  
+   Marking an order as `DELIVERED` automatically increments the vendor's `totalOrdersHandled` in the database.
+
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Work order status updated successfully by vendor",
+  "data": {
+    "_id": "67b0c0f81234567890abcdef",
+    "orderNumber": "WO-20261018-4921",
+    "status": "PICKED_UP",
+    "statusHistory": [ ... ]
   }
 }
 ```
