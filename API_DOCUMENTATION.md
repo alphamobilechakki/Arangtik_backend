@@ -63,13 +63,14 @@
   - [12.6 POST /api/v1/laundry/orders/:id/resend-whatsapp — Re-send WhatsApp PDF](#126-post-apiv1laundryordersidresend-whatsapp---re-send-whatsapp-pdf)
 - [SERIES 13: Vendor Partner Network & Order Management (`/api/vendor`)](#series-13-vendor-partner-network--order-management-apivendor)
   - [13.1 GET /api/vendor/categories — Public Service Categories](#131-get-apivendorcategories---public-service-categories)
-  - [13.2 POST /api/vendor/auth/register — Vendor Partner Registration](#132-post-apivendorauthregister---vendor-partner-registration)
-  - [13.3 POST /api/vendor/auth/login — Vendor Password Login](#133-post-apivendorauthlogin---vendor-password-login)
-  - [13.4 POST /api/vendor/auth/forgot-password, verify, reset — Password Reset Flow](#134-vendor-password-reset-flow)
-  - [13.5 GET /api/vendor/profile — Fetch Vendor Profile](#135-get-apivendorprofile---fetch-vendor-profile)
-  - [13.6 GET /api/vendor/orders — List Assigned Work Orders](#136-get-apivendororders---list-assigned-work-orders)
-  - [13.7 GET /api/vendor/orders/:id — Work Order Details by ID](#137-get-apivendorordersid---work-order-details-by-id)
-  - [13.8 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update](#138-patch-apivendorordersidstatus---vendor-order-status-update)
+  - [13.2 POST /api/vendor/auth/send-otp — Send WhatsApp OTP](#132-post-apivendorauthsend-otp---send-whatsapp-otp)
+  - [13.3 POST /api/vendor/auth/verify-otp — Verify OTP & Authenticate](#133-post-apivendorauthverify-otp---verify-otp--authenticate)
+  - [13.4 POST /api/vendor/auth/register — Vendor Partner Registration](#134-post-apivendorauthregister---vendor-partner-registration)
+  - [13.5 POST /api/vendor/auth/login — Vendor Login](#135-post-apivendorauthlogin---vendor-login)
+  - [13.6 GET /api/vendor/profile — Fetch Vendor Profile](#136-get-apivendorprofile---fetch-vendor-profile)
+  - [13.7 GET /api/vendor/orders — List Assigned Work Orders](#137-get-apivendororders---list-assigned-work-orders)
+  - [13.8 GET /api/vendor/orders/:id — Work Order Details by ID](#138-get-apivendorordersid---work-order-details-by-id)
+  - [13.9 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update](#139-patch-apivendorordersidstatus---vendor-order-status-update)
 - [SERIES 14: Complete Master Endpoint Reference Table](#series-14-complete-master-endpoint-reference-table)
 
 ---
@@ -1649,60 +1650,37 @@ Returns registered operational partner categories with icons and descriptions.
 }
 ```
 
-### 13.2 POST /api/vendor/auth/register — Vendor Partner Registration
-Registers a new verified partner with automatic unique Vendor ID (`VND-XXXXXX`).
+### 13.2 POST /api/vendor/auth/send-otp — Send WhatsApp OTP
+Sends a 4-digit verification code to the vendor's WhatsApp number.  
+Returns `isExistingVendor: true` if already registered, or `false` if new registration.
 
 - **Headers:** `Content-Type: application/json`
 - **Request Body:**
 ```json
 {
-  "name": "Ramesh Patel",
-  "phone": "919876543210",
-  "password": "VendorSecretPassword123",
-  "category": "Dhobi",
-  "businessName": "Ramesh Super Dry Cleaners",
-  "address": {
-    "street": "Shop 4, Gandhi Market",
-    "city": "Mumbai",
-    "state": "Maharashtra",
-    "pincode": "400001"
-  }
+  "phone": "919876543210"
 }
 ```
-- **Response (201 Created):**
+- **Response (200 OK):**
 ```json
 {
   "success": true,
-  "statusCode": 201,
-  "message": "Vendor registered successfully",
+  "statusCode": 200,
+  "message": "OTP sent successfully to your WhatsApp number",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "vendor": {
-      "_id": "67b3f890b1234567890abcde",
-      "vendorId": "VND-482910",
-      "name": "Ramesh Patel",
-      "phone": "919876543210",
-      "category": "Dhobi",
-      "businessName": "Ramesh Super Dry Cleaners",
-      "rating": 5.0,
-      "totalOrdersHandled": 0,
-      "isVerified": true,
-      "isRegistered": true,
-      "status": "ACTIVE"
-    }
+    "phone": "919876543210",
+    "isExistingVendor": true,
+    "expiresInMinutes": 5
   }
 }
 ```
 
-### 13.3 POST /api/vendor/auth/login — Vendor Password Login
+### 13.3 POST /api/vendor/auth/verify-otp — Verify OTP & Authenticate
+Verifies the WhatsApp OTP and issues the Vendor JWT token.
+- **For Login:** Send `{ "phone": "919876543210", "otp": "1234" }`
+- **For Registration:** Send `{ "phone": "919876543210", "otp": "1234", "name": "Ramesh Patel", "category": "Dhobi", "businessName": "..." }`
+
 - **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "phone": "919876543210",
-  "password": "VendorSecretPassword123"
-}
-```
 - **Response (200 OK):**
 ```json
 {
@@ -1711,25 +1689,30 @@ Registers a new verified partner with automatic unique Vendor ID (`VND-XXXXXX`).
   "message": "Vendor login successful",
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isNewVendor": false,
     "vendor": {
       "_id": "67b3f890b1234567890abcde",
       "vendorId": "VND-482910",
       "name": "Ramesh Patel",
       "phone": "919876543210",
       "category": "Dhobi",
+      "isRegistered": true,
       "businessName": "Ramesh Super Dry Cleaners",
-      "isVerified": true
+      "rating": 5.0,
+      "totalOrdersHandled": 14,
+      "status": "ACTIVE"
     }
   }
 }
 ```
 
-### 13.4 Vendor Password Reset Flow
-1. **Request Reset OTP:** `POST /api/vendor/auth/forgot-password` with `{ "phone": "919876543210" }`
-2. **Verify Reset OTP:** `POST /api/vendor/auth/verify-reset-otp` with `{ "phone": "919876543210", "otp": "1234" }`
-3. **Set New Password:** `POST /api/vendor/auth/reset-password` with `{ "phone": "919876543210", "otp": "1234", "newPassword": "NewPassword123" }`
+### 13.4 POST /api/vendor/auth/register — Vendor Partner Registration
+Registration endpoint accepting `{ phone, otp, name, category, businessName, address }`.
 
-### 13.5 GET /api/vendor/profile — Fetch Vendor Profile
+### 13.5 POST /api/vendor/auth/login — Vendor Login
+Login endpoint accepting `{ phone, otp }` to authenticate or `{ phone }` to request an OTP.
+
+### 13.6 GET /api/vendor/profile — Fetch Vendor Profile
 Returns authenticated vendor's full profile, metrics, rating, and address details.
 
 - **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
@@ -1762,7 +1745,7 @@ Returns authenticated vendor's full profile, metrics, rating, and address detail
 ```
 *(Alias: `GET /api/vendor/auth/me`)*
 
-### 13.6 GET /api/vendor/orders — List Assigned Work Orders
+### 13.7 GET /api/vendor/orders — List Assigned Work Orders
 Lists all work orders assigned to this partner, with multi-status filtering, text search, and pagination.
 
 - **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
@@ -1801,7 +1784,7 @@ Lists all work orders assigned to this partner, with multi-status filtering, tex
 }
 ```
 
-### 13.7 GET /api/vendor/orders/:id — Work Order Details by ID
+### 13.8 GET /api/vendor/orders/:id — Work Order Details by ID
 - **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`
 - **Response (200 OK):**
 ```json
@@ -1823,7 +1806,7 @@ Lists all work orders assigned to this partner, with multi-status filtering, tex
 }
 ```
 
-### 13.8 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update
+### 13.9 PATCH /api/vendor/orders/:id/status — Vendor Order Status Update
 Advances the order through the streamlined 4-step process or declines/rejects the order.
 
 - **Headers:** `Authorization: Bearer <VENDOR_TOKEN>`, `Content-Type: application/json`

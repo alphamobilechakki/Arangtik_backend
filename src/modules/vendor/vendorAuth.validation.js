@@ -1,8 +1,35 @@
 const ApiError = require('../../utils/apiError');
 const { formatPhoneNumber } = require('../../utils/whatsapp.service');
 
+const validateSendOtp = (req, res, next) => {
+  const { phone } = req.body;
+  if (!phone) {
+    return next(new ApiError(400, 'Mobile number is required'));
+  }
+  const formattedPhone = formatPhoneNumber(phone);
+  if (!formattedPhone || formattedPhone.length < 10) {
+    return next(new ApiError(400, 'Please provide a valid 10-digit mobile number'));
+  }
+  next();
+};
+
+const validateVerifyOtp = (req, res, next) => {
+  const { phone, otp } = req.body;
+  if (!phone) {
+    return next(new ApiError(400, 'Mobile number is required'));
+  }
+  const formattedPhone = formatPhoneNumber(phone);
+  if (!formattedPhone || formattedPhone.length < 10) {
+    return next(new ApiError(400, 'Please provide a valid 10-digit mobile number'));
+  }
+  if (!otp || !String(otp).trim()) {
+    return next(new ApiError(400, 'OTP is required'));
+  }
+  next();
+};
+
 const validateVendorRegister = (req, res, next) => {
-  const { phone, password, name, category, categoryId } = req.body;
+  const { phone, password, otp, name, category, categoryId } = req.body;
 
   if (!phone) {
     return next(new ApiError(400, 'Mobile number is required'));
@@ -12,7 +39,8 @@ const validateVendorRegister = (req, res, next) => {
     return next(new ApiError(400, 'Please provide a valid 10-digit mobile number'));
   }
 
-  if (!password || typeof password !== 'string' || password.trim().length < 6) {
+  // If registering via password, validate length
+  if (!otp && password && (typeof password !== 'string' || password.trim().length < 6)) {
     return next(new ApiError(400, 'Password must be at least 6 characters long'));
   }
 
@@ -28,7 +56,7 @@ const validateVendorRegister = (req, res, next) => {
 };
 
 const validateVendorLogin = (req, res, next) => {
-  const { phone, password } = req.body;
+  const { phone } = req.body;
 
   if (!phone) {
     return next(new ApiError(400, 'Mobile number is required'));
@@ -36,10 +64,6 @@ const validateVendorLogin = (req, res, next) => {
   const formattedPhone = formatPhoneNumber(phone);
   if (!formattedPhone || formattedPhone.length < 10) {
     return next(new ApiError(400, 'Please provide a valid 10-digit mobile number'));
-  }
-
-  if (!password || typeof password !== 'string' || !password.trim()) {
-    return next(new ApiError(400, 'Password is required'));
   }
 
   next();
@@ -74,6 +98,8 @@ const validateResetPassword = (req, res, next) => {
 };
 
 module.exports = {
+  validateSendOtp,
+  validateVerifyOtp,
   validateVendorRegister,
   validateVendorLogin,
   validateForgotPassword,

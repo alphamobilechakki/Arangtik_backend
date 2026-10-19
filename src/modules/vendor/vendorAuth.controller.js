@@ -14,7 +14,41 @@ class VendorAuthController {
   });
 
   /**
-   * @desc    Register new vendor with selected category & password (auto-logs in)
+   * @desc    Send OTP to vendor mobile number via WhatsApp
+   * @route   POST /api/vendor/auth/send-otp
+   * @access  Public
+   */
+  sendOtp = asyncHandler(async (req, res) => {
+    const { phone } = req.body;
+    const result = await vendorAuthService.sendOtp(phone);
+    return ApiResponse.success(res, result, 'OTP sent successfully to your WhatsApp number');
+  });
+
+  /**
+   * @desc    Verify OTP to Login or Register Vendor (Passwordless)
+   * @route   POST /api/vendor/auth/verify-otp
+   * @access  Public
+   */
+  verifyOtp = asyncHandler(async (req, res) => {
+    const { phone, otp, name, category, categoryId, businessName, address } = req.body;
+    const result = await vendorAuthService.verifyOtp(phone, otp, {
+      name,
+      category,
+      categoryId,
+      businessName,
+      address,
+    });
+    return ApiResponse.success(
+      res,
+      result,
+      result.isNewVendor
+        ? 'Vendor registered and logged in successfully'
+        : 'Vendor login successful'
+    );
+  });
+
+  /**
+   * @desc    Register new vendor with selected category & OTP / direct
    * @route   POST /api/vendor/auth/register
    * @access  Public
    */
@@ -24,14 +58,19 @@ class VendorAuthController {
   });
 
   /**
-   * @desc    Login vendor using phone and password
+   * @desc    Login vendor using phone and OTP (or password)
    * @route   POST /api/vendor/auth/login
    * @access  Public
    */
   login = asyncHandler(async (req, res) => {
-    const { phone, password } = req.body;
-    const result = await vendorAuthService.loginVendor(phone, password);
-    return ApiResponse.success(res, result, 'Vendor login successful');
+    const { phone, otp, password } = req.body;
+    const credential = otp || password;
+    const result = await vendorAuthService.loginVendor(phone, credential);
+    return ApiResponse.success(
+      res,
+      result,
+      result.token ? 'Vendor login successful' : 'OTP sent successfully to your WhatsApp number'
+    );
   });
 
   /**

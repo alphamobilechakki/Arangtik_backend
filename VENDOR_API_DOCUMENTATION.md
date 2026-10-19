@@ -16,12 +16,11 @@
 3. [🏷️ Service Categories & Discovery Endpoints](#3--service-categories--discovery-endpoints)
    - [3.1 List Vendor Service Categories (`GET /api/vendor/categories`)](#31-list-vendor-service-categories)
    - [3.2 User Vendor Lookup by Phone (`GET /api/vendor/lookup`)](#32-user-vendor-lookup-by-phone)
-4. [📲 Vendor Authentication Endpoints](#4--vendor-authentication-endpoints)
-   - [4.1 Vendor Registration (`POST /api/vendor/auth/register`)](#41-vendor-registration)
-   - [4.2 Vendor Login (`POST /api/vendor/auth/login`)](#42-vendor-login)
-   - [4.3 Forgot Password - Request OTP (`POST /api/vendor/auth/forgot-password`)](#43-forgot-password---request-otp)
-   - [4.4 Verify Reset OTP (`POST /api/vendor/auth/verify-reset-otp`)](#44-verify-reset-otp)
-   - [4.5 Reset Password (`POST /api/vendor/auth/reset-password`)](#45-reset-password)
+4. [📲 Vendor Authentication Endpoints (WhatsApp OTP & Passwordless)](#4--vendor-authentication-endpoints)
+   - [4.1 Send WhatsApp OTP (`POST /api/vendor/auth/send-otp`)](#41-send-whatsapp-otp)
+   - [4.2 Verify OTP & Authenticate (`POST /api/vendor/auth/verify-otp`)](#42-verify-otp--authenticate)
+   - [4.3 Vendor Registration with Category & OTP (`POST /api/vendor/auth/register`)](#43-vendor-registration)
+   - [4.4 Vendor Login with OTP / Password (`POST /api/vendor/auth/login`)](#44-vendor-login)
 5. [👤 Vendor Profile Management](#5--vendor-profile-management)
    - [5.1 Get Authenticated Vendor Profile (`GET /api/vendor/auth/me`)](#51-get-authenticated-vendor-profile)
 6. [📋 Work Orders & Laundry Execution (Vendor Hub)](#6--work-orders--laundry-execution-vendor-hub)
@@ -192,22 +191,108 @@ Used by the Customer Mobile App when typing a phone number or picking from conta
 
 ---
 
-## 4. 📲 Vendor Authentication Endpoints
+## 4. 📲 Vendor Authentication Endpoints (WhatsApp OTP & Passwordless)
 
-### 4.1 Vendor Registration
-Registers a new vendor with their primary category, mobile number, and password.  
-**⚡ Instant Login:** Upon successful registration, the backend automatically generates and returns the Vendor JWT Bearer token so the user is directly logged into the dashboard!
+Arangtik Vendor App uses **secure, passwordless authentication** via 4-digit WhatsApp OTP (identical to the customer app). Vendors no longer need to remember passwords or usernames.
+
+### 4.1 Send WhatsApp OTP
+Sends a 4-digit verification code to the vendor's WhatsApp number.  
+The response indicates `isExistingVendor: true` (vendor can directly log in with OTP) or `false` (vendor should fill registration profile).
 
 - **Method:** `POST`
-- **Path:** `/api/vendor/auth/register` *(or `/api/v1/vendor/auth/register`)*
+- **Path:** `/api/vendor/auth/send-otp` *(or `/api/v1/vendor/auth/send-otp`)*
 - **Access:** Public
 - **Headers:** `Content-Type: application/json`
 - **Request Body:**
 ```json
 {
-  "name": "Ramesh Kumar",
+  "phone": "9876543210"
+}
+```
+- **Response (200 OK — Existing Registered Vendor):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "OTP sent successfully to your WhatsApp number",
+  "data": {
+    "phone": "919876543210",
+    "isExistingVendor": true,
+    "expiresInMinutes": 5
+  }
+}
+```
+- **Response (200 OK — New Unregistered Number):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "OTP sent successfully to your WhatsApp number",
+  "data": {
+    "phone": "919876543210",
+    "isExistingVendor": false,
+    "expiresInMinutes": 5
+  }
+}
+```
+- **Error Responses:**
+  - `400 Bad Request`: Missing phone or invalid 10-digit number.
+  - `403 Forbidden`: Vendor account is suspended or inactive.
+
+---
+
+### 4.2 Verify OTP & Authenticate (Direct Login or Register)
+Verifies the WhatsApp OTP and issues the Vendor JWT token.
+
+#### Flow A: Existing Vendor Login (Just Phone + OTP)
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/verify-otp`
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
   "phone": "9876543210",
-  "password": "Password@123",
+  "otp": "1234"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isNewVendor": false,
+    "vendor": {
+      "_id": "67b4d1234567890abcdef012",
+      "vendorId": "VND-849102",
+      "name": "Ramesh Kumar",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "isRegistered": true,
+      "businessName": "Ramesh Dry Cleaners & Steam Press",
+      "rating": 5.0,
+      "totalOrdersHandled": 12,
+      "isVerified": true,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-19T10:00:00.000Z"
+    }
+  }
+}
+```
+
+#### Flow B: New Vendor Registration (Phone + OTP + Profile Details)
+If `isExistingVendor === false`, include the vendor's name and category alongside the OTP:
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/verify-otp` *(or `/api/vendor/auth/register`)*
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "phone": "9876543210",
+  "otp": "1234",
+  "name": "Ramesh Kumar",
   "category": "Dhobi",
   "businessName": "Ramesh Dry Cleaners & Steam Press",
   "address": {
@@ -220,21 +305,22 @@ Registers a new vendor with their primary category, mobile number, and password.
 ```
 | Field | Type | Mandatory? | Description |
 | :--- | :--- | :--- | :--- |
-| `name` | String | **Yes** | Full name of the vendor proprietor |
 | `phone` | String | **Yes** | 10-digit mobile number |
-| `password` | String | **Yes** | Minimum 6 characters |
-| `category` | String | **Yes** | Category name or Category ID (e.g. `"Dhobi"`, `"Tailor"`) |
+| `otp` | String | **Yes** | 4-digit WhatsApp OTP |
+| `name` | String | **Yes** (For new vendors) | Full name of the vendor proprietor |
+| `category` | String | **Yes** (For new vendors) | Category name or ID (e.g. `"Dhobi"`, `"Tailor"`) |
 | `businessName` | String | Optional | Registered business / shop name |
 | `address` | Object | Optional | Shop address object |
 
-- **Response (201 Created):**
+- **Response (200 OK):**
 ```json
 {
   "success": true,
-  "statusCode": 201,
+  "statusCode": 200,
   "message": "Vendor registered and logged in successfully",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY3YjRkMTIzNDU2Nzg5MGFiY2RlZjAxMiIsInZlbmRvcklkIjoiVk5ELTg0OTEwMiIsInBob25lIjoiOTE5ODc2NTQzMjEwIiwicm9sZSI6InZlbmRvciIsImNhdGVnb3J5IjoiRGhvYmkiLCJpYXQiOjE3MzcyNDgwMDB9...",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isNewVendor": true,
     "vendor": {
       "_id": "67b4d1234567890abcdef012",
       "vendorId": "VND-849102",
@@ -259,155 +345,25 @@ Registers a new vendor with their primary category, mobile number, and password.
 }
 ```
 - **Error Responses:**
-  - `400 Bad Request`: Missing name, phone, password (< 6 chars), or category.
-  - `409 Conflict`: Phone number is already registered with a password.
-
----
-
-### 4.2 Vendor Login
-Log in to an existing vendor account with mobile number and password.
-
-- **Method:** `POST`
-- **Path:** `/api/vendor/auth/login` *(or `/api/v1/vendor/auth/login`)*
-- **Access:** Public
-- **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "phone": "9876543210",
-  "password": "Password@123"
-}
-```
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Vendor login successful",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "vendor": {
-      "_id": "67b4d1234567890abcdef012",
-      "vendorId": "VND-849102",
-      "name": "Ramesh Kumar",
-      "phone": "919876543210",
-      "category": "Dhobi",
-      "isRegistered": true,
-      "businessName": "Ramesh Dry Cleaners & Steam Press",
-      "address": {
-        "street": "Shop 4, Market Complex",
-        "city": "Jaipur",
-        "state": "Rajasthan",
-        "pincode": "302001"
-      },
-      "rating": 4.9,
-      "totalOrdersHandled": 18,
-      "isVerified": true,
-      "status": "ACTIVE",
-      "createdAt": "2026-10-19T10:00:00.000Z"
-    }
-  }
-}
-```
-- **Error Responses:**
-  - `400 Bad Request`: Password has not been set yet (user must use Forgot Password to initialize password).
-  - `401 Unauthorized`: Invalid mobile number or incorrect password.
-  - `403 Forbidden`: Account suspended or inactive.
-
----
-
-### 4.3 Forgot Password - Request OTP
-Sends a 4-digit verification OTP to the vendor's registered WhatsApp number.
-
-- **Method:** `POST`
-- **Path:** `/api/vendor/auth/forgot-password`
-- **Access:** Public
-- **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "phone": "9876543210"
-}
-```
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Password reset OTP sent successfully to your WhatsApp number",
-  "data": {
-    "phone": "919876543210",
-    "expiresInMinutes": 10
-  }
-}
-```
-- **Error Responses:**
-  - `404 Not Found`: No registered vendor found with this phone number.
-  - `403 Forbidden`: Vendor account is suspended.
-
----
-
-### 4.4 Verify Reset OTP
-Pre-validates the OTP entered by the vendor before prompting for the new password.
-
-- **Method:** `POST`
-- **Path:** `/api/vendor/auth/verify-reset-otp`
-- **Access:** Public
-- **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "phone": "9876543210",
-  "otp": "1234"
-}
-```
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "OTP verified successfully",
-  "data": {
-    "phone": "919876543210",
-    "verified": true
-  }
-}
-```
-- **Error Responses:**
   - `400 Bad Request`: Invalid or expired OTP.
+  - `400 Bad Request`: Missing vendor name or category when registering for the first time.
+  - `403 Forbidden`: Account is suspended or inactive.
 
 ---
 
-### 4.5 Reset Password
-Verifies OTP and sets the new encrypted password for the vendor.
+### 4.3 Vendor Registration Alias (`POST /api/vendor/auth/register`)
+Convenience endpoint for registration. Accepts identical payload to `verify-otp` with `{ phone, otp, name, category, businessName, address }`.
 
 - **Method:** `POST`
-- **Path:** `/api/vendor/auth/reset-password`
-- **Access:** Public
-- **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "phone": "9876543210",
-  "otp": "1234",
-  "newPassword": "NewStrongPassword@2026"
-}
-```
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Password reset successfully. You can now login with your new password.",
-  "data": {
-    "phone": "919876543210",
-    "success": true,
-    "message": "Password reset successfully. You can now login with your new password."
-  }
-}
-```
-- **Error Responses:**
-  - `400 Bad Request`: OTP expired or new password < 6 characters.
+- **Path:** `/api/vendor/auth/register`
+
+---
+
+### 4.4 Vendor Login Alias (`POST /api/vendor/auth/login`)
+Convenience endpoint for login. Accepts `{ phone, otp }` to verify OTP, or `{ phone }` to trigger an OTP send.
+
+- **Method:** `POST`
+- **Path:** `/api/vendor/auth/login`
 
 ---
 
@@ -732,23 +688,50 @@ class VendorApiService {
     if (_authToken != null) 'Authorization': 'Bearer $_authToken',
   };
 
-  // 1. Vendor Login
-  Future<Map<String, dynamic>> login(String phone, String password) async {
+  // 1. Send WhatsApp OTP
+  Future<Map<String, dynamic>> sendOtp(String phone) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
+      Uri.parse('$baseUrl/auth/send-otp'),
       headers: _headers,
-      body: jsonEncode({'phone': phone, 'password': password}),
+      body: jsonEncode({'phone': phone}),
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['data']; // { phone, isExistingVendor, expiresInMinutes }
+    } else {
+      throw Exception(body['message'] ?? 'Failed to send OTP');
+    }
+  }
+
+  // 2. Verify OTP & Login / Register
+  Future<Map<String, dynamic>> verifyOtp({
+    required String phone,
+    required String otp,
+    String? name,
+    String? category,
+    String? businessName,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/verify-otp'),
+      headers: _headers,
+      body: jsonEncode({
+        'phone': phone,
+        'otp': otp,
+        if (name != null) 'name': name,
+        if (category != null) 'category': category,
+        if (businessName != null) 'businessName': businessName,
+      }),
     );
     final body = jsonDecode(response.body);
     if (response.statusCode == 200) {
       setToken(body['data']['token']);
       return body['data'];
     } else {
-      throw Exception(body['message'] ?? 'Login failed');
+      throw Exception(body['message'] ?? 'OTP verification failed');
     }
   }
 
-  // 2. Fetch Assigned Orders with Status Filter
+  // 3. Fetch Assigned Orders with Status Filter
   Future<List<dynamic>> getOrders({String status = 'ALL', int page = 1}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/orders?status=$status&page=$page&limit=20'),
@@ -762,7 +745,7 @@ class VendorApiService {
     }
   }
 
-  // 3. Update Order Status (PATCH per Rule 4)
+  // 4. Update Order Status (PATCH per Rule 4)
   Future<void> updateOrderStatus(String orderId, String newStatus, String note) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/orders/$orderId/status'),
@@ -799,15 +782,21 @@ vendorApi.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Vendor Registration & Auto-Login
-export const registerVendor = async (payload: {
-  name: string;
+// Send WhatsApp OTP
+export const sendVendorOtp = async (phone: string) => {
+  const { data } = await vendorApi.post('/auth/send-otp', { phone });
+  return data.data; // { phone, isExistingVendor, expiresInMinutes }
+};
+
+// Verify OTP & Login / Register
+export const verifyVendorOtp = async (payload: {
   phone: string;
-  password: string;
-  category: string;
+  otp: string;
+  name?: string;
+  category?: string;
   businessName?: string;
 }) => {
-  const { data } = await vendorApi.post('/auth/register', payload);
+  const { data } = await vendorApi.post('/auth/verify-otp', payload);
   if (data.data?.token) {
     await AsyncStorage.setItem('VENDOR_TOKEN', data.data.token);
   }
