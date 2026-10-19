@@ -83,6 +83,11 @@ class VendorCategoryService {
       const doc = cat.toObject ? cat.toObject() : { ...cat };
       if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
       if (doc.image) doc.image = formatUploadUrl(doc.image);
+      const finalImg = doc.imageUrl || doc.image;
+      if (finalImg) {
+        doc.imageUrl = finalImg;
+        doc.image = finalImg;
+      }
       return doc;
     });
   }
@@ -103,6 +108,11 @@ class VendorCategoryService {
     const doc = category.toObject ? category.toObject() : { ...category };
     if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
     if (doc.image) doc.image = formatUploadUrl(doc.image);
+    const finalImg = doc.imageUrl || doc.image;
+    if (finalImg) {
+      doc.imageUrl = finalImg;
+      doc.image = finalImg;
+    }
     return doc;
   }
 
