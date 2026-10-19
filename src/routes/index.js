@@ -42,8 +42,13 @@ const outfitRoutes = require('../modules/outfit/outfit.routes');
 router.use('/outfit', outfitRoutes);
 router.use('/v1/outfit', outfitRoutes);
 
-// Laundry & Work Order Routes
-const laundryRoutes = require('../modules/laundry/laundry.routes');
+// Universal Orders Routes (Dhobi, Kitchen, Tailor, Doodh Wala)
+const orderRoutes = require('../modules/order/order.routes');
+router.use('/orders', orderRoutes);
+router.use('/v1/orders', orderRoutes);
+
+// Laundry & Specific Work Order Routes (Mounted from modular order/laundry)
+const laundryRoutes = require('../modules/order/laundry/laundry.routes');
 router.use('/laundry', laundryRoutes);
 router.use('/v1/laundry', laundryRoutes);
 
@@ -56,6 +61,13 @@ router.use('/v1/vendor', vendorRoutes);
 const notificationRoutes = require('../modules/notification/notification.routes');
 router.use('/notifications', notificationRoutes);
 router.use('/v1/notifications', notificationRoutes);
+
+// Vendor Categories Routes (Public customer and mobile app category list)
+const vendorCategoryRoutes = require('../modules/admin/vendorCategory/vendorCategory.routes');
+router.use('/categories', vendorCategoryRoutes);
+router.use('/v1/categories', vendorCategoryRoutes);
+router.use('/vendor-categories', vendorCategoryRoutes);
+router.use('/v1/vendor-categories', vendorCategoryRoutes);
 
 // Admin Module Routes
 const adminRoutes = require('../modules/admin/admin.routes');

@@ -884,7 +884,94 @@ The backend automatically:
 
 ### 2. Mobile Endpoints
 
-#### A. Vendor Phone Lookup (Contacts or Manual Input)
+#### A. Universal Customer Orders (All Categories Aggregated)
+Enables mobile apps to fetch all customer orders in a unified list with category tab switching (e.g. `Dhobi`, future services):
+- **Method:** `GET`
+- **Path:** `/api/orders` *(or `/api/v1/orders`)*
+- **Headers:** `Authorization: Bearer <TOKEN>`
+- **Query Parameters:**
+  - `orderCategory` *(optional)*: Filter by category (e.g. `Dhobi`, or omit to fetch all).
+  - `status` *(optional)*: Filter by status (`PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `CANCELLED`, `REJECTED`).
+  - `page` *(optional, default: 1)*: Page number.
+  - `limit` *(optional, default: 20)*: Page size.
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "User orders retrieved successfully",
+  "data": {
+    "orders": [
+      {
+        "_id": "670d8f1e2a3b4c5d6e7f8a9b",
+        "orderNumber": "WO-20261019-4821",
+        "orderCategory": "Dhobi",
+        "orderType": "LAUNDRY_WORK_ORDER",
+        "vendorName": "CleanWash Express",
+        "vendorPhone": "919876543210",
+        "pickupDate": "2026-10-20T10:00:00.000Z",
+        "expectedDeliveryDate": "2026-10-22T18:00:00.000Z",
+        "status": "PENDING_PICKUP",
+        "totalItems": 2,
+        "items": [
+          {
+            "name": "Navy Blue Blazer",
+            "serviceType": "DRY_CLEAN",
+            "color": "Navy Blue",
+            "fabric": "Wool Blend",
+            "imageUrl": "https://api.arangtik.com/uploads/garment_1.jpg"
+          }
+        ],
+        "pdfUrl": "https://api.arangtik.com/uploads/work-orders/WO-20261019-4821.pdf",
+        "createdAt": "2026-10-19T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+#### B. Cancel Order (Universal Self-Service Cancellation)
+Allows customers to cancel an order before vendor collection:
+- **Method:** `PATCH`
+- **Path:** `/api/orders/:id/cancel` *(or `/api/v1/orders/:id/cancel`)*
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "reason": "Customer needs clothes tomorrow morning"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Order cancelled successfully",
+  "data": {
+    "_id": "670d8f1e2a3b4c5d6e7f8a9b",
+    "orderNumber": "WO-20261019-4821",
+    "status": "CANCELLED",
+    "statusHistory": [
+      {
+        "status": "CANCELLED",
+        "changedBy": "USER",
+        "note": "Customer needs clothes tomorrow morning"
+      }
+    ]
+  }
+}
+```
+> **Garment Status Reversion:** Cancelling an order automatically releases all associated clothes back to `ACTIVE` so they are immediately available again in the user's Almari.
+
+---
+
+#### C. Vendor Phone Lookup (Contacts or Manual Input)
 When the user types a number or picks a contact from their device:
 - **Method:** `GET`
 - **Path:** `/api/v1/laundry/vendors/lookup?phone=919876543210`
@@ -933,7 +1020,7 @@ When the user types a number or picks a contact from their device:
 
 ---
 
-#### B. Create Laundry Work Order
+#### D. Create Laundry Work Order
 - **Method:** `POST`
 - **Path:** `/api/v1/laundry/orders`
 - **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
@@ -996,7 +1083,7 @@ When the user types a number or picks a contact from their device:
 
 ---
 
-#### C. List Laundry Orders
+#### E. List Laundry Orders
 - **Method:** `GET`
 - **Path:** `/api/v1/laundry/orders?status=PENDING_PICKUP&page=1&limit=20`
 - **Headers:** `Authorization: Bearer <TOKEN>`
@@ -1013,14 +1100,14 @@ When the user types a number or picks a contact from their device:
 
 ---
 
-#### D. Get Single Work Order Details
+#### F. Get Single Work Order Details
 - **Method:** `GET`
 - **Path:** `/api/v1/laundry/orders/:id`
 - **Headers:** `Authorization: Bearer <TOKEN>`
 
 ---
 
-#### E. Update Work Order Status (User Self-Service)
+#### G. Update Work Order Status (User Self-Service)
 - **Method:** `PATCH` *(Strict Rule: never use PUT)*
 - **Path:** `/api/v1/laundry/orders/:id/status`
 - **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
@@ -1044,7 +1131,7 @@ When the user types a number or picks a contact from their device:
 
 ---
 
-#### F. Re-Send WhatsApp PDF to Vendor
+#### H. Re-Send WhatsApp PDF to Vendor
 - **Method:** `POST`
 - **Path:** `/api/v1/laundry/orders/:id/resend-whatsapp`
 - **Headers:** `Authorization: Bearer <TOKEN>`

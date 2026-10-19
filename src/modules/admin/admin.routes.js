@@ -14,5 +14,9 @@ router.use('/categories', vendorCategoryRoutes);
 // Admin Submodule: Vendors Hub Management (/api/admin/vendors)
 router.use('/vendors', adminVendorRoutes);
 
+// Admin Submodule: Orders Management (/api/admin/orders)
+const adminOrderRoutes = require('./order/adminOrder.routes');
+router.use('/orders', adminOrderRoutes);
+
 module.exports = router;
 

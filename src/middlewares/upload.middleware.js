@@ -86,9 +86,19 @@ const getImageUrl = (filename, req = null) => {
   }
   const cleanFilename = path.basename(filename);
 
+  if (req && req.get) {
+    const host = req.get('host');
+    const protocol = req.protocol || 'http';
+    return `${protocol}://${host}/uploads/${cleanFilename}`;
+  }
+
   if (process.env.UPLOAD_BASE_URL && process.env.UPLOAD_BASE_URL.trim()) {
     const base = process.env.UPLOAD_BASE_URL.replace(/\/?$/, '/');
     return `${base}${cleanFilename}`;
+  }
+
+  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+    return `http://localhost:${process.env.PORT || 8083}/uploads/${cleanFilename}`;
   }
 
   const baseUrl = (process.env.BASE_URL || 'https://api.arangtik.com').replace(/\/+$/, '');

@@ -29,7 +29,7 @@ const validateVerifyOtp = (req, res, next) => {
 };
 
 const validateVendorRegister = (req, res, next) => {
-  const { phone, password, otp, name, category, categoryId } = req.body;
+  const { phone, password, otp, name, category, categoryId, categories } = req.body;
 
   if (!phone) {
     return next(new ApiError(400, 'Mobile number is required'));
@@ -48,7 +48,12 @@ const validateVendorRegister = (req, res, next) => {
     return next(new ApiError(400, 'Vendor name is required'));
   }
 
-  if ((!category || !String(category).trim()) && (!categoryId || !String(categoryId).trim())) {
+  const hasCategory =
+    (category && String(category).trim()) ||
+    (categoryId && String(categoryId).trim()) ||
+    (Array.isArray(categories) && categories.length > 0);
+
+  if (!hasCategory) {
     return next(new ApiError(400, 'Vendor category is required. Please select a category (e.g. Dhobi, Doodh Wala).'));
   }
 
@@ -97,6 +102,22 @@ const validateResetPassword = (req, res, next) => {
   next();
 };
 
+const validateUpdateCategories = (req, res, next) => {
+  const { categories } = req.body;
+  if (!categories || !Array.isArray(categories) || categories.length === 0) {
+    return next(new ApiError(400, 'Please select at least one service category'));
+  }
+  next();
+};
+
+const validateUpdateProfile = (req, res, next) => {
+  const { categories } = req.body;
+  if (categories !== undefined && (!Array.isArray(categories) || categories.length === 0)) {
+    return next(new ApiError(400, 'Categories must be a non-empty array of category names'));
+  }
+  next();
+};
+
 module.exports = {
   validateSendOtp,
   validateVerifyOtp,
@@ -104,4 +125,6 @@ module.exports = {
   validateVendorLogin,
   validateForgotPassword,
   validateResetPassword,
+  validateUpdateCategories,
+  validateUpdateProfile,
 };

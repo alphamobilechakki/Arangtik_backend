@@ -9,7 +9,7 @@ class VendorCategoryController {
    * @access  Private (Admin)
    */
   createCategory = asyncHandler(async (req, res) => {
-    const category = await vendorCategoryService.createCategory(req.body);
+    const category = await vendorCategoryService.createCategory(req.body, req.file);
     return ApiResponse.created(res, category, 'Vendor category created successfully');
   });
 
@@ -40,7 +40,7 @@ class VendorCategoryController {
    * @access  Private (Admin)
    */
   updateCategory = asyncHandler(async (req, res) => {
-    const updated = await vendorCategoryService.updateCategory(req.params.id, req.body);
+    const updated = await vendorCategoryService.updateCategory(req.params.id, req.body, req.file);
     return ApiResponse.success(res, updated, 'Vendor category updated successfully');
   });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const vendorCategoryController = require('./vendorCategory.controller');
 const { protectAdmin } = require('../../../middlewares/auth.middleware');
+const { uploadSingleImage } = require('../../../middlewares/upload.middleware');
 const {
   validateCreateCategory,
   validateUpdateCategory,
@@ -19,12 +20,14 @@ router.get('/:id', vendorCategoryController.getCategoryById);
 router.post(
   '/',
   protectAdmin,
+  uploadSingleImage('image', { required: false }),
   validateCreateCategory,
   vendorCategoryController.createCategory
 );
 router.patch(
   '/:id',
   protectAdmin,
+  uploadSingleImage('image', { required: false }),
   validateUpdateCategory,
   vendorCategoryController.updateCategory
 );

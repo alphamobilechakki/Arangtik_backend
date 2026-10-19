@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const RegisteredVendor = require('./registeredVendor.model');
 const Vendor = RegisteredVendor;
 const UnregisteredVendor = require('./unregisteredVendor.model');
+const Order = require('../order/order.model');
+const LaundryOrder = Order;
 const { formatPhoneNumber } = require('../../utils/whatsapp.service');
 const ApiError = require('../../utils/apiError');
 
@@ -218,10 +220,10 @@ class VendorService {
         await unreg.save();
       }
 
-      // Update past laundry orders linked to this vendor phone
-      const LaundryOrder = require('../laundry/laundryOrder.model');
-      if (LaundryOrder) {
-        await LaundryOrder.updateMany(
+      // Update past orders linked to this vendor phone
+      const Order = require('../order/order.model');
+      if (Order) {
+        await Order.updateMany(
           { vendorPhone: formattedPhone, isRegisteredVendor: false },
           {
             $set: {
@@ -266,8 +268,8 @@ class VendorService {
       throw new ApiError(401, 'Vendor authentication required');
     }
 
-    const { status, page = 1, limit = 20, search } = query;
-    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const { status, page = 1, limit = 20, search, category, orderCategory } = query;
+    const Order = require('../order/order.model');
     const formattedPhone = formatPhoneNumber(vendor.phone);
 
     const filter = {
@@ -276,6 +278,11 @@ class VendorService {
         { vendorPhone: formattedPhone },
       ],
     };
+
+    const targetCategory = category || orderCategory;
+    if (targetCategory && targetCategory !== 'ALL') {
+      filter.orderCategory = targetCategory;
+    }
 
     if (status && status !== 'ALL') {
       filter.status = status;
@@ -330,10 +337,10 @@ class VendorService {
       throw new ApiError(400, 'Invalid Order ID format');
     }
 
-    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const Order = require('../order/order.model');
     const formattedPhone = formatPhoneNumber(vendor.phone);
 
-    const order = await LaundryOrder.findOne({
+    const order = await Order.findOne({
       _id: orderId,
       $or: [
         { vendorId: vendor._id },
@@ -384,10 +391,10 @@ class VendorService {
       );
     }
 
-    const LaundryOrder = require('../laundry/laundryOrder.model');
+    const Order = require('../order/order.model');
     const formattedPhone = formatPhoneNumber(vendor.phone);
 
-    const order = await LaundryOrder.findOne({
+    const order = await Order.findOne({
       _id: orderId,
       $or: [
         { vendorId: vendor._id },

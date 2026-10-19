@@ -10,6 +10,8 @@ const {
   validateVendorLogin,
   validateForgotPassword,
   validateResetPassword,
+  validateUpdateCategories,
+  validateUpdateProfile,
 } = require('./vendorAuth.validation');
 
 // ==========================================
@@ -32,10 +34,12 @@ router.post('/auth/verify-reset-otp', vendorAuthController.verifyResetOtp);
 router.post('/auth/reset-password', validateResetPassword, vendorAuthController.resetPassword);
 
 // ==========================================
-// 2. Vendor Profile (Protected by Vendor JWT)
+// 2. Vendor Profile & Category Management (Protected by Vendor JWT)
 // ==========================================
 router.get('/auth/me', protectVendor, vendorAuthController.getMe);
 router.get('/profile', protectVendor, vendorAuthController.getMe);
+router.patch('/profile', protectVendor, validateUpdateProfile, vendorAuthController.updateProfile);
+router.patch('/categories', protectVendor, validateUpdateCategories, vendorAuthController.updateCategories);
 
 // ==========================================
 // 3. Vendor Lookup (Protected for App Users)

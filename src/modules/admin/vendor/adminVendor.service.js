@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const RegisteredVendor = require('../../vendor/registeredVendor.model');
 const UnregisteredVendor = require('../../vendor/unregisteredVendor.model');
-const LaundryOrder = require('../../laundry/laundryOrder.model');
+const Order = require('../../order/order.model');
+const LaundryOrder = Order;
 require('../../auth/user.model');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 const ApiError = require('../../../utils/apiError');
@@ -280,6 +281,8 @@ class AdminVendorService {
       name,
       phone,
       category = 'Dhobi',
+      categories,
+      primaryCategory,
       businessName = '',
       status = 'ACTIVE',
       address = {},
@@ -299,10 +302,18 @@ class AdminVendorService {
       throw new ApiError(409, `Vendor already registered with phone number ${formattedPhone}`);
     }
 
+    const initialCategories =
+      Array.isArray(categories) && categories.length > 0
+        ? categories
+        : [String(category).trim() || 'Dhobi'];
+    const initialPrimaryCat = primaryCategory || initialCategories[0] || 'Dhobi';
+
     const vendor = await RegisteredVendor.create({
       name: String(name).trim(),
       phone: formattedPhone,
-      category: String(category).trim(),
+      category: initialPrimaryCat,
+      primaryCategory: initialPrimaryCat,
+      categories: initialCategories,
       businessName: String(businessName || '').trim(),
       status,
       address: {
@@ -366,6 +377,8 @@ class AdminVendorService {
       'name',
       'businessName',
       'category',
+      'primaryCategory',
+      'categories',
       'status',
       'rating',
       'isVerified',

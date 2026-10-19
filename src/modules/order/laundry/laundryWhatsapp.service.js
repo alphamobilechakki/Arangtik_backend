@@ -9,8 +9,8 @@ const {
   API24_LAUNDRY_TEMPLATE_UNREG,
   API24_LANGUAGE,
   OTP_DEV_MODE,
-} = require('../../config/env.config');
-const { formatPhoneNumber } = require('../../utils/whatsapp.service');
+} = require('../../../config/env.config');
+const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 
 class LaundryWhatsappService {
   /**

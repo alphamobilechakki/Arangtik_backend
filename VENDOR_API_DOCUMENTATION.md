@@ -1,9 +1,9 @@
 # 🧺 Arangtik Vendor App API Documentation & Integration Guide
 
 > **Official Backend Integration Guide for Arangtik Vendor Native Mobile Application (iOS / Android / Flutter / React Native)**  
-> **Base URL:** `http://localhost:5000/api/vendor` *(or `/api/v1/vendor`)*  
+> **Base URL:** `http://localhost:8083/api/vendor` *(or `/api/v1/vendor`)*  
 > **Production Base URL:** `https://api.arangtik.com/api/vendor`  
-> **Version:** `v1.0.0` • **Target Platform:** `Mobile Native App` • **Auth:** `Bearer JWT (role: 'vendor')`  
+> **Version:** `v1.2.0` • **Target Platform:** `Mobile Native App` • **Auth:** `Bearer JWT (role: 'vendor')`  
 
 ---
 
@@ -21,10 +21,12 @@
    - [4.2 Verify OTP & Authenticate (`POST /api/vendor/auth/verify-otp`)](#42-verify-otp--authenticate)
    - [4.3 Vendor Registration with Category & OTP (`POST /api/vendor/auth/register`)](#43-vendor-registration)
    - [4.4 Vendor Login with OTP / Password (`POST /api/vendor/auth/login`)](#44-vendor-login)
-5. [👤 Vendor Profile Management](#5--vendor-profile-management)
-   - [5.1 Get Authenticated Vendor Profile (`GET /api/vendor/auth/me`)](#51-get-authenticated-vendor-profile)
+5. [👤 Vendor Profile & Category Management](#5--vendor-profile-management)
+   - [5.1 Get Authenticated Vendor Profile (`GET /api/vendor/profile`)](#51-get-authenticated-vendor-profile)
+   - [5.2 Multi-Category In-App Management (`PATCH /api/vendor/categories`)](#52-multi-category-in-app-management)
+   - [5.3 Update Vendor Profile (`PATCH /api/vendor/profile`)](#53-update-vendor-profile)
 6. [📋 Work Orders & Laundry Execution (Vendor Hub)](#6--work-orders--laundry-execution-vendor-hub)
-   - [6.1 List Assigned Work Orders (`GET /api/vendor/orders`)](#61-list-assigned-work-orders)
+   - [6.1 List Assigned Work Orders & Category Tab Switching (`GET /api/vendor/orders`)](#61-list-assigned-work-orders)
    - [6.2 Get Work Order Details (`GET /api/vendor/orders/:id`)](#62-get-work-order-details)
    - [6.3 Update Work Order Status (`PATCH /api/vendor/orders/:id/status`)](#63-update-work-order-status)
 7. [⚙️ Critical Business Rules & State Machine](#7--critical-business-rules--state-machine)
@@ -308,9 +310,11 @@ If `isExistingVendor === false`, include the vendor's name and category alongsid
 | `phone` | String | **Yes** | 10-digit mobile number |
 | `otp` | String | **Yes** | 4-digit WhatsApp OTP |
 | `name` | String | **Yes** (For new vendors) | Full name of the vendor proprietor |
-| `category` | String | **Yes** (For new vendors) | Category name or ID (e.g. `"Dhobi"`, `"Tailor"`) |
+| `category` | String | Optional (default `"Dhobi"`) | Initial primary service category (e.g. `"Dhobi"`, `"Tailor"`) |
+| `categories` | Array of Strings | Optional | Initial list of service categories e.g. `["Dhobi", "Press / Ironing"]` |
+| `primaryCategory` | String | Optional | Primary category tag (defaults to first category in `categories`) |
 | `businessName` | String | Optional | Registered business / shop name |
-| `address` | Object | Optional | Shop address object |
+| `address` | Object | Optional | Shop address object (`street`, `city`, `state`, `pincode`) |
 
 - **Response (200 OK):**
 ```json
@@ -327,6 +331,8 @@ If `isExistingVendor === false`, include the vendor's name and category alongsid
       "name": "Ramesh Kumar",
       "phone": "919876543210",
       "category": "Dhobi",
+      "primaryCategory": "Dhobi",
+      "categories": ["Dhobi"],
       "isRegistered": true,
       "businessName": "Ramesh Dry Cleaners & Steam Press",
       "address": {
@@ -352,7 +358,7 @@ If `isExistingVendor === false`, include the vendor's name and category alongsid
 ---
 
 ### 4.3 Vendor Registration Alias (`POST /api/vendor/auth/register`)
-Convenience endpoint for registration. Accepts identical payload to `verify-otp` with `{ phone, otp, name, category, businessName, address }`.
+Convenience endpoint for registration. Accepts identical payload to `verify-otp` with `{ phone, otp, name, category, categories, primaryCategory, businessName, address }`.
 
 - **Method:** `POST`
 - **Path:** `/api/vendor/auth/register`
@@ -367,13 +373,13 @@ Convenience endpoint for login. Accepts `{ phone, otp }` to verify OTP, or `{ ph
 
 ---
 
-## 5. 👤 Vendor Profile Management
+## 5. 👤 Vendor Profile & Category Management
 
 ### 5.1 Get Authenticated Vendor Profile
-Fetches the current logged-in vendor's profile details.
+Fetches the current logged-in vendor's profile details including all registered service categories.
 
 - **Method:** `GET`
-- **Path:** `/api/vendor/auth/me` *(Alias: `/api/vendor/profile`)*
+- **Path:** `/api/vendor/profile` *(Alias: `/api/vendor/auth/me`)*
 - **Access:** Private (Vendor Bearer JWT required)
 - **Headers:**
   ```http
@@ -391,6 +397,8 @@ Fetches the current logged-in vendor's profile details.
     "name": "Ramesh Kumar",
     "phone": "919876543210",
     "category": "Dhobi",
+    "primaryCategory": "Dhobi",
+    "categories": ["Dhobi", "Press / Ironing", "Tailor"],
     "isRegistered": true,
     "businessName": "Ramesh Dry Cleaners & Steam Press",
     "address": {
@@ -410,16 +418,86 @@ Fetches the current logged-in vendor's profile details.
 
 ---
 
+### 5.2 Multi-Category In-App Management (Tick / Add Categories)
+Allows a logged-in vendor to tick, untick, or add multiple service categories and set their primary category from the vendor mobile app settings/profile screen.
+
+- **Method:** `PATCH`
+- **Path:** `/api/vendor/categories`
+- **Access:** Private (Vendor Bearer JWT required)
+- **Headers:**
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+- **Request Body:**
+```json
+{
+  "categories": ["Dhobi", "Press / Ironing", "Tailor"],
+  "primaryCategory": "Dhobi"
+}
+```
+| Field | Type | Mandatory? | Description |
+| :--- | :--- | :--- | :--- |
+| `categories` | Array of Strings | **Yes** | Array of category names vendor operates in (at least 1 required) |
+| `primaryCategory` | String | Optional | Primary service category (defaults to first item in `categories`) |
+
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor categories updated successfully",
+  "data": {
+    "_id": "67b4d1234567890abcdef012",
+    "name": "Ramesh Kumar",
+    "primaryCategory": "Dhobi",
+    "categories": ["Dhobi", "Press / Ironing", "Tailor"],
+    "category": "Dhobi"
+  }
+}
+```
+
+---
+
+### 5.3 Update Vendor Profile
+Updates vendor details including personal name, business name, address, and categories.
+
+- **Method:** `PATCH`
+- **Path:** `/api/vendor/profile`
+- **Access:** Private (Vendor Bearer JWT required)
+- **Headers:** `Authorization: Bearer <VENDOR_JWT_TOKEN>`
+- **Request Body:**
+```json
+{
+  "name": "Ramesh Multi-Service Enterprise",
+  "businessName": "Ramesh Hub",
+  "categories": ["Dhobi", "Press / Ironing", "Tailor"],
+  "primaryCategory": "Dhobi",
+  "address": {
+    "street": "Shop 4, Market Complex",
+    "city": "Jaipur",
+    "state": "Rajasthan",
+    "pincode": "302001"
+  }
+}
+```
+
+---
+
 ## 6. 📋 Work Orders & Laundry Execution (Vendor Hub)
 
-### 6.1 List Assigned Work Orders
-Fetches paginated work orders assigned to this vendor. Automatically matches orders by either `vendorId` OR `vendorPhone` (ensuring unlinked past orders show up seamlessly).
+### 6.1 List Assigned Work Orders & Category Tab Switching
+Fetches paginated work orders assigned to this vendor.
+- **In-App Category Switcher:** Passing `?category=Dhobi` or `?category=Tailor` filters work orders for that specific service tab, leveraging direct MongoDB indexes `{ orderCategory: 1 }`.
+- **Backward Compatibility:** Omit `category` or pass `?category=ALL` to retrieve all orders assigned to the vendor.
 
 - **Method:** `GET`
 - **Path:** `/api/vendor/orders`
 - **Access:** Private (Vendor Bearer JWT required)
 - **Headers:** `Authorization: Bearer <VENDOR_JWT_TOKEN>`
 - **Query Parameters:**
+  - `category` *(optional)*: Filter by active service tab (`'Dhobi'`, `'Press / Ironing'`, `'Tailor'`, `'ALL'`).
+  - `orderCategory` *(optional)*: Alias for `category`.
   - `status` *(optional)*: Filter by status (`ALL`, `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`, `DELIVERED`, `CANCELLED`, `REJECTED`).
   - `search` *(optional)*: Text search across `orderNumber`, `userName`, or `userPhone`.
   - `page` *(optional, default: 1)*: Page number.
@@ -436,6 +514,7 @@ Fetches paginated work orders assigned to this vendor. Automatically matches ord
       {
         "_id": "67b0aa112233445566778899",
         "orderNumber": "WO-20261019-4821",
+        "orderCategory": "Dhobi",
         "userId": "670a9876543210fedcba9876",
         "userName": "Amit Sharma",
         "userPhone": "919812345678",
@@ -457,7 +536,7 @@ Fetches paginated work orders assigned to this vendor. Automatically matches ord
             "subCategory": "Kurta",
             "color": "Navy Blue",
             "fabric": "Silk",
-            "imageUrl": "http://localhost:5000/uploads/garments/kurta_1.png",
+            "imageUrl": "http://localhost:8083/uploads/garments/kurta_1.png",
             "serviceType": "DRY_CLEAN",
             "specialInstructions": "Mild solvent only"
           },
@@ -469,12 +548,12 @@ Fetches paginated work orders assigned to this vendor. Automatically matches ord
             "subCategory": "Shirt",
             "color": "White",
             "fabric": "Linen",
-            "imageUrl": "http://localhost:5000/uploads/garments/shirt_1.png",
+            "imageUrl": "http://localhost:8083/uploads/garments/shirt_1.png",
             "serviceType": "WASH_AND_IRON",
             "specialInstructions": "Starch collar lightly"
           }
         ],
-        "pdfUrl": "http://localhost:5000/uploads/laundry-slips/WO-20261019-4821.pdf",
+        "pdfUrl": "http://localhost:8083/uploads/work-orders/WO-20261019-4821.pdf",
         "createdAt": "2026-10-19T09:30:00.000Z"
       }
     ],
@@ -617,205 +696,6 @@ The vendor updates the progress of the laundry order. Uses HTTP `PATCH` in accor
   - `400 Bad Request`: Vendor attempts `CANCELLED` *(Returns: "Vendors cannot cancel orders. Please use REJECTED if you wish to decline this order.")*
   - `400 Bad Request`: Vendor attempts to reject an order that is already `DELIVERED` or `CANCELLED`.
   - `404 Not Found`: Order ID does not exist or is not assigned to this vendor.
-
----
-
-## 7. ⚙️ Critical Business Rules & State Machine
-
-```
-              ┌───────────────────┐
-              │  PENDING_PICKUP   │
-              └─────────┬─────────┘
-                        │
-         ┌──────────────┴──────────────┐
-         ▼                             ▼
-   [ PICKED_UP ]                 [ REJECTED ] (By Vendor)
-         │                             │
-         ▼                             ▼
-   [ IN_PROCESS ]             (Items revert to ACTIVE)
-         │
-         ▼
-[ READY_FOR_DELIVERY ]
-         │
-         ▼
-   [ DELIVERED ] ──────────► (Items revert to ACTIVE & vendor totalOrders incremented)
-```
-
-### 7.1 User Cancellation vs. Vendor Rejection
-- **Customer Cancellation:** If a user cancels an order, the status is set to `CANCELLED`.
-- **Vendor Rejection:** If a vendor is overloaded or unable to serve, they must choose `REJECTED`. The backend strictly blocks vendors from calling `CANCELLED` (`400 Bad Request`).
-
-### 7.2 Automatic Wardrobe Clothes State Sync
-The backend coordinates between the laundry module and the customer's virtual wardrobe:
-- While an order is active (`PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`), all associated wardrobe items are automatically marked `status: 'INACTIVE'` in the customer's wardrobe so they cannot be selected for daily outfits or duplicate laundry orders.
-- As soon as the vendor sets the status to `DELIVERED` or `REJECTED`, the items are immediately reverted to `status: 'ACTIVE'`.
-
-### 7.3 Real-Time FCM Push Notifications to Customers
-Whenever a vendor changes the order status via `PATCH /api/vendor/orders/:id/status`, the backend immediately dispatches an FCM Push Notification to the customer's mobile device:
-- **Title:** `Laundry Order Update #WO-20261019-4821`
-- **Body:** `Vendor Ramesh Kumar updated your work order to: Ready for Delivery.`
-- **Data Payload:** `{ "type": "LAUNDRY_ORDER_STATUS", "orderId": "...", "status": "READY_FOR_DELIVERY" }`
-
-### 7.4 Unregistered to Registered Seamless Migration
-When a customer inputs an unregistered vendor phone:
-1. An entry is saved in `unregisteredvendors`.
-2. A PDF invoice slip is generated and sent to the vendor via WhatsApp.
-3. Later, when the vendor installs the Arangtik Vendor App and registers with that phone number, the backend automatically:
-   - Sets `isConvertedToRegistered: true` on the old contact record.
-   - Updates all past work orders with `vendorId: vendor._id` and `isRegisteredVendor: true`.
-   - Sends a welcome FCM notification: *"Vendor Hub Activated 🧺 - Past work orders are now in your dashboard!"*
-
----
-
-## 8. 📱 Mobile App Integration Best Practices & Code Examples
-
-### 8.1 Flutter / Dart API Service Example
-
-```dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-
-class VendorApiService {
-  static const String baseUrl = 'http://10.0.2.2:5000/api/vendor'; // Android Emulator
-  String? _authToken;
-
-  void setToken(String token) {
-    _authToken = token;
-  }
-
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    if (_authToken != null) 'Authorization': 'Bearer $_authToken',
-  };
-
-  // 1. Send WhatsApp OTP
-  Future<Map<String, dynamic>> sendOtp(String phone) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/send-otp'),
-      headers: _headers,
-      body: jsonEncode({'phone': phone}),
-    );
-    final body = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return body['data']; // { phone, isExistingVendor, expiresInMinutes }
-    } else {
-      throw Exception(body['message'] ?? 'Failed to send OTP');
-    }
-  }
-
-  // 2. Verify OTP & Login / Register
-  Future<Map<String, dynamic>> verifyOtp({
-    required String phone,
-    required String otp,
-    String? name,
-    String? category,
-    String? businessName,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/verify-otp'),
-      headers: _headers,
-      body: jsonEncode({
-        'phone': phone,
-        'otp': otp,
-        if (name != null) 'name': name,
-        if (category != null) 'category': category,
-        if (businessName != null) 'businessName': businessName,
-      }),
-    );
-    final body = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      setToken(body['data']['token']);
-      return body['data'];
-    } else {
-      throw Exception(body['message'] ?? 'OTP verification failed');
-    }
-  }
-
-  // 3. Fetch Assigned Orders with Status Filter
-  Future<List<dynamic>> getOrders({String status = 'ALL', int page = 1}) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/orders?status=$status&page=$page&limit=20'),
-      headers: _headers,
-    );
-    final body = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return body['data']['orders'];
-    } else {
-      throw Exception(body['message'] ?? 'Failed to fetch orders');
-    }
-  }
-
-  // 4. Update Order Status (PATCH per Rule 4)
-  Future<void> updateOrderStatus(String orderId, String newStatus, String note) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/orders/$orderId/status'),
-      headers: _headers,
-      body: jsonEncode({'status': newStatus, 'note': note}),
-    );
-    final body = jsonDecode(response.body);
-    if (response.statusCode != 200) {
-      throw Exception(body['message'] ?? 'Failed to update status');
-    }
-  }
-}
-```
-
-### 8.2 React Native / Axios Example
-
-```typescript
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const vendorApi = axios.create({
-  baseURL: 'https://api.arangtik.com/api/vendor',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Automatic Bearer Token Injection
-vendorApi.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('VENDOR_TOKEN');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Send WhatsApp OTP
-export const sendVendorOtp = async (phone: string) => {
-  const { data } = await vendorApi.post('/auth/send-otp', { phone });
-  return data.data; // { phone, isExistingVendor, expiresInMinutes }
-};
-
-// Verify OTP & Login / Register
-export const verifyVendorOtp = async (payload: {
-  phone: string;
-  otp: string;
-  name?: string;
-  category?: string;
-  businessName?: string;
-}) => {
-  const { data } = await vendorApi.post('/auth/verify-otp', payload);
-  if (data.data?.token) {
-    await AsyncStorage.setItem('VENDOR_TOKEN', data.data.token);
-  }
-  return data.data;
-};
-
-// Update Order Status
-export const updateVendorOrderStatus = async (
-  orderId: string,
-  status: 'PICKED_UP' | 'IN_PROCESS' | 'READY_FOR_DELIVERY' | 'DELIVERED' | 'REJECTED',
-  note?: string
-) => {
-  const { data } = await vendorApi.patch(`/orders/${orderId}/status`, {
-    status,
-    note,
-  });
-  return data.data;
-};
-```
 
 ---
 

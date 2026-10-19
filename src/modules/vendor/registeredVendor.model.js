@@ -28,6 +28,17 @@ const registeredVendorSchema = new mongoose.Schema(
       default: 'Dhobi',
       index: true,
     },
+    primaryCategory: {
+      type: String,
+      trim: true,
+      default: 'Dhobi',
+      index: true,
+    },
+    categories: {
+      type: [{ type: String, trim: true }],
+      default: ['Dhobi'],
+      index: true,
+    },
     password: {
       type: String,
       select: false,
@@ -101,7 +112,33 @@ const registeredVendorSchema = new mongoose.Schema(
 );
 
 registeredVendorSchema.index({ category: 1, status: 1 });
+registeredVendorSchema.index({ primaryCategory: 1, status: 1 });
+registeredVendorSchema.index({ categories: 1, status: 1 });
 registeredVendorSchema.index({ isRegistered: 1, status: 1 });
+
+// Ensure categories array, primaryCategory, and legacy category remain strictly in sync
+registeredVendorSchema.pre('save', function (next) {
+  if (!Array.isArray(this.categories) || this.categories.length === 0) {
+    const defaultCat = this.primaryCategory || this.category || 'Dhobi';
+    this.categories = [defaultCat];
+  } else {
+    // Deduplicate and trim categories
+    this.categories = [...new Set(this.categories.map((c) => String(c).trim()).filter(Boolean))];
+    if (this.categories.length === 0) {
+      this.categories = ['Dhobi'];
+    }
+  }
+
+  // Ensure primaryCategory is valid and part of categories
+  if (!this.primaryCategory || !this.categories.includes(this.primaryCategory)) {
+    this.primaryCategory = this.categories[0];
+  }
+
+  // Keep legacy single-category field in sync with primaryCategory
+  this.category = this.primaryCategory;
+
+  next();
+});
 
 const bcrypt = require('bcryptjs');
 

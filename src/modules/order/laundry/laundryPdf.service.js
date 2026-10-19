@@ -2,12 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const sharp = require('sharp');
-const { BASE_URL } = require('../../config/env.config');
-const { formatUploadUrl } = require('../../utils/url.util');
+const { BASE_URL } = require('../../../config/env.config');
+const { formatUploadUrl } = require('../../../utils/url.util');
 
 class LaundryPdfService {
   constructor() {
-    this.outputDir = path.resolve(__dirname, '../../../uploads/work-orders');
+    this.outputDir = path.resolve(process.cwd(), 'uploads/work-orders');
     if (!fs.existsSync(this.outputDir)) {
       fs.mkdirSync(this.outputDir, { recursive: true });
     }
@@ -40,7 +40,7 @@ class LaundryPdfService {
       }
       // Remove leading slash or /uploads/ or /api/uploads/
       relativePath = relativePath.replace(/^\/?(api\/)?uploads\//, '');
-      const fullPath = path.resolve(__dirname, '../../../uploads', relativePath);
+      const fullPath = path.resolve(process.cwd(), 'uploads', relativePath);
       if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
         return fullPath;
       }
@@ -89,7 +89,7 @@ class LaundryPdfService {
    * - PAGE 1: Order Summary, Customer, Vendor, Schedule & Master Garment Checklist
    * - PAGE 2+: Dedicated Single Full Page for EACH selected garment (Large Photo + Metadata)
    *
-   * @param {Object} order LaundryOrder document
+   * @param {Object} order Order document
    * @returns {Promise<{ filePath: string, fileUrl: string, totalPages: number }>}
    */
   async generateWorkOrderPdf(order) {
@@ -235,7 +235,7 @@ class LaundryPdfService {
       const tableTop = tableStartY + 16;
       const rowHeight = 30;
 
-      // Table Header Row (Simplified: #, Garment Name, Category, Service, Page)
+      // Table Header Row
       doc.rect(36, tableTop, 523, 24).fill(primaryColor);
       doc.fillColor('#FFFFFF').fontSize(8.5).font('Helvetica-Bold');
       doc.text('#', 44, tableTop + 7, { width: 25 });
@@ -245,7 +245,7 @@ class LaundryPdfService {
       doc.text('PAGE', 515, tableTop + 7, { width: 35, align: 'right' });
 
       let currentY = tableTop + 24;
-            
+
       if (Array.isArray(order.items)) {
         order.items.forEach((item, index) => {
           const itemPageNumber = index + 2;
@@ -298,7 +298,7 @@ class LaundryPdfService {
       );
 
       // =========================================================================
-      // PAGE 2 ONWARDS: DEDICATED FULL PAGE FOR EACH GARMENT (SIMPLIFIED & CLEAN)
+      // PAGE 2 ONWARDS: DEDICATED FULL PAGE FOR EACH GARMENT
       // =========================================================================
       if (Array.isArray(order.items)) {
         order.items.forEach((item, index) => {
@@ -323,7 +323,7 @@ class LaundryPdfService {
           // 2. Extra Large High-Resolution Garment Photo Box
           const photoBoxY = 82;
           const photoBoxWidth = 523;
-          const photoBoxHeight = 475; // Maximized photo area
+          const photoBoxHeight = 475;
 
           doc.rect(36, photoBoxY, photoBoxWidth, photoBoxHeight).fill('#FFFFFF');
           doc.rect(36, photoBoxY, photoBoxWidth, photoBoxHeight).stroke(borderColor);
@@ -346,7 +346,6 @@ class LaundryPdfService {
           }
 
           if (!imageRendered) {
-            // Elegant Garment Frame Placeholder
             doc.rect(46, photoBoxY + 10, photoBoxWidth - 20, photoBoxHeight - 20).fill('#F8FAFC');
             doc.fillColor(primaryColor).fontSize(56).font('Helvetica-Bold');
             doc.text('👗', 280, photoBoxY + 180, { align: 'center' });
@@ -362,14 +361,14 @@ class LaundryPdfService {
             });
           }
 
-          // 3. Garment Details Box Below Photo (Clean & Focused)
-          const detailsCardY = photoBoxY + photoBoxHeight + 14; // ~571
+          // 3. Garment Details Box Below Photo
+          const detailsCardY = photoBoxY + photoBoxHeight + 14;
           const detailsCardHeight = 185;
 
           doc.rect(36, detailsCardY, 523, detailsCardHeight).fill(lightBg);
           doc.rect(36, detailsCardY, 523, detailsCardHeight).stroke(cardBorder);
 
-          // Garment Name (Large Bold Title)
+          // Garment Name
           doc.fillColor(darkColor).fontSize(16).font('Helvetica-Bold');
           doc.text(item.name || 'Garment Item', 48, detailsCardY + 14, {
             width: 500,
@@ -394,7 +393,7 @@ class LaundryPdfService {
           doc.fillColor(primaryDark).fontSize(12).font('Helvetica-Bold');
           doc.text(serviceName, 185, serviceY + 12);
 
-          // Special Instructions Alert Box for this specific garment
+          // Special Instructions Alert Box
           const itemNoteY = serviceY + 50;
           const itemNoteHeight = 44;
 

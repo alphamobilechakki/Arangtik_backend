@@ -1,5 +1,6 @@
 const VendorCategory = require('./vendorCategory.model');
 const ApiError = require('../../../utils/apiError');
+const { formatUploadUrl } = require('../../../utils/url.util');
 
 const DEFAULT_CATEGORIES = [
   { name: 'Dhobi', icon: '🧺', description: 'Laundry, Dry Cleaning & Garment Care', sortOrder: 1 },
@@ -10,17 +11,19 @@ const DEFAULT_CATEGORIES = [
 
 class VendorCategoryService {
   /**
-   * Seed default categories into the database if the collection is empty
+   * Seed default categories into the database if missing
    */
   async seedDefaultsIfEmpty() {
-    const count = await VendorCategory.countDocuments();
-    if (count === 0) {
-      for (const cat of DEFAULT_CATEGORIES) {
-        try {
+    for (const cat of DEFAULT_CATEGORIES) {
+      try {
+        const exists = await VendorCategory.findOne({
+          name: { $regex: new RegExp(`^${cat.name}$`, 'i') },
+        });
+        if (!exists) {
           await VendorCategory.create(cat);
-        } catch (err) {
-          // Ignore duplicate race conditions
         }
+      } catch (err) {
+        // Ignore duplicate race conditions
       }
     }
   }
@@ -28,8 +31,8 @@ class VendorCategoryService {
   /**
    * Create a new vendor category
    */
-  async createCategory(payload = {}) {
-    const { name, code, icon, description, sortOrder, isActive } = payload;
+  async createCategory(payload = {}, file = null) {
+    const { name, code, icon, image, imageUrl, description, sortOrder, isActive } = payload;
 
     if (!name || !String(name).trim()) {
       throw new ApiError(400, 'Vendor category name is required');
@@ -46,10 +49,17 @@ class VendorCategoryService {
       throw new ApiError(409, `Vendor category with name "${trimmedName}" already exists`);
     }
 
+    let finalImageUrl = (file && file.url) || imageUrl || image || '';
+    if (finalImageUrl) {
+      finalImageUrl = formatUploadUrl(finalImageUrl);
+    }
+
     const category = await VendorCategory.create({
       name: trimmedName,
       code: code ? String(code).trim().toUpperCase() : undefined,
       icon: icon ? String(icon).trim() : '🧺',
+      image: finalImageUrl,
+      imageUrl: finalImageUrl,
       description: description ? String(description).trim() : '',
       sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
@@ -68,7 +78,13 @@ class VendorCategoryService {
     await this.seedDefaultsIfEmpty();
 
     const query = includeInactive ? {} : { isActive: true };
-    return VendorCategory.find(query).sort({ sortOrder: 1, name: 1, createdAt: 1 });
+    const categories = await VendorCategory.find(query).sort({ sortOrder: 1, name: 1, createdAt: 1 });
+    return categories.map((cat) => {
+      const doc = cat.toObject ? cat.toObject() : { ...cat };
+      if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
+      if (doc.image) doc.image = formatUploadUrl(doc.image);
+      return doc;
+    });
   }
 
   /**
@@ -84,13 +100,16 @@ class VendorCategoryService {
       throw new ApiError(404, 'Vendor category not found');
     }
 
-    return category;
+    const doc = category.toObject ? category.toObject() : { ...category };
+    if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
+    if (doc.image) doc.image = formatUploadUrl(doc.image);
+    return doc;
   }
 
   /**
    * Update category by ID (PATCH)
    */
-  async updateCategory(id, updateData = {}) {
+  async updateCategory(id, updateData = {}, file = null) {
     if (!id) {
       throw new ApiError(400, 'Vendor category ID is required');
     }
@@ -121,6 +140,18 @@ class VendorCategoryService {
 
     if (updateData.code) category.code = String(updateData.code).trim().toUpperCase();
     if (updateData.icon !== undefined) category.icon = String(updateData.icon).trim();
+
+    if (file && file.url) {
+      const formatted = formatUploadUrl(file.url);
+      category.image = formatted;
+      category.imageUrl = formatted;
+    } else if (updateData.imageUrl !== undefined || updateData.image !== undefined) {
+      const img = updateData.imageUrl !== undefined ? updateData.imageUrl : updateData.image;
+      const formatted = img ? formatUploadUrl(String(img).trim()) : '';
+      category.image = formatted;
+      category.imageUrl = formatted;
+    }
+
     if (updateData.description !== undefined) category.description = String(updateData.description).trim();
     if (updateData.sortOrder !== undefined) category.sortOrder = Number(updateData.sortOrder);
     if (updateData.isActive !== undefined) category.isActive = Boolean(updateData.isActive);

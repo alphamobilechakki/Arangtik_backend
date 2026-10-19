@@ -1,17 +1,50 @@
 const mongoose = require('mongoose');
 const { formatUploadUrl } = require('../../utils/url.util');
 
-const laundryItemSchema = new mongoose.Schema(
+const orderItemSchema = new mongoose.Schema(
   {
-    wardrobeItemId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'WardrobeItem',
-      required: true,
-    },
+    // 1. Universal Item Identification
     name: {
       type: String,
       required: true,
       trim: true,
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    price: {
+      type: Number,
+      default: 0,
+    },
+
+    // 2. Service & Special Instructions
+    serviceType: {
+      type: String,
+      enum: [
+        'WASH',
+        'IRON',
+        'DRY_CLEAN',
+        'WASH_AND_IRON',
+        'ALTERATION',
+        'STITCHING',
+        'DELIVERY',
+        'OTHER',
+      ],
+      default: 'WASH_AND_IRON',
+    },
+    specialInstructions: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    // 3. Garment / Wardrobe Specifics (For Dhobi / Tailor / Ironing)
+    wardrobeItemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'WardrobeItem',
+      default: null,
     },
     category: {
       type: String,
@@ -43,26 +76,28 @@ const laundryItemSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
-    serviceType: {
-      type: String,
-      enum: ['WASH', 'IRON', 'DRY_CLEAN', 'WASH_AND_IRON', 'OTHER'],
-      default: 'WASH_AND_IRON',
-    },
-    specialInstructions: {
-      type: String,
-      trim: true,
-      default: '',
-    },
   },
   { _id: true }
 );
 
-const laundryOrderSchema = new mongoose.Schema(
+const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
       type: String,
       unique: true,
       trim: true,
+      index: true,
+    },
+    orderCategory: {
+      type: String,
+      required: [true, 'Order category is required'],
+      trim: true,
+      default: 'Dhobi',
+    },
+    orderType: {
+      type: String,
+      enum: ['SERVICE', 'PRODUCT', 'LAUNDRY_WORK_ORDER', 'OTHER'],
+      default: 'SERVICE',
       index: true,
     },
     userId: {
@@ -80,6 +115,7 @@ const laundryOrderSchema = new mongoose.Schema(
       type: String,
       trim: true,
       required: [true, 'User phone number is required'],
+      index: true,
     },
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -105,11 +141,15 @@ const laundryOrderSchema = new mongoose.Schema(
     },
     pickupDate: {
       type: Date,
-      required: [true, 'Pickup date is required'],
+      default: null,
     },
     expectedDeliveryDate: {
       type: Date,
-      required: [true, 'Expected delivery date is required'],
+      default: null,
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
     },
     specialInstructions: {
       type: String,
@@ -117,36 +157,63 @@ const laundryOrderSchema = new mongoose.Schema(
       default: '',
     },
     items: {
-      type: [laundryItemSchema],
+      type: [orderItemSchema],
       validate: [
         (val) => Array.isArray(val) && val.length > 0,
-        'At least one dress must be selected for laundry',
+        'At least one item must be included in the order',
       ],
     },
     totalItems: {
       type: Number,
       default: 0,
     },
+    subtotal: {
+      type: Number,
+      default: 0,
+    },
+    deliveryFee: {
+      type: Number,
+      default: 0,
+    },
+    totalAmount: {
+      type: Number,
+      default: 0,
+    },
+    payment: {
+      method: {
+        type: String,
+        enum: ['COD', 'ONLINE', 'WALLET', 'UPI'],
+        default: 'COD',
+      },
+      status: {
+        type: String,
+        enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+        default: 'PENDING',
+      },
+      transactionId: {
+        type: String,
+        default: null,
+      },
+    },
     status: {
       type: String,
       enum: [
-        'PENDING_PICKUP', // Work Order created, awaiting pickup
-        'PICKED_UP', // Clothes picked up by vendor
-        'IN_PROCESS', // Washing / Dry cleaning / Ironing underway
-        'READY_FOR_DELIVERY', // Cleaned and packed, ready to return
-        'DELIVERED', // Handed over to user / completed
-        'CANCELLED', // Cancelled by user
-        'REJECTED', // Rejected by vendor
+        'PENDING_PICKUP',
+        'PICKED_UP',
+        'IN_PROCESS',
+        'READY_FOR_DELIVERY',
+        'DELIVERED',
+        'CANCELLED',
+        'REJECTED',
       ],
       default: 'PENDING_PICKUP',
-      index: true,
     },
     statusHistory: [
       {
         status: { type: String, required: true },
         changedBy: {
           type: String,
-          enum: ['USER', 'VENDOR', 'SYSTEM'],
+          enum: ['USER', 'VENDOR', 'SYSTEM', 'ADMIN'],
           default: 'USER',
         },
         changedAt: { type: Date, default: Date.now },
@@ -174,18 +241,20 @@ const laundryOrderSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    collection: 'orders',
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
 // Auto-generate orderNumber before saving if not present
-laundryOrderSchema.pre('validate', function (next) {
+orderSchema.pre('validate', function (next) {
   if (!this.orderNumber) {
     const today = new Date();
     const yyyymmdd = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    this.orderNumber = `WO-${yyyymmdd}-${randomSuffix}`;
+    const prefix = this.orderCategory === 'Dhobi' ? 'WO' : 'ORD';
+    this.orderNumber = `${prefix}-${yyyymmdd}-${randomSuffix}`;
   }
   if (Array.isArray(this.items)) {
     this.totalItems = this.items.length;
@@ -194,7 +263,7 @@ laundryOrderSchema.pre('validate', function (next) {
 });
 
 // Format URLs before save
-laundryOrderSchema.pre('save', function (next) {
+orderSchema.pre('save', function (next) {
   if (this.pdfUrl) {
     this.pdfUrl = formatUploadUrl(this.pdfUrl);
   }
@@ -208,8 +277,21 @@ laundryOrderSchema.pre('save', function (next) {
   next();
 });
 
-laundryOrderSchema.index({ userId: 1, createdAt: -1 });
-laundryOrderSchema.index({ vendorPhone: 1, createdAt: -1 });
+// High-Performance Universal Query Indexes
+orderSchema.index({ orderCategory: 1 });
+orderSchema.index({ orderCategory: 1, createdAt: -1 });
+orderSchema.index({ userId: 1, createdAt: -1 });
+orderSchema.index({ userId: 1, orderCategory: 1, createdAt: -1 });
+orderSchema.index({ vendorPhone: 1, createdAt: -1 });
+orderSchema.index({ vendorPhone: 1, orderCategory: 1, createdAt: -1 });
+orderSchema.index({ vendorId: 1, orderCategory: 1, createdAt: -1 });
+orderSchema.index({ status: 1 });
 
-module.exports =
-  mongoose.models.LaundryOrder || mongoose.model('LaundryOrder', laundryOrderSchema);
+const Order = mongoose.models.Order || mongoose.model('Order', orderSchema, 'orders');
+
+// Ensure LaundryOrder is registered on the same universal 'orders' collection
+if (!mongoose.models.LaundryOrder) {
+  mongoose.model('LaundryOrder', orderSchema, 'orders');
+}
+
+module.exports = Order;

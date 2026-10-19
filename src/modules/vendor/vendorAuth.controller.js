@@ -30,11 +30,13 @@ class VendorAuthController {
    * @access  Public
    */
   verifyOtp = asyncHandler(async (req, res) => {
-    const { phone, otp, name, category, categoryId, businessName, address } = req.body;
+    const { phone, otp, name, category, categoryId, categories, primaryCategory, businessName, address } = req.body;
     const result = await vendorAuthService.verifyOtp(phone, otp, {
       name,
       category,
       categoryId,
+      categories,
+      primaryCategory,
       businessName,
       address,
     });
@@ -119,6 +121,28 @@ class VendorAuthController {
     const vendorId = req.vendor?._id || req.user?.id;
     const vendor = await vendorAuthService.getCurrentVendor(vendorId);
     return ApiResponse.success(res, vendor, 'Vendor profile fetched successfully');
+  });
+
+  /**
+   * @desc    Update vendor profile (Name, business name, address, categories)
+   * @route   PATCH /api/vendor/profile
+   * @access  Private (Vendor)
+   */
+  updateProfile = asyncHandler(async (req, res) => {
+    const vendorId = req.vendor?._id || req.user?.id;
+    const vendor = await vendorAuthService.updateVendorProfile(vendorId, req.body);
+    return ApiResponse.success(res, vendor, 'Vendor profile updated successfully');
+  });
+
+  /**
+   * @desc    Update vendor service categories (tick/untick categories)
+   * @route   PATCH /api/vendor/categories
+   * @access  Private (Vendor)
+   */
+  updateCategories = asyncHandler(async (req, res) => {
+    const vendorId = req.vendor?._id || req.user?.id;
+    const vendor = await vendorAuthService.updateVendorCategories(vendorId, req.body);
+    return ApiResponse.success(res, vendor, 'Vendor categories updated successfully');
   });
 }
 

@@ -22,7 +22,21 @@
    - [3.1 Aggregated System Statistics (`GET /api/integration/stats`)](#31-aggregated-system-statistics-get-apiintegrationstats)
    - [3.2 User List Synchronization (`GET /api/integration/users`)](#32-user-list-synchronization-get-apiintegrationusers)
    - [3.3 Detailed User Profile (`GET /api/integration/users/:identifier`)](#33-detailed-user-profile-get-apiintegrationusersidentifier)
-4. [📋 Quick Integration Checklist for Admin Web Developers](#4--quick-integration-checklist-for-admin-web-developers)
+4. [👥 Vendor Partner Management (`/api/admin/vendors`)](#4--vendor-partner-management-apiadminvendors)
+   - [4.1 Registered vs Unregistered Vendor Metrics (`GET /api/admin/vendors/stats`)](#41-registered-vs-unregistered-vendor-metrics)
+   - [4.2 List Registered Vendors (`GET /api/admin/vendors/registered`)](#42-list-registered-vendors)
+   - [4.3 Onboard New Registered Vendor (`POST /api/admin/vendors/registered`)](#43-onboard-new-registered-vendor)
+   - [4.4 Update Registered Vendor Details (`PATCH /api/admin/vendors/registered/:id`)](#44-update-registered-vendor-details)
+   - [4.5 Suspend / Activate Vendor Status (`PATCH /api/admin/vendors/registered/:id/status`)](#45-suspend--activate-vendor-status)
+   - [4.6 List Unregistered Contact Leads (`GET /api/admin/vendors/unregistered`)](#46-list-unregistered-contact-leads)
+   - [4.7 Convert Unregistered Lead to Registered Partner (`POST /api/admin/vendors/unregistered/:id/convert`)](#47-convert-unregistered-lead-to-registered-partner)
+5. [🧺 Customer Work Orders & Fulfillment (`/api/admin/orders`)](#5--customer-work-orders--fulfillment-apiadminorders)
+   - [5.1 Aggregated Work Order Statistics (`GET /api/admin/orders/stats`)](#51-aggregated-work-order-statistics)
+   - [5.2 List All Customer Work Orders with Category & Status Filters (`GET /api/admin/orders`)](#52-list-all-customer-work-orders)
+   - [5.3 Work Order Details & Garments Breakdown (`GET /api/admin/orders/:id`)](#53-work-order-details--garments-breakdown)
+   - [5.4 Admin Status Override (`PATCH /api/admin/orders/:id/status`)](#54-admin-status-override)
+   - [5.5 Resend WhatsApp PDF Work Order Slip (`POST /api/admin/orders/:id/resend-whatsapp`)](#55-resend-whatsapp-pdf-work-order-slip)
+6. [📋 Quick Integration Checklist for Admin Web Developers](#6--quick-integration-checklist-for-admin-web-developers)
 
 ---
 
@@ -381,14 +395,234 @@ Endpoints designed for Admin Dashboard overviews, monitoring, and database audit
 - **Path:** `/api/integration/users/:identifier`
 - **Headers:** `x-api-key: <ADMIN_SYNC_API_KEY>`
 
+### 3.3 Detailed User Profile
+- **Method:** `GET`
+- **Path:** `/api/integration/users/:identifier`
+- **Headers:** `x-api-key: <ADMIN_SYNC_API_KEY>`
+
 ---
 
-## 4. 📋 Quick Integration Checklist for Admin Web Developers
+## 4. 👥 Vendor Partner Management (`/api/admin/vendors`)
+
+Comprehensive partner lifecycle management for the Operations team. Handles registered vendors, lead conversions, category associations, and verification.
+
+### 4.1 Registered vs Unregistered Vendor Metrics
+- **Method:** `GET`
+- **Path:** `/api/admin/vendors/stats`
+- **Headers:** `Authorization: Bearer <ADMIN_TOKEN>` or `x-api-key: <ADMIN_SYNC_API_KEY>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor statistics retrieved successfully",
+  "data": {
+    "totalVendors": 45,
+    "registeredVendors": 32,
+    "unregisteredVendors": 13,
+    "activeVendors": 30,
+    "suspendedVendors": 2,
+    "convertedLeads": 18,
+    "categoryDistribution": [
+      { "category": "Dhobi", "count": 28 },
+      { "category": "Press / Ironing", "count": 14 },
+      { "category": "Tailor", "count": 7 },
+      { "category": "Doodh Wala", "count": 3 }
+    ]
+  }
+}
+```
+
+---
+
+### 4.2 List Registered Vendors
+Search, filter by category or status, and paginate registered partners.
+- **Method:** `GET`
+- **Path:** `/api/admin/vendors/registered`
+- **Query Parameters:**
+  - `page` *(number, default 1)*
+  - `limit` *(number, default 10)*
+  - `search` *(string, matches name, phone, vendorId, or businessName)*
+  - `category` *(string, category filter e.g. 'Dhobi', 'Tailor')*
+  - `status` *(string, 'ALL' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED')*
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "vendors": [
+      {
+        "_id": "6ad4a204850e8a45c0ac41d2",
+        "vendorId": "VND-481920",
+        "name": "Raushan Kumar",
+        "phone": "918949056321",
+        "primaryCategory": "Dhobi",
+        "categories": ["Dhobi", "Press / Ironing"],
+        "category": "Dhobi",
+        "businessName": "Raushan Express Laundry",
+        "status": "ACTIVE",
+        "rating": 5.0,
+        "totalOrdersHandled": 12,
+        "isVerified": true
+      }
+    ],
+    "pagination": { "page": 1, "limit": 10, "total": 1, "pages": 1 }
+  }
+}
+```
+
+---
+
+### 4.3 Onboard New Registered Vendor (Direct Admin Creation)
+- **Method:** `POST`
+- **Path:** `/api/admin/vendors/registered`
+- **Request Body:**
+```json
+{
+  "name": "Suresh Tailors",
+  "phone": "919812345678",
+  "primaryCategory": "Tailor",
+  "categories": ["Tailor", "Press / Ironing"],
+  "businessName": "Suresh Stitching & Care",
+  "address": {
+    "street": "12 Gandhi Chowk",
+    "city": "Patna",
+    "state": "Bihar",
+    "pincode": "800001"
+  }
+}
+```
+
+---
+
+### 4.4 Update Registered Vendor Details
+- **Method:** `PATCH`
+- **Path:** `/api/admin/vendors/registered/:id`
+- **Request Body:** Send only fields to update (`name`, `businessName`, `primaryCategory`, `categories`, `address`, `rating`, `isVerified`).
+
+---
+
+### 4.5 Suspend / Activate Vendor Status
+- **Method:** `PATCH`
+- **Path:** `/api/admin/vendors/registered/:id/status`
+- **Request Body:**
+```json
+{
+  "status": "SUSPENDED"
+}
+```
+
+---
+
+### 4.6 List Unregistered Contact Leads
+Lists vendors entered by customer contacts that have not yet installed the app.
+- **Method:** `GET`
+- **Path:** `/api/admin/vendors/unregistered`
+
+---
+
+### 4.7 Convert Unregistered Lead to Registered Partner
+- **Method:** `POST`
+- **Path:** `/api/admin/vendors/unregistered/:id/convert`
+- **Request Body:**
+```json
+{
+  "name": "Official Vendor Name",
+  "category": "Dhobi",
+  "categories": ["Dhobi", "Press / Ironing"]
+}
+```
+
+---
+
+## 5. 🧺 Customer Work Orders & Fulfillment (`/api/admin/orders`)
+
+Full control over customer work orders. Supports direct category indexing (`orderCategory`), order timeline auditing, and manual status overrides.
+
+### 5.1 Aggregated Work Order Statistics
+- **Method:** `GET`
+- **Path:** `/api/admin/orders/stats`
+- **Headers:** `Authorization: Bearer <ADMIN_TOKEN>` or `x-api-key: <ADMIN_SYNC_API_KEY>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "totalOrders": 12,
+    "pendingPickup": 7,
+    "pickedUp": 1,
+    "inProcess": 0,
+    "readyForDelivery": 0,
+    "delivered": 4,
+    "cancelled": 0,
+    "rejected": 0,
+    "activeProcessing": 1,
+    "totalGarments": 77,
+    "categoryDistribution": [
+      { "category": "Dhobi", "count": 12 }
+    ],
+    "serviceTypeDistribution": [
+      { "serviceType": "WASH_AND_IRON", "count": 77 }
+    ]
+  }
+}
+```
+
+---
+
+### 5.2 List All Customer Work Orders with Category & Status Filters
+- **Method:** `GET`
+- **Path:** `/api/admin/orders`
+- **Query Parameters:**
+  - `page` *(number, default 1)*
+  - `limit` *(number, default 10, max 100)*
+  - `search` *(string, searches orderNumber, userPhone, userName, vendorPhone, vendorName)*
+  - `category` *(string, e.g. `'Dhobi'`, `'Tailor'`, `'Doodh Wala'`, `'ALL'`)*
+  - `status` *(string, `'ALL'` | `'PENDING_PICKUP'` | `'PICKED_UP'` | `'IN_PROCESS'` | `'READY_FOR_DELIVERY'` | `'DELIVERED'` | `'CANCELLED'` | `'REJECTED'`)*
+  - `serviceType` *(string, `'ALL'` | `'WASH'` | `'IRON'` | `'DRY_CLEAN'` | `'WASH_AND_IRON'`)*
+  - `isRegisteredVendor` *(boolean, `'true'` | `'false'`)*
+  - `startDate`, `endDate` *(ISO date strings)*
+  - `sortBy` *(string, default `'createdAt'`)*
+  - `sortOrder` *(string, `'asc'` | `'desc'`)*
+
+---
+
+### 5.3 Work Order Details & Garments Breakdown
+- **Method:** `GET`
+- **Path:** `/api/admin/orders/:id`
+- Returns full snapshot including user info, vendor info, item thumbnails, attributes (fabric, color, brand), and timestamped audit history.
+
+---
+
+### 5.4 Admin Status Override
+Allows administrator to advance or intervene on an order status.
+- Automatically syncs connected closet garments (`ACTIVE`/`INACTIVE`).
+- Automatically dispatches FCM push notification to the customer mobile app.
+- **Method:** `PATCH`
+- **Path:** `/api/admin/orders/:id/status`
+- **Request Body:**
+```json
+{
+  "status": "DELIVERED",
+  "note": "Admin confirmed order handover"
+}
+```
+
+---
+
+### 5.5 Resend WhatsApp PDF Work Order Slip
+Re-triggers the WhatsApp PDF work order slip dispatch to the assigned vendor.
+- **Method:** `POST`
+- **Path:** `/api/admin/orders/:id/resend-whatsapp`
+
+---
+
+## 6. 📋 Quick Integration Checklist for Admin Web Developers
 
 - [ ] Set `x-api-key` header to `process.env.ADMIN_SYNC_API_KEY` in your HTTP client (Axios / Fetch).
 - [ ] Alternatively, authenticate with an admin user account and set `Authorization: Bearer <TOKEN>`.
 - [ ] For updates, always use `PATCH` method; never use `PUT`.
-- [ ] In Category management tables, default list call is `GET /api/admin/categories`.
-- [ ] Provide an "Include Inactive / Archive" toggle that switches to `GET /api/admin/categories?includeInactive=true`.
-- [ ] Deactivation (`DELETE /api/admin/categories/:id`) is recommended over hard-delete to avoid disrupting historical vendor category labels.
-- [ ] Categories created here immediately become selectable by mobile vendors upon registration.
+- [ ] In Category management tables, default list call is `GET /api/admin/vendor-categories`.
+- [ ] In Orders table, pass `?category=Dhobi` to filter orders by service category.
+- [ ] In Vendor table, pass `?category=Dhobi` or multi-category array to onboard multi-service partners.
+- [ ] Deactivation (`DELETE /api/admin/vendor-categories/:id`) is recommended over hard-delete to avoid disrupting historical vendor category labels.

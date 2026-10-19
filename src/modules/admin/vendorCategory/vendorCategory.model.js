@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { formatUploadUrl } = require('../../../utils/url.util');
 
 const vendorCategorySchema = new mongoose.Schema(
   {
@@ -18,6 +19,16 @@ const vendorCategorySchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '🧺',
+    },
+    image: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: '',
     },
     description: {
       type: String,
@@ -51,6 +62,22 @@ vendorCategorySchema.pre('validate', function (next) {
       .trim()
       .replace(/[^A-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
+  }
+  next();
+});
+
+// Format image URLs to absolute URLs and sync image <-> imageUrl
+vendorCategorySchema.pre('save', function (next) {
+  if (this.imageUrl) {
+    this.imageUrl = formatUploadUrl(this.imageUrl);
+  }
+  if (this.image) {
+    this.image = formatUploadUrl(this.image);
+  }
+  if (this.imageUrl && !this.image) {
+    this.image = this.imageUrl;
+  } else if (this.image && !this.imageUrl) {
+    this.imageUrl = this.image;
   }
   next();
 });

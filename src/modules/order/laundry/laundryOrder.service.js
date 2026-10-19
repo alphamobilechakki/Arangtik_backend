@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
-const LaundryOrder = require('./laundryOrder.model');
-const vendorService = require('../vendor/vendor.service');
+const Order = require('../order.model');
+const vendorService = require('../../vendor/vendor.service');
 const laundryPdfService = require('./laundryPdf.service');
 const laundryWhatsappService = require('./laundryWhatsapp.service');
-const WardrobeItem = require('../wardrobe/wardrobeItem.model');
-const User = require('../auth/user.model');
-const ApiError = require('../../utils/apiError');
-const { formatPhoneNumber } = require('../../utils/whatsapp.service');
+const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
+const User = require('../../auth/user.model');
+const ApiError = require('../../../utils/apiError');
+const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 
 class LaundryOrderService {
   /**
@@ -147,11 +147,19 @@ class LaundryOrderService {
         ? vendorRecord.vendor.name
         : vendorName || vendorRecord.vendor.name) || 'Laundry Vendor';
 
-    // 6. Create Initial Work Order
-    const order = new LaundryOrder({
+    // Explicit orderCategory: Laundry work orders are explicitly 'Dhobi'
+    const orderCategory =
+      (payload.orderCategory && String(payload.orderCategory).trim()) ||
+      (payload.category && String(payload.category).trim()) ||
+      'Dhobi';
+
+    // 6. Create Initial Work Order directly in universal 'orders' collection
+    const order = new Order({
       userId: user._id,
       userName: user.name || 'Arangtik User',
       userPhone: user.phone,
+      orderCategory,
+      orderType: 'LAUNDRY_WORK_ORDER',
       vendorId: vendorRecord.isRegistered ? vendorRecord.vendor._id : null,
       vendorPhone: formattedVendorPhone,
       vendorName: resolvedVendorName,
@@ -225,7 +233,7 @@ class LaundryOrderService {
 
     // 9. Dispatch FCM Push Notifications
     try {
-      const notificationService = require('../notification/notification.service');
+      const notificationService = require('../../notification/notification.service');
 
       // A. Notify Customer
       await notificationService
@@ -244,7 +252,7 @@ class LaundryOrderService {
         .catch((err) => console.warn('[FCM Customer Order Notification Warning]:', err.message));
 
       // B. If vendor has an active user account in Arangtik, notify the vendor
-      const VendorModel = require('../vendor/registeredVendor.model');
+      const VendorModel = require('../../vendor/registeredVendor.model');
       let vendorUserTargetId = null;
       if (order.vendorId) {
         const vDoc = await VendorModel.findById(order.vendorId).select('userId');
@@ -284,7 +292,7 @@ class LaundryOrderService {
   async getUserOrders(userId, query = {}) {
     const { status, page = 1, limit = 20, vendorPhone } = query;
 
-    const filter = { userId };
+    const filter = { userId, orderCategory: 'Dhobi' };
     if (status) {
       filter.status = status;
     }
@@ -297,12 +305,12 @@ class LaundryOrderService {
     const skip = (pageNum - 1) * limitNum;
 
     const [orders, totalCount] = await Promise.all([
-      LaundryOrder.find(filter)
+      Order.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .lean(),
-      LaundryOrder.countDocuments(filter),
+      Order.countDocuments(filter),
     ]);
 
     return {
@@ -324,7 +332,7 @@ class LaundryOrderService {
       throw new ApiError(400, 'Invalid Order ID format');
     }
 
-    const order = await LaundryOrder.findOne({
+    const order = await Order.findOne({
       _id: orderId,
       userId,
     }).populate('items.wardrobeItemId', 'name category images attributes');
@@ -368,7 +376,7 @@ class LaundryOrderService {
       );
     }
 
-    const order = await LaundryOrder.findOne({
+    const order = await Order.findOne({
       _id: orderId,
       userId,
     });
@@ -424,7 +432,7 @@ class LaundryOrderService {
 
     // Dispatch FCM status update notification to customer
     try {
-      const notificationService = require('../notification/notification.service');
+      const notificationService = require('../../notification/notification.service');
       const statusLabels = {
         PENDING_PICKUP: 'Awaiting Pickup',
         PICKED_UP: 'Clothes Picked Up by Vendor',
@@ -451,7 +459,7 @@ class LaundryOrderService {
 
       // If user cancelled, notify vendor if vendor has an active account
       if (status === 'CANCELLED') {
-        const VendorModel = require('../vendor/registeredVendor.model');
+        const VendorModel = require('../../vendor/registeredVendor.model');
         let vendorUserTargetId = null;
         if (order.vendorId) {
           const vDoc = await VendorModel.findById(order.vendorId).select('userId');

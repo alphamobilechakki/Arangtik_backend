@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const laundryController = require('./laundry.controller');
-const { protect } = require('../../middlewares/auth.middleware');
+const { protect } = require('../../../middlewares/auth.middleware');
 
 // All laundry endpoints require authentication
 router.use(protect);

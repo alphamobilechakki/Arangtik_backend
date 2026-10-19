@@ -43,15 +43,55 @@ class VendorAuthService {
   }
 
   /**
+   * Helper to resolve category names from names, codes, or IDs against database
+   */
+  async resolveCategoryNames(categoriesInput) {
+    if (!categoriesInput) return ['Dhobi'];
+    const rawList = Array.isArray(categoriesInput)
+      ? categoriesInput
+      : String(categoriesInput).split(',').map((s) => s.trim()).filter(Boolean);
+
+    if (rawList.length === 0) return ['Dhobi'];
+
+    try {
+      const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
+      const dbCategories = await VendorCategory.find({ isActive: true }).lean();
+
+      const resolved = rawList.map((item) => {
+        const trimmed = String(item).trim();
+        const match = dbCategories.find(
+          (c) =>
+            c.name.toLowerCase() === trimmed.toLowerCase() ||
+            (c.code && c.code.toLowerCase() === trimmed.toLowerCase()) ||
+            (c._id && c._id.toString() === trimmed)
+        );
+        return match ? match.name : trimmed;
+      });
+
+      return [...new Set(resolved.filter(Boolean))];
+    } catch (err) {
+      return [...new Set(rawList.map((s) => String(s).trim()).filter(Boolean))];
+    }
+  }
+
+  /**
    * Helper to format vendor document for client responses
    */
   formatVendorProfile(vendor) {
+    const categoriesList =
+      Array.isArray(vendor.categories) && vendor.categories.length > 0
+        ? vendor.categories
+        : [vendor.category || 'Dhobi'];
+    const primaryCat = vendor.primaryCategory || vendor.category || categoriesList[0] || 'Dhobi';
+
     return {
       _id: vendor._id,
       vendorId: vendor.vendorId,
       name: vendor.name,
       phone: vendor.phone,
-      category: vendor.category || 'Dhobi',
+      category: primaryCat,
+      primaryCategory: primaryCat,
+      categories: categoriesList,
       isRegistered: vendor.isRegistered === true,
       businessName: vendor.businessName || '',
       address: vendor.address || {},
@@ -188,7 +228,7 @@ class VendorAuthService {
     }
 
     // Case B: New vendor or unregistered vendor completing registration
-    const { name, category, categoryId, businessName, address } = registrationData;
+    const { name, category, categoryId, categories, primaryCategory, businessName, address } = registrationData;
 
     let vendorName = name ? String(name).trim() : '';
     if (!vendorName && vendor && vendor.name) {
@@ -207,30 +247,27 @@ class VendorAuthService {
     }
 
     const rawCategory = category || categoryId;
-    if (!rawCategory || !String(rawCategory).trim()) {
-      throw new ApiError(400, 'Vendor category is required (e.g. Dhobi, Tailor, Press / Ironing)');
+    const hasCategory =
+      (rawCategory && String(rawCategory).trim()) ||
+      (Array.isArray(categories) && categories.length > 0);
+
+    if (!hasCategory) {
+      throw new ApiError(400, 'Vendor category is required. Please select a category (e.g. Dhobi, Doodh Wala).');
     }
 
-    const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
-    const trimmedCat = String(rawCategory).trim();
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(trimmedCat);
-
-    const dbCat = await VendorCategory.findOne({
-      $or: [
-        { name: { $regex: new RegExp(`^${trimmedCat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-        { code: trimmedCat.toUpperCase() },
-        ...(isMongoId ? [{ _id: trimmedCat }] : []),
-      ],
-      isActive: true,
-    });
-
-    const resolvedCategory = dbCat ? dbCat.name : trimmedCat;
+    const initialCategories = await this.resolveCategoryNames(categories || rawCategory || 'Dhobi');
+    const resolvedPrimaryCategory =
+      primaryCategory && initialCategories.includes(primaryCategory)
+        ? primaryCategory
+        : initialCategories[0] || 'Dhobi';
 
     if (!vendor) {
       vendor = new Vendor({
         name: vendorName,
         phone: formattedPhone,
-        category: resolvedCategory,
+        categories: initialCategories,
+        primaryCategory: resolvedPrimaryCategory,
+        category: resolvedPrimaryCategory,
         isRegistered: true,
         businessName: businessName ? String(businessName).trim() : '',
         address: address || {},
@@ -238,7 +275,9 @@ class VendorAuthService {
       });
     } else {
       vendor.name = vendorName;
-      vendor.category = resolvedCategory;
+      vendor.categories = initialCategories;
+      vendor.primaryCategory = resolvedPrimaryCategory;
+      vendor.category = resolvedPrimaryCategory;
       vendor.isRegistered = true;
       if (businessName) vendor.businessName = String(businessName).trim();
       if (address) vendor.address = address;
@@ -256,9 +295,9 @@ class VendorAuthService {
         unreg.convertedAt = new Date();
         await unreg.save();
 
-        const LaundryOrder = require('../laundry/laundryOrder.model');
-        if (LaundryOrder) {
-          await LaundryOrder.updateMany(
+        const Order = require('../order/order.model');
+        if (Order) {
+          await Order.updateMany(
             { vendorPhone: formattedPhone, isRegisteredVendor: false },
             {
               $set: {
@@ -290,7 +329,7 @@ class VendorAuthService {
    * 3. Vendor Registration (Supports OTP or direct registration)
    */
   async registerVendor(payload = {}) {
-    const { phone, otp, password, name, category, categoryId, businessName, address } = payload;
+    const { phone, otp, password, name, category, categoryId, categories, primaryCategory, businessName, address } = payload;
 
     // If OTP provided, delegate to OTP-based registration
     if (otp) {
@@ -307,24 +346,19 @@ class VendorAuthService {
     }
 
     const rawCategory = category || categoryId;
-    if (!rawCategory || !String(rawCategory).trim()) {
+    const hasCategory =
+      (rawCategory && String(rawCategory).trim()) ||
+      (Array.isArray(categories) && categories.length > 0);
+
+    if (!hasCategory) {
       throw new ApiError(400, 'Please select a vendor category (e.g. Dhobi, Doodh Wala)');
     }
 
-    const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
-    const trimmedCat = String(rawCategory).trim();
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(trimmedCat);
-
-    const dbCat = await VendorCategory.findOne({
-      $or: [
-        { name: { $regex: new RegExp(`^${trimmedCat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-        { code: trimmedCat.toUpperCase() },
-        ...(isMongoId ? [{ _id: trimmedCat }] : []),
-      ],
-      isActive: true,
-    });
-
-    const resolvedCategory = dbCat ? dbCat.name : trimmedCat;
+    const initialCategories = await this.resolveCategoryNames(categories || rawCategory || 'Dhobi');
+    const resolvedPrimaryCategory =
+      primaryCategory && initialCategories.includes(primaryCategory)
+        ? primaryCategory
+        : initialCategories[0] || 'Dhobi';
 
     let vendor = await Vendor.findOne({ phone: formattedPhone });
 
@@ -340,7 +374,9 @@ class VendorAuthService {
         name: name.trim(),
         phone: formattedPhone,
         ...(password && password.trim().length >= 6 ? { password: String(password).trim() } : {}),
-        category: resolvedCategory,
+        categories: initialCategories,
+        primaryCategory: resolvedPrimaryCategory,
+        category: resolvedPrimaryCategory,
         isRegistered: true,
         businessName: businessName ? businessName.trim() : '',
         address: address || {},
@@ -351,7 +387,9 @@ class VendorAuthService {
       if (password && password.trim().length >= 6) {
         vendor.password = String(password).trim();
       }
-      vendor.category = resolvedCategory;
+      vendor.categories = initialCategories;
+      vendor.primaryCategory = resolvedPrimaryCategory;
+      vendor.category = resolvedPrimaryCategory;
       vendor.isRegistered = true;
       if (businessName) vendor.businessName = businessName.trim();
       if (address) vendor.address = address;
@@ -368,9 +406,9 @@ class VendorAuthService {
         unreg.convertedAt = new Date();
         await unreg.save();
 
-        const LaundryOrder = require('../laundry/laundryOrder.model');
-        if (LaundryOrder) {
-          await LaundryOrder.updateMany(
+        const Order = require('../order/order.model');
+        if (Order) {
+          await Order.updateMany(
             { vendorPhone: formattedPhone, isRegisteredVendor: false },
             {
               $set: {
@@ -574,6 +612,88 @@ class VendorAuthService {
     if (!vendor) {
       throw new ApiError(404, 'Vendor not found');
     }
+    return this.formatVendorProfile(vendor);
+  }
+
+  /**
+   * 7. Update Vendor Categories (Tick/untick multiple service categories)
+   * Designed specifically for mobile app category selection
+   */
+  async updateVendorCategories(vendorId, { categories, primaryCategory } = {}) {
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      throw new ApiError(404, 'Vendor not found');
+    }
+
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+      throw new ApiError(400, 'Please select at least one service category');
+    }
+
+    const resolvedCategories = await this.resolveCategoryNames(categories);
+    if (resolvedCategories.length === 0) {
+      throw new ApiError(400, 'Please select at least one valid service category');
+    }
+
+    vendor.categories = resolvedCategories;
+
+    if (primaryCategory && resolvedCategories.includes(primaryCategory)) {
+      vendor.primaryCategory = primaryCategory;
+      vendor.category = primaryCategory;
+    } else if (!resolvedCategories.includes(vendor.primaryCategory)) {
+      vendor.primaryCategory = resolvedCategories[0];
+      vendor.category = resolvedCategories[0];
+    }
+
+    await vendor.save();
+    return this.formatVendorProfile(vendor);
+  }
+
+  /**
+   * 8. Update Vendor Profile (Name, business name, address, categories)
+   */
+  async updateVendorProfile(vendorId, updateData = {}) {
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      throw new ApiError(404, 'Vendor not found');
+    }
+
+    const { name, businessName, address, categories, primaryCategory } = updateData;
+
+    if (name && String(name).trim()) {
+      vendor.name = String(name).trim();
+    }
+
+    if (businessName !== undefined) {
+      vendor.businessName = String(businessName).trim();
+    }
+
+    if (address && typeof address === 'object') {
+      vendor.address = {
+        street: address.street !== undefined ? String(address.street).trim() : vendor.address?.street || '',
+        city: address.city !== undefined ? String(address.city).trim() : vendor.address?.city || '',
+        state: address.state !== undefined ? String(address.state).trim() : vendor.address?.state || '',
+        pincode: address.pincode !== undefined ? String(address.pincode).trim() : vendor.address?.pincode || '',
+      };
+    }
+
+    if (categories && Array.isArray(categories) && categories.length > 0) {
+      const resolvedCategories = await this.resolveCategoryNames(categories);
+      if (resolvedCategories.length > 0) {
+        vendor.categories = resolvedCategories;
+        if (primaryCategory && resolvedCategories.includes(primaryCategory)) {
+          vendor.primaryCategory = primaryCategory;
+          vendor.category = primaryCategory;
+        } else if (!resolvedCategories.includes(vendor.primaryCategory)) {
+          vendor.primaryCategory = resolvedCategories[0];
+          vendor.category = resolvedCategories[0];
+        }
+      }
+    } else if (primaryCategory && vendor.categories.includes(primaryCategory)) {
+      vendor.primaryCategory = primaryCategory;
+      vendor.category = primaryCategory;
+    }
+
+    await vendor.save();
     return this.formatVendorProfile(vendor);
   }
 }
