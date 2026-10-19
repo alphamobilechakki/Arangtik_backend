@@ -104,27 +104,38 @@ class SegmentationService {
    */
   removeSkinAndIsolateGarment(buffer, width, height, garmentColor = '') {
     const out = Buffer.from(buffer);
-    const skinToneNames = ['nude', 'beige', 'tan', 'camel', 'peach', 'skin', 'flesh'];
-    const isSkinColorFabric = skinToneNames.some((c) => (garmentColor || '').toLowerCase().includes(c));
+    const warmAndSkinTones = [
+      'orange', 'saffron', 'gold', 'golden', 'mustard', 'yellow', 'brown', 'rust',
+      'coral', 'terracotta', 'copper', 'amber', 'maroon', 'red', 'cream', 'wheat',
+      'sand', 'nude', 'beige', 'tan', 'camel', 'peach', 'skin', 'flesh', 'khaki', 'caramel'
+    ];
+    const isSkinColorFabric = warmAndSkinTones.some((c) => (garmentColor || '').toLowerCase().includes(c));
 
-    // If garment itself is not a skin-colored tone, remove skin pixels
-    if (!isSkinColorFabric) {
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          if (out[idx + 3] < 30) continue;
-          const r = out[idx];
-          const g = out[idx + 1];
-          const b = out[idx + 2];
-          // Remove human skin or studio white background gap remnants
-          if (this.isSkinPixel(r, g, b) || (r > 225 && g > 225 && b > 225)) {
-            out[idx + 3] = 0;
-          }
+    // If garment itself has warm/skin/earthy tones, do NOT attempt RGB-based skin erasure as it will destroy the fabric
+    if (isSkinColorFabric) {
+      return out;
+    }
+
+    // Only inspect top 15% (neck area) or outer wrist margins, NEVER the center chest or torso
+    for (let y = 0; y < height; y++) {
+      const isNeckArea = y < height * 0.15;
+      const isWristArea = y > height * 0.85;
+      if (!isNeckArea && !isWristArea) continue; // Protect entire chest, torso, and main fabric body
+
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        if (out[idx + 3] < 30) continue;
+        const r = out[idx];
+        const g = out[idx + 1];
+        const b = out[idx + 2];
+        if (this.isSkinPixel(r, g, b)) {
+          out[idx + 3] = 0;
         }
       }
     }
 
-    // Connected Component Analysis: keep only the main garment body (drops floating watch, detached wrist specks, etc.)
+    // Prune only tiny disconnected noise floaters (< 0.5% of total pixels)
+    // Preserves all genuine garment parts (both sleeves, collar, hem, etc.)
     const totalPixels = width * height;
     const visited = new Uint8Array(totalPixels);
     const components = [];
@@ -165,16 +176,21 @@ class SegmentationService {
       }
     }
 
+    // Keep all significant garment components (e.g. >= 0.5% of image or >= 5% of largest component)
     if (components.length > 0) {
       components.sort((a, b) => b.length - a.length);
-      const largest = components[0];
-      // Only keep the largest garment component if it represents a significant portion
-      if (largest.length >= totalPixels * 0.08) {
-        const mainMask = new Uint8Array(totalPixels);
-        for (const p of largest) mainMask[p] = 1;
-        for (let i = 0; i < totalPixels; i++) {
-          if (!mainMask[i]) out[i * 4 + 3] = 0;
+      const largestSize = components[0].length;
+      const minKeepSize = Math.max(totalPixels * 0.005, largestSize * 0.05);
+
+      const keepMask = new Uint8Array(totalPixels);
+      for (const comp of components) {
+        if (comp.length >= minKeepSize) {
+          for (const p of comp) keepMask[p] = 1;
         }
+      }
+
+      for (let i = 0; i < totalPixels; i++) {
+        if (!keepMask[i]) out[i * 4 + 3] = 0;
       }
     }
 

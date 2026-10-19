@@ -892,8 +892,8 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
           };
 
           const isAccessory = isFootwearOrAccessory(item);
-          // Skin exclusion is enabled strictly for men's clothing garments, NEVER for ladies garments AND NEVER for footwear/accessories/jewelry
-          const shouldExcludeSkin = !isLadiesGarment(item) && !isAccessory;
+          // Skin exclusion should only run if explicitly requested in options and never for ladies or accessories
+          const shouldExcludeSkin = Boolean(options.excludeSkin) && !isLadiesGarment(item) && !isAccessory;
 
           // Background Removal: Run neural segmentation by default so dress/item background is cleanly removed
           const shouldSegment = options.removeBackground !== false && process.env.DISABLE_SEGMENTATION !== 'true';

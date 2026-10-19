@@ -1,8 +1,13 @@
-arangtik
+# 👗 Arangtik Backend
 
+## 📚 Documentation Index
+- 📱 [Customer Mobile App Integration Guide](file:///d:/my%20codes/Arangtik/backend/MOBILE_APP_INTEGRATION_GUIDE.md)
+- 🧺 [Vendor Mobile App & Portal API Documentation](file:///d:/my%20codes/Arangtik/backend/VENDOR_API_DOCUMENTATION.md)
+- 🛠️ [Admin Web Panel API Documentation](file:///d:/my%20codes/Arangtik/backend/ADMIN_API_DOCUMENTATION.md)
+- 📖 [Complete Core Backend API Documentation](file:///d:/my%20codes/Arangtik/backend/API_DOCUMENTATION.md)
 
+---
 
-rontend me duplicate dress handling ko perfectly connect karne ke liye ye comprehensive prompt taiyar hai. Is prompt ko aap seedhe use kar sakte hain:
 
 📋 Frontend Implementation Prompt (Copy & Paste):
 markdown
