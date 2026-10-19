@@ -1864,4 +1864,181 @@ Advances the order through the streamlined 4-step process or declines/rejects th
 
 ---
 
+## SERIES 14: Enterprise Admin Operations — Vendors Hub (`/api/admin/vendors`)
+
+> All endpoints in Series 14 require Admin Authorization via `Authorization: Bearer <ADMIN_TOKEN>` or `x-api-key: <ADMIN_SYNC_API_KEY>`.
+
+### 14.1 GET /api/admin/vendors/stats — Vendor Network Analytics & KPIs
+Returns aggregated platform vendor metrics across registered official providers and customer-saved unregistered leads.
+
+- **Endpoint:** `GET /api/admin/vendors/stats`
+- **Headers:** `x-api-key: <ADMIN_SYNC_API_KEY>` or `Authorization: Bearer <ADMIN_TOKEN>`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor statistics retrieved successfully",
+  "data": {
+    "registered": {
+      "total": 12,
+      "active": 10,
+      "inactive": 2,
+      "suspended": 0,
+      "verified": 11
+    },
+    "unregistered": {
+      "total": 45,
+      "converted": 8,
+      "pending": 37
+    },
+    "totalVendors": 57,
+    "totalOrdersProcessed": 184,
+    "categoryDistribution": [
+      { "category": "Dhobi", "count": 8 },
+      { "category": "Dry Cleaner", "count": 3 },
+      { "category": "Tailor", "count": 1 }
+    ]
+  }
+}
+```
+
+### 14.2 GET /api/admin/vendors/registered — List Registered Vendors
+Search, filter, paginate, and sort registered service vendors.
+
+- **Endpoint:** `GET /api/admin/vendors/registered`
+- **Query Parameters:**
+  - `page` *(number, default 1)*
+  - `limit` *(number, default 10, max 100)*
+  - `search` *(string, searches name, phone, vendorId, businessName, city)*
+  - `status` *(string, 'ALL' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED')*
+  - `category` *(string, category filter e.g. 'Dhobi')*
+  - `isVerified` *(boolean, 'true' | 'false')*
+  - `sortBy` *(string, default 'createdAt')*
+  - `sortOrder` *(string, 'asc' | 'desc', default 'desc')*
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Registered vendors retrieved successfully",
+  "data": {
+    "vendors": [
+      {
+        "_id": "6ad4a204850e8a45c0ac41d2",
+        "vendorId": "VND-773717",
+        "name": "Raushan Kumar",
+        "phone": "918949056321",
+        "category": "Dhobi",
+        "businessName": "Express Wash Jaipur",
+        "status": "ACTIVE",
+        "rating": 5,
+        "totalOrdersHandled": 14,
+        "isVerified": true,
+        "address": { "city": "Jaipur", "state": "Rajasthan" },
+        "createdAt": "2026-10-18T10:40:04.861Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "perPage": 10,
+      "totalRecords": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+### 14.3 POST /api/admin/vendors/registered — Admin Direct Vendor Onboarding
+Allows administrators to manually register a new vendor partner.
+
+- **Endpoint:** `POST /api/admin/vendors/registered`
+- **Request Body:**
+```json
+{
+  "name": "Shyam Dhobi Express",
+  "phone": "919876543210",
+  "category": "Dhobi",
+  "businessName": "Shyam Professional Ironing & Wash",
+  "status": "ACTIVE",
+  "address": {
+    "street": "14 Commercial Complex",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001"
+  },
+  "rating": 5.0,
+  "isVerified": true
+}
+```
+
+### 14.4 GET /api/admin/vendors/registered/:id — Registered Vendor Details & Orders
+Fetches full details including populated customer connections and up to 10 recent work orders.
+
+- **Endpoint:** `GET /api/admin/vendors/registered/:id`
+
+### 14.5 PATCH /api/admin/vendors/registered/:id — Update Vendor Profile
+Updates profile fields, address, business details, or category.
+
+- **Endpoint:** `PATCH /api/admin/vendors/registered/:id`
+- **Request Body:**
+```json
+{
+  "name": "Shyam Dhobi Premium",
+  "businessName": "Shyam Laundry & Drycleaners",
+  "category": "Dry Cleaner",
+  "address": { "city": "Mumbai South" }
+}
+```
+
+### 14.6 PATCH /api/admin/vendors/registered/:id/status — Toggle Vendor Status
+Quick status modification (`ACTIVE`, `INACTIVE`, `SUSPENDED`).
+
+- **Endpoint:** `PATCH /api/admin/vendors/registered/:id/status`
+- **Request Body:**
+```json
+{
+  "status": "INACTIVE"
+}
+```
+
+### 14.7 GET /api/admin/vendors/unregistered — List Customer-Saved Unregistered Vendors
+Lists local vendors and dhobis added by mobile app customers during laundry order creation.
+
+- **Endpoint:** `GET /api/admin/vendors/unregistered`
+- **Query Parameters:**
+  - `page` *(number, default 1)*
+  - `limit` *(number, default 10)*
+  - `search` *(string, searches name, phone, addedBy name)*
+  - `isConverted` *(string, 'ALL' | 'true' | 'false')*
+  - `sortBy` *(string, default 'createdAt')*
+  - `sortOrder` *(string, default 'desc')*
+
+### 14.8 GET /api/admin/vendors/unregistered/:id — Unregistered Vendor Details & Customers
+Returns the list of customers who saved this vendor, custom names given, and past order activity.
+
+- **Endpoint:** `GET /api/admin/vendors/unregistered/:id`
+
+### 14.9 POST /api/admin/vendors/unregistered/:id/convert — Convert Unregistered to Registered Partner
+Upgrades a customer-saved contact into an official registered vendor. All past orders and customer links are automatically associated.
+
+- **Endpoint:** `POST /api/admin/vendors/unregistered/:id/convert`
+- **Request Body:**
+```json
+{
+  "name": "Ramesh Laundry & Ironing",
+  "category": "Dhobi",
+  "businessName": "Ramesh Express",
+  "address": {
+    "city": "Bengaluru",
+    "state": "Karnataka"
+  }
+}
+```
+
+---
+
 *Documentation maintained by Arangtik Engineering Team.*
+
