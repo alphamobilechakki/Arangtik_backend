@@ -26,7 +26,7 @@ class VendorService {
     const existingVendor = await Vendor.findOne({
       phone: formattedPhone,
       status: 'ACTIVE',
-    }).select('vendorId name phone category categoryCode isRegistered businessName rating totalOrdersHandled isVerified addedByUsers');
+    }).select('vendorId name phone category categoryCode isRegistered businessName rating totalOrdersHandled isVerified addedByUsers services offeredServices');
 
     if (existingVendor) {
       let preferredName = existingVendor.name || '';
@@ -46,12 +46,14 @@ class VendorService {
           vendorId: existingVendor.vendorId,
           name: preferredName,
           phone: existingVendor.phone,
-          category: existingVendor.category || 'Dhobi',
-          categoryCode: existingVendor.categoryCode || 'DHOBI',
+          category: existingVendor.category || existingVendor.primaryCategory || 'General',
+          categoryCode: existingVendor.categoryCode || (existingVendor.category ? existingVendor.category.toUpperCase().replace(/[^A-Z0-9]+/g, '_') : 'GENERAL'),
           businessName: existingVendor.businessName || '',
           rating: existingVendor.rating,
           totalOrdersHandled: existingVendor.totalOrdersHandled,
           isVerified: existingVendor.isVerified,
+          services: existingVendor.services || [],
+          offeredServices: existingVendor.offeredServices || [],
         },
       };
     }
@@ -79,7 +81,7 @@ class VendorService {
           vendorId: null,
           name: preferredName,
           phone: unregVendor.phone,
-          category: 'Dhobi',
+          category: 'General',
           businessName: '',
           isVerified: false,
         },
@@ -94,7 +96,7 @@ class VendorService {
         vendorId: null,
         name: '',
         phone: formattedPhone,
-        category: 'Dhobi',
+        category: 'General',
         businessName: '',
         isVerified: false,
       },
@@ -196,11 +198,15 @@ class VendorService {
     if (unreg || (vendor && !vendor.isRegistered)) {
       if (!vendor) {
         const vendorName = user.name || unreg?.name || 'Laundry Vendor';
+        const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
+        const defaultCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+        const catName = defaultCat?.name || 'General';
+        const catCode = defaultCat?.code || 'GENERAL';
         vendor = await Vendor.create({
           name: vendorName,
           phone: formattedPhone,
-          category: 'Dhobi',
-          categoryCode: 'DHOBI',
+          category: catName,
+          categoryCode: catCode,
           isRegistered: true,
           userId: user._id || user.id,
           status: 'ACTIVE',
@@ -504,6 +510,70 @@ class VendorService {
     }
 
     return order;
+  }
+
+  /**
+   * Find vendors in a category that offer ALL required services
+   * @param {Object} query { category, requiredServices: string[] }
+   */
+  async getEligibleVendors({ category, requiredServices = [] } = {}) {
+    if (!category) {
+      throw new ApiError(400, 'Category is required to find eligible vendors');
+    }
+
+    const catRegex = new RegExp(`^${String(category).trim()}$`, 'i');
+    const filter = {
+      status: 'ACTIVE',
+      isRegistered: true,
+      $or: [
+        { category: catRegex },
+        { primaryCategory: catRegex },
+        { categories: catRegex },
+      ],
+    };
+
+    const reqList = Array.isArray(requiredServices)
+      ? requiredServices.map((s) => String(s).trim()).filter(Boolean)
+      : String(requiredServices)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+    if (reqList.length > 0) {
+      // Vendor must offer ALL required services
+      filter.offeredServices = {
+        $all: reqList.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
+    }
+
+    const vendors = await Vendor.find(filter)
+      .select('name phone vendorId businessName category primaryCategory categories services offeredServices rating isVerified address')
+      .lean();
+
+    return vendors;
+  }
+
+  /**
+   * Get offered services for a specific vendor
+   */
+  async getVendorServices(vendorId) {
+    if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
+      throw new ApiError(400, 'Valid Vendor ID is required');
+    }
+
+    const vendor = await Vendor.findById(vendorId).select('name phone businessName category primaryCategory categories services offeredServices isRegistered');
+    if (!vendor) {
+      throw new ApiError(404, 'Vendor not found');
+    }
+
+    return {
+      vendorId: vendor._id,
+      vendorName: vendor.name,
+      businessName: vendor.businessName || '',
+      category: vendor.primaryCategory || vendor.category,
+      services: (vendor.services || []).filter((s) => s.isOffered !== false),
+      offeredServices: vendor.offeredServices || [],
+    };
   }
 }
 

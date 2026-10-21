@@ -53,6 +53,38 @@ class VendorController {
     );
     return ApiResponse.success(res, order, 'Work order status updated successfully by vendor');
   });
+
+  /**
+   * @desc    Get offered services of a vendor
+   * @route   GET /api/vendor/:id/services
+   * @access  Public / Private
+   */
+  getVendorServices = asyncHandler(async (req, res) => {
+    const result = await vendorService.getVendorServices(req.params.id);
+    return ApiResponse.success(res, result, 'Vendor offered services retrieved successfully');
+  });
+
+  /**
+   * @desc    Find eligible vendors offering required services in a category
+   * @route   POST /api/vendor/eligible
+   *          GET /api/vendor/eligible
+   * @access  Public / Private
+   */
+  getEligibleVendors = asyncHandler(async (req, res) => {
+    let category = req.body?.category || req.query?.category;
+    if (!category) {
+      const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
+      const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+      category = firstCat?.name || '';
+    }
+    const requiredServices =
+      req.body?.requiredServices || req.body?.services || req.query?.services;
+    const vendors = await vendorService.getEligibleVendors({
+      category,
+      requiredServices,
+    });
+    return ApiResponse.success(res, vendors, 'Eligible vendors retrieved successfully');
+  });
 }
 
 module.exports = new VendorController();

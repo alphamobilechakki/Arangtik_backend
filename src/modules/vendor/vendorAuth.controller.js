@@ -144,6 +144,49 @@ class VendorAuthController {
     const vendor = await vendorAuthService.updateVendorCategories(vendorId, req.body);
     return ApiResponse.success(res, vendor, 'Vendor categories updated successfully');
   });
+
+  /**
+   * @desc    Get available services for a selected category
+   * @route   GET /api/vendor/categories/:category/services
+   * @access  Public / Private (Vendor)
+   */
+  getCategoryServices = asyncHandler(async (req, res) => {
+    const categoryIdentifier =
+      req.params.category || req.params.categoryId || req.query.category || req.query.categoryId;
+    const services = await vendorAuthService.getCategoryServices(categoryIdentifier);
+    return ApiResponse.success(res, services, 'Category services retrieved successfully');
+  });
+
+  /**
+   * @desc    Update vendor's offered services
+   * @route   PATCH /api/vendor/services
+   * @access  Private (Vendor)
+   */
+  updateServices = asyncHandler(async (req, res) => {
+    const vendorId = req.vendor?._id || req.user?.id;
+    const vendor = await vendorAuthService.updateVendorServices(vendorId, req.body);
+    return ApiResponse.success(res, vendor, 'Vendor services updated successfully');
+  });
+
+  /**
+   * @desc    Get currently authenticated vendor's selected services
+   * @route   GET /api/vendor/services
+   * @access  Private (Vendor)
+   */
+  getVendorServices = asyncHandler(async (req, res) => {
+    const vendorId = req.vendor?._id || req.user?.id;
+    const vendor = await vendorAuthService.getCurrentVendor(vendorId);
+    return ApiResponse.success(
+      res,
+      {
+        vendorId: vendor._id,
+        category: vendor.category,
+        services: vendor.services || [],
+        offeredServices: vendor.offeredServices || [],
+      },
+      'Vendor services fetched successfully'
+    );
+  });
 }
 
 module.exports = new VendorAuthController();

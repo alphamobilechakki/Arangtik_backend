@@ -7,15 +7,7 @@ const { JWT_SECRET, JWT_EXPIRES_IN, OTP_EXPIRY, TEST_PHONE, TEST_OTP } = require
 const { formatPhoneNumber, sendWhatsAppOtp } = require('../../utils/whatsapp.service');
 const ApiError = require('../../utils/apiError');
 
-/**
- * Standard dynamic service categories for vendor registration & selection
- */
-const VENDOR_CATEGORIES = [
-  { id: 'dhobi', name: 'Dhobi', icon: '🧺', description: 'Laundry, Dry Cleaning & Garment Care' },
-  { id: 'doodh_wala', name: 'Doodh Wala', icon: '🥛', description: 'Fresh Milk & Dairy Delivery' },
-  { id: 'press_ironing', name: 'Press / Ironing', icon: '👔', description: 'Clothes Pressing & Fold Delivery' },
-  { id: 'tailor', name: 'Tailor', icon: '✂️', description: 'Stitching & Garment Alteration' },
-];
+
 
 /**
  * Check if the provided phone matches the test account
@@ -46,12 +38,12 @@ class VendorAuthService {
    * Helper to resolve category names from names, codes, or IDs against database
    */
   async resolveCategoryNames(categoriesInput) {
-    if (!categoriesInput) return ['Dhobi'];
+    if (!categoriesInput) return [];
     const rawList = Array.isArray(categoriesInput)
       ? categoriesInput
       : String(categoriesInput).split(',').map((s) => s.trim()).filter(Boolean);
 
-    if (rawList.length === 0) return ['Dhobi'];
+    if (rawList.length === 0) return [];
 
     try {
       const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
@@ -81,8 +73,8 @@ class VendorAuthService {
     const categoriesList =
       Array.isArray(vendor.categories) && vendor.categories.length > 0
         ? vendor.categories
-        : [vendor.category || 'Dhobi'];
-    const primaryCat = vendor.primaryCategory || vendor.category || categoriesList[0] || 'Dhobi';
+        : vendor.category ? [vendor.category] : [];
+    const primaryCat = vendor.primaryCategory || vendor.category || categoriesList[0] || '';
 
     return {
       _id: vendor._id,
@@ -99,6 +91,8 @@ class VendorAuthService {
       totalOrdersHandled: vendor.totalOrdersHandled || 0,
       isVerified: vendor.isVerified !== undefined ? vendor.isVerified : true,
       status: vendor.status || 'ACTIVE',
+      services: vendor.services || [],
+      offeredServices: vendor.offeredServices || [],
       createdAt: vendor.createdAt,
     };
   }
@@ -113,7 +107,7 @@ class VendorAuthService {
         vendorId: vendor.vendorId,
         phone: vendor.phone,
         role: 'vendor',
-        category: vendor.category || 'Dhobi',
+        category: vendor.category || vendor.primaryCategory || 'General',
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN || '30d' }
@@ -255,11 +249,11 @@ class VendorAuthService {
       throw new ApiError(400, 'Vendor category is required. Please select a category (e.g. Dhobi, Doodh Wala).');
     }
 
-    const initialCategories = await this.resolveCategoryNames(categories || rawCategory || 'Dhobi');
+    const initialCategories = await this.resolveCategoryNames(categories || rawCategory);
     const resolvedPrimaryCategory =
       primaryCategory && initialCategories.includes(primaryCategory)
         ? primaryCategory
-        : initialCategories[0] || 'Dhobi';
+        : initialCategories[0] || (rawCategory ? String(rawCategory).trim() : '');
 
     if (!vendor) {
       vendor = new Vendor({
@@ -354,11 +348,11 @@ class VendorAuthService {
       throw new ApiError(400, 'Please select a vendor category (e.g. Dhobi, Doodh Wala)');
     }
 
-    const initialCategories = await this.resolveCategoryNames(categories || rawCategory || 'Dhobi');
+    const initialCategories = await this.resolveCategoryNames(categories || rawCategory);
     const resolvedPrimaryCategory =
       primaryCategory && initialCategories.includes(primaryCategory)
         ? primaryCategory
-        : initialCategories[0] || 'Dhobi';
+        : initialCategories[0] || (rawCategory ? String(rawCategory).trim() : '');
 
     let vendor = await Vendor.findOne({ phone: formattedPhone });
 
@@ -693,6 +687,121 @@ class VendorAuthService {
       vendor.category = primaryCategory;
     }
 
+    await vendor.save();
+    return this.formatVendorProfile(vendor);
+  }
+
+  /**
+   * 9. Get available services for a category (for vendor selection)
+   */
+  async getCategoryServices(categoryIdentifier) {
+    const categoryServiceService = require('../admin/vendorCategory/categoryService.service');
+    return categoryServiceService.getServicesByCategory(categoryIdentifier, {
+      includeInactive: false,
+    });
+  }
+
+  /**
+   * 10. Update Vendor Offered Services
+   * Vendor selects which services they offer from their category (e.g., Milkman selecting Milk only, not Paneer)
+   */
+  async updateVendorServices(vendorId, { services = [] } = {}) {
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      throw new ApiError(404, 'Vendor not found');
+    }
+
+    if (!Array.isArray(services)) {
+      throw new ApiError(400, 'Services must be provided as an array');
+    }
+
+    const VendorCategory = require('../admin/vendorCategory/vendorCategory.model');
+    const mongoose = require('mongoose');
+
+    // Get available services for vendor's categories
+    const vendorCategories =
+      Array.isArray(vendor.categories) && vendor.categories.length > 0
+        ? vendor.categories
+        : [vendor.category || vendor.primaryCategory].filter(Boolean);
+
+    const categoryQueries = [];
+    for (const c of vendorCategories) {
+      if (mongoose.Types.ObjectId.isValid(c)) {
+        categoryQueries.push({ _id: c });
+      }
+      categoryQueries.push({ name: new RegExp(`^${c}$`, 'i') });
+      categoryQueries.push({ code: new RegExp(`^${c}$`, 'i') });
+    }
+
+    const matchedCats = await VendorCategory.find(
+      categoryQueries.length > 0 ? { $or: categoryQueries, isActive: true } : { isActive: true }
+    ).lean();
+
+    const availableServices = [];
+    for (const cat of matchedCats) {
+      if (Array.isArray(cat.services)) {
+        for (const srv of cat.services) {
+          if (srv.isActive !== false) {
+            availableServices.push({
+              ...srv,
+              categoryId: cat._id.toString(),
+              categoryName: cat.name,
+            });
+          }
+        }
+      }
+    }
+
+    const processedServices = [];
+
+    for (const item of services) {
+      let matchedService = null;
+
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        matchedService = availableServices.find(
+          (s) =>
+            s._id.toString() === trimmed ||
+            s.name.toLowerCase() === trimmed.toLowerCase() ||
+            (s.code && s.code.toLowerCase() === trimmed.toLowerCase())
+        );
+        if (matchedService) {
+          processedServices.push({
+            serviceId: matchedService._id,
+            name: matchedService.name,
+            code: matchedService.code,
+            isOffered: true,
+            price: matchedService.price || 0,
+          });
+        }
+      } else if (item && typeof item === 'object') {
+        const idOrName = item.serviceId || item.id || item._id || item.name || item.code;
+        if (!idOrName) continue;
+        const trimmed = String(idOrName).trim();
+
+        matchedService = availableServices.find(
+          (s) =>
+            s._id.toString() === trimmed ||
+            s.name.toLowerCase() === trimmed.toLowerCase() ||
+            (s.code && s.code.toLowerCase() === trimmed.toLowerCase())
+        );
+
+        if (matchedService) {
+          processedServices.push({
+            serviceId: matchedService._id,
+            name: matchedService.name,
+            code: matchedService.code,
+            isOffered: item.isOffered !== undefined ? Boolean(item.isOffered) : true,
+            price:
+              item.price !== undefined && !isNaN(Number(item.price))
+                ? Number(item.price)
+                : matchedService.price || 0,
+          });
+        }
+      }
+    }
+
+    vendor.services = processedServices;
     await vendor.save();
     return this.formatVendorProfile(vendor);
   }

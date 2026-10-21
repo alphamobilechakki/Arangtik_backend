@@ -1,33 +1,10 @@
 const VendorCategory = require('./vendorCategory.model');
 const ApiError = require('../../../utils/apiError');
 const { formatUploadUrl } = require('../../../utils/url.util');
-
-const DEFAULT_CATEGORIES = [
-  { name: 'Dhobi', icon: '🧺', description: 'Laundry, Dry Cleaning & Garment Care', sortOrder: 1 },
-  { name: 'Doodh Wala', icon: '🥛', description: 'Fresh Milk & Dairy Delivery', sortOrder: 2 },
-  { name: 'Press / Ironing', icon: '👔', description: 'Clothes Pressing & Fold Delivery', sortOrder: 3 },
-  { name: 'Tailor', icon: '✂️', description: 'Stitching & Garment Alteration', sortOrder: 4 },
-];
+const Order = require('../../order/order.model');
+const RegisteredVendor = require('../../vendor/registeredVendor.model');
 
 class VendorCategoryService {
-  /**
-   * Seed default categories into the database if missing
-   */
-  async seedDefaultsIfEmpty() {
-    for (const cat of DEFAULT_CATEGORIES) {
-      try {
-        const exists = await VendorCategory.findOne({
-          name: { $regex: new RegExp(`^${cat.name}$`, 'i') },
-        });
-        if (!exists) {
-          await VendorCategory.create(cat);
-        }
-      } catch (err) {
-        // Ignore duplicate race conditions
-      }
-    }
-  }
-
   /**
    * Create a new vendor category
    */
@@ -57,7 +34,7 @@ class VendorCategoryService {
     const category = await VendorCategory.create({
       name: trimmedName,
       code: code ? String(code).trim().toUpperCase() : undefined,
-      icon: icon ? String(icon).trim() : '🧺',
+      icon: icon && icon !== '??' && icon !== '?' ? String(icon).trim() : '',
       image: finalImageUrl,
       imageUrl: finalImageUrl,
       description: description ? String(description).trim() : '',
@@ -74,9 +51,6 @@ class VendorCategoryService {
   async getAllCategories(options = {}) {
     const { includeInactive = false } = options;
 
-    // Ensure defaults exist if collection is empty
-    await this.seedDefaultsIfEmpty();
-
     const query = includeInactive ? {} : { isActive: true };
     const categories = await VendorCategory.find(query).sort({ sortOrder: 1, name: 1, createdAt: 1 });
     return categories.map((cat) => {
@@ -88,6 +62,12 @@ class VendorCategoryService {
         doc.imageUrl = finalImg;
         doc.image = finalImg;
       }
+      if (doc.icon === '??' || doc.icon === '?') {
+        doc.icon = '';
+      }
+      doc.services = (doc.services || [])
+        .filter((s) => s.isActive)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       return doc;
     });
   }
@@ -113,6 +93,14 @@ class VendorCategoryService {
       doc.imageUrl = finalImg;
       doc.image = finalImg;
     }
+    if (doc.icon === '??' || doc.icon === '?') {
+      doc.icon = '';
+    }
+
+    doc.services = (doc.services || [])
+      .filter((s) => s.isActive)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
     return doc;
   }
 
@@ -129,22 +117,28 @@ class VendorCategoryService {
       throw new ApiError(404, 'Vendor category not found');
     }
 
+    const oldName = category.name;
+    let nameChanged = false;
+
     if (updateData.name && updateData.name.trim()) {
       const trimmedName = updateData.name.trim();
-      // Check if duplicate with another category
-      const existing = await VendorCategory.findOne({
-        _id: { $ne: id },
-        name: { $regex: new RegExp(`^${trimmedName}$`, 'i') },
-      });
-      if (existing) {
-        throw new ApiError(409, `Another category with name "${trimmedName}" already exists`);
-      }
-      category.name = trimmedName;
-      if (!updateData.code) {
-        category.code = trimmedName
-          .toUpperCase()
-          .replace(/[^A-Z0-9]+/g, '_')
-          .replace(/^_+|_+$/g, '');
+      if (trimmedName.toLowerCase() !== oldName.toLowerCase()) {
+        // Check if duplicate with another category
+        const existing = await VendorCategory.findOne({
+          _id: { $ne: id },
+          name: { $regex: new RegExp(`^${trimmedName}$`, 'i') },
+        });
+        if (existing) {
+          throw new ApiError(409, `Another category with name "${trimmedName}" already exists`);
+        }
+        category.name = trimmedName;
+        nameChanged = true;
+        if (!updateData.code) {
+          category.code = trimmedName
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        }
       }
     }
 
@@ -167,6 +161,40 @@ class VendorCategoryService {
     if (updateData.isActive !== undefined) category.isActive = Boolean(updateData.isActive);
 
     await category.save();
+
+    // Cascading Update: When a category name changes, dynamically update all linked Orders and Vendors
+    if (nameChanged) {
+      const newName = category.name;
+      try {
+        const regexOld = new RegExp(`^${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+        await Promise.all([
+          // 1. Update all Work Orders matching old category name
+          Order.updateMany(
+            { orderCategory: regexOld },
+            { $set: { orderCategory: newName } }
+          ),
+          // 2. Update primary / single category in RegisteredVendors
+          RegisteredVendor.updateMany(
+            { category: regexOld },
+            { $set: { category: newName } }
+          ),
+          RegisteredVendor.updateMany(
+            { primaryCategory: regexOld },
+            { $set: { primaryCategory: newName } }
+          ),
+          // 3. Update element in categories array if present
+          RegisteredVendor.updateMany(
+            { categories: regexOld },
+            { $set: { 'categories.$[elem]': newName } },
+            { arrayFilters: [{ elem: regexOld }] }
+          ),
+        ]);
+      } catch (cascadeErr) {
+        console.error(`[VendorCategoryService] Cascade update from "${oldName}" to "${newName}" failed:`, cascadeErr);
+      }
+    }
+
     return category;
   }
 

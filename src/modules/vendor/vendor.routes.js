@@ -17,8 +17,10 @@ const {
 // ==========================================
 // 1. Vendor Authentication Endpoints (Public - WhatsApp OTP & Passwordless)
 // ==========================================
+// Category & Available Services
 router.get('/categories', vendorAuthController.getCategories);
 router.get('/auth/categories', vendorAuthController.getCategories);
+router.get('/categories/:category/services', vendorAuthController.getCategoryServices);
 
 // Primary Mobile OTP Flow
 router.post('/auth/send-otp', validateSendOtp, vendorAuthController.sendOtp);
@@ -41,10 +43,18 @@ router.get('/profile', protectVendor, vendorAuthController.getMe);
 router.patch('/profile', protectVendor, validateUpdateProfile, vendorAuthController.updateProfile);
 router.patch('/categories', protectVendor, validateUpdateCategories, vendorAuthController.updateCategories);
 
+// Vendor Offered Services Selection (Protected by Vendor JWT)
+const { validateUpdateVendorServices } = require('./vendorAuth.validation');
+router.get('/services', protectVendor, vendorAuthController.getVendorServices);
+router.patch('/services', protectVendor, validateUpdateVendorServices, vendorAuthController.updateServices);
+
 // ==========================================
-// 3. Vendor Lookup (Protected for App Users)
+// 3. Vendor Lookup & Eligible Matching (App Users & Public)
 // ==========================================
 router.get('/lookup', protect, vendorController.lookupVendor);
+router.get('/eligible', vendorController.getEligibleVendors);
+router.post('/eligible', vendorController.getEligibleVendors);
+router.get('/:id/services', vendorController.getVendorServices);
 
 // ==========================================
 // 4. Vendor Work Orders (Protected by Vendor JWT)

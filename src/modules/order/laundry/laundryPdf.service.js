@@ -269,7 +269,7 @@ class LaundryPdfService {
             ellipsis: true,
           });
 
-          const serviceName = (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
+          const serviceName = item.serviceName || (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
           doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold');
           doc.text(serviceName, 415, currentY + 9, { width: 95, ellipsis: true });
 
@@ -389,7 +389,7 @@ class LaundryPdfService {
           doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold');
           doc.text('SERVICE REQUESTED:', 60, serviceY + 14);
 
-          const serviceName = (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
+          const serviceName = item.serviceName || (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
           doc.fillColor(primaryDark).fontSize(12).font('Helvetica-Bold');
           doc.text(serviceName, 185, serviceY + 12);
 

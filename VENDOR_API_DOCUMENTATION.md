@@ -193,6 +193,125 @@ Used by the Customer Mobile App when typing a phone number or picking from conta
 
 ---
 
+### 3.3 List Available Services for Selected Category
+When a vendor selects their category (e.g. *Washerman* or *Milkman*), the mobile app calls this endpoint to fetch all available services under that category so the vendor can select what they provide.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/categories/:category/services`
+- **Access:** Public / Vendor
+- **URL Parameters:**
+  - `category`: Category name (e.g. `Dhobi`, `Washerman`, `Doodh Wala`, `Milkman`) or `categoryId`.
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Category services retrieved successfully",
+  "data": [
+    {
+      "_id": "67b1234567890abcdef12345",
+      "categoryId": "67b0ef123456789abcdef001",
+      "categoryName": "Dhobi",
+      "name": "Dry Cleaning",
+      "code": "DRY_CLEANING",
+      "description": "Specialized chemical garment cleaning",
+      "price": 60,
+      "icon": "✨",
+      "isActive": true
+    },
+    {
+      "_id": "67b1234567890abcdef12346",
+      "categoryId": "67b0ef123456789abcdef001",
+      "categoryName": "Dhobi",
+      "name": "Ironing",
+      "code": "IRONING",
+      "description": "Steam and heat garment pressing",
+      "price": 15,
+      "icon": "👔",
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+### 3.4 Public Vendor Offered Services Lookup
+Allows customer mobile app or public users to view exactly which services a specific vendor provides.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/:id/services`
+- **Access:** Public / Customer
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor offered services retrieved successfully",
+  "data": {
+    "vendorId": "67b4d1234567890abcdef012",
+    "vendorName": "Ramesh Laundry Services",
+    "businessName": "Ramesh Dry Cleaners",
+    "category": "Dhobi",
+    "services": [
+      {
+        "serviceId": "67b1234567890abcdef12345",
+        "name": "Dry Cleaning",
+        "code": "DRY_CLEANING",
+        "price": 60,
+        "isOffered": true
+      },
+      {
+        "serviceId": "67b1234567890abcdef12346",
+        "name": "Ironing",
+        "code": "IRONING",
+        "price": 15,
+        "isOffered": true
+      }
+    ],
+    "offeredServices": ["Dry Cleaning", "Ironing"]
+  }
+}
+```
+
+---
+
+### 3.5 Find Eligible Vendors Offering Required Services
+Finds all active registered vendors in a category that provide **ALL** services requested by the customer (e.g. customer needs *Dry Cleaning* and *Ironing*).
+
+- **Method:** `POST` *(or `GET /api/vendor/eligible?category=Dhobi&services=Dry Cleaning,Ironing`)*
+- **Path:** `/api/vendor/eligible`
+- **Access:** Public / Customer
+- **Request Body:**
+```json
+{
+  "category": "Dhobi",
+  "requiredServices": ["Dry Cleaning", "Ironing"]
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Eligible vendors retrieved successfully",
+  "data": [
+    {
+      "_id": "67b4d1234567890abcdef012",
+      "vendorId": "VND-849102",
+      "name": "Ramesh Laundry Services",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "offeredServices": ["Dry Cleaning", "Ironing", "Washing"],
+      "rating": 4.9,
+      "isVerified": true
+    }
+  ]
+}
+```
+
+---
+
 ## 4. 📲 Vendor Authentication Endpoints (WhatsApp OTP & Passwordless)
 
 Arangtik Vendor App uses **secure, passwordless authentication** via 4-digit WhatsApp OTP (identical to the customer app). Vendors no longer need to remember passwords or usernames.
@@ -260,27 +379,37 @@ Verifies the WhatsApp OTP and issues the Vendor JWT token.
 - **Response (200 OK):**
 ```json
 {
-  "success": true,
-  "statusCode": 200,
-  "message": "Vendor login successful",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "isNewVendor": false,
-    "vendor": {
-      "_id": "67b4d1234567890abcdef012",
-      "vendorId": "VND-849102",
-      "name": "Ramesh Kumar",
-      "phone": "919876543210",
-      "category": "Dhobi",
-      "isRegistered": true,
-      "businessName": "Ramesh Dry Cleaners & Steam Press",
-      "rating": 5.0,
-      "totalOrdersHandled": 12,
-      "isVerified": true,
-      "status": "ACTIVE",
-      "createdAt": "2026-10-19T10:00:00.000Z"
-    }
-  }
+    "statusCode": 200,
+    "data": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDRhMjA0ODUwZThhNDVjMGFjNDFkMiIsInZlbmRvcklkIjoiVk5ELTc3MzcxNyIsInBob25lIjoiOTE4OTQ5MDU2MzIxIiwicm9sZSI6InZlbmRvciIsImNhdGVnb3J5IjoiRGhvYmkiLCJpYXQiOjE3OTI1NzQxODgsImV4cCI6MTgyNDExMDE4OH0.PwKD2OFzi_fAM1ncEWXxrIYlxKekuQaGDtq3DlNdbAs",
+        "isNewVendor": false,
+        "vendor": {
+            "_id": "6ad4a204850e8a45c0ac41d2",
+            "vendorId": "VND-773717",
+            "name": "Raushan Kumar",
+            "phone": "918949056321",
+            "category": "Dhobi",
+            "primaryCategory": "Dhobi",
+            "categories": [
+                "Dhobi"
+            ],
+            "isRegistered": true,
+            "businessName": "",
+            "address": {
+                "street": "",
+                "city": "",
+                "state": "",
+                "pincode": ""
+            },
+            "rating": 5,
+            "totalOrdersHandled": 3,
+            "isVerified": true,
+            "status": "ACTIVE",
+            "createdAt": "2026-10-18T10:40:04.861Z"
+        }
+    },
+    "message": "Vendor login successful",
+    "success": true
 }
 ```
 
@@ -388,31 +517,33 @@ Fetches the current logged-in vendor's profile details including all registered 
 - **Response (200 OK):**
 ```json
 {
-  "success": true,
-  "statusCode": 200,
-  "message": "Vendor profile fetched successfully",
-  "data": {
-    "_id": "67b4d1234567890abcdef012",
-    "vendorId": "VND-849102",
-    "name": "Ramesh Kumar",
-    "phone": "919876543210",
-    "category": "Dhobi",
-    "primaryCategory": "Dhobi",
-    "categories": ["Dhobi", "Press / Ironing", "Tailor"],
-    "isRegistered": true,
-    "businessName": "Ramesh Dry Cleaners & Steam Press",
-    "address": {
-      "street": "Shop 4, Market Complex",
-      "city": "Jaipur",
-      "state": "Rajasthan",
-      "pincode": "302001"
+    "statusCode": 200,
+    "data": {
+        "_id": "6ad4a204850e8a45c0ac41d2",
+        "vendorId": "VND-773717",
+        "name": "Raushan Kumar",
+        "phone": "918949056321",
+        "category": "Dhobi",
+        "primaryCategory": "Dhobi",
+        "categories": [
+            "Dhobi"
+        ],
+        "isRegistered": true,
+        "businessName": "",
+        "address": {
+            "street": "",
+            "city": "",
+            "state": "",
+            "pincode": ""
+        },
+        "rating": 5,
+        "totalOrdersHandled": 3,
+        "isVerified": true,
+        "status": "ACTIVE",
+        "createdAt": "2026-10-18T10:40:04.861Z"
     },
-    "rating": 4.9,
-    "totalOrdersHandled": 24,
-    "isVerified": true,
-    "status": "ACTIVE",
-    "createdAt": "2026-10-19T10:00:00.000Z"
-  }
+    "message": "Vendor profile fetched successfully",
+    "success": true
 }
 ```
 
@@ -478,6 +609,132 @@ Updates vendor details including personal name, business name, address, and cate
     "city": "Jaipur",
     "state": "Rajasthan",
     "pincode": "302001"
+  }
+}
+```
+
+---
+
+### 5.4 Select / Update Vendor Offered Services
+Enables vendors to select, deselect, and update the specific services they offer within their category (e.g. A Milkman selecting only *Milk* and unticking *Paneer*, or a Washerman selecting *Dry Cleaning* and *Ironing*).
+
+- **Method:** `PATCH`
+- **Path:** `/api/vendor/services`
+- **Access:** Private (Vendor Bearer JWT required)
+- **Headers:**
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+- **Request Body (Example A - Array of Objects):**
+```json
+{
+  "services": [
+    {
+      "serviceId": "67b1234567890abcdef12345",
+      "name": "Dry Cleaning",
+      "code": "DRY_CLEANING",
+      "price": 60,
+      "isOffered": true
+    },
+    {
+      "serviceId": "67b1234567890abcdef12346",
+      "name": "Ironing",
+      "code": "IRONING",
+      "price": 15,
+      "isOffered": true
+    },
+    {
+      "serviceId": "67b1234567890abcdef12347",
+      "name": "Premium Cleaning",
+      "code": "PREMIUM_CLEANING",
+      "price": 120,
+      "isOffered": false
+    }
+  ]
+}
+```
+- **Request Body (Example B - Simple Names Array):**
+```json
+{
+  "services": ["Milk"]
+}
+```
+
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor services updated successfully",
+  "data": {
+    "vendorId": "VND-849102",
+    "category": "Dhobi",
+    "services": [
+      {
+        "serviceId": "67b1234567890abcdef12345",
+        "name": "Dry Cleaning",
+        "code": "DRY_CLEANING",
+        "price": 60,
+        "isOffered": true
+      },
+      {
+        "serviceId": "67b1234567890abcdef12346",
+        "name": "Ironing",
+        "code": "IRONING",
+        "price": 15,
+        "isOffered": true
+      }
+    ],
+    "offeredServices": [
+      "Dry Cleaning",
+      "Ironing"
+    ]
+  }
+}
+```
+
+---
+
+### 5.5 Get Authenticated Vendor Offered Services
+Retrieves the list of services currently configured and offered by the logged-in vendor.
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/services`
+- **Access:** Private (Vendor Bearer JWT required)
+- **Headers:**
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor services retrieved successfully",
+  "data": {
+    "vendorId": "VND-849102",
+    "category": "Dhobi",
+    "services": [
+      {
+        "serviceId": "67b1234567890abcdef12345",
+        "name": "Dry Cleaning",
+        "code": "DRY_CLEANING",
+        "price": 60,
+        "isOffered": true
+      },
+      {
+        "serviceId": "67b1234567890abcdef12346",
+        "name": "Ironing",
+        "code": "IRONING",
+        "price": 15,
+        "isOffered": true
+      }
+    ],
+    "offeredServices": [
+      "Dry Cleaning",
+      "Ironing"
+    ]
   }
 }
 ```

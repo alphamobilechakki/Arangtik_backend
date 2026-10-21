@@ -8,6 +8,8 @@ router.use(protect);
 
 // Vendor Lookup (Contacts / Manual Number check)
 router.get('/vendors/lookup', laundryController.lookupVendor);
+router.get('/vendors/eligible', laundryController.getEligibleVendors);
+router.post('/vendors/eligible', laundryController.getEligibleVendors);
 
 // Laundry Work Orders
 router.route('/orders')

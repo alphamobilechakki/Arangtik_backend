@@ -38,7 +38,7 @@ class AdminOrderService {
       LaundryOrder.aggregate([
         {
           $group: {
-            _id: { $ifNull: ['$orderCategory', 'Dhobi'] },
+            _id: { $ifNull: ['$orderCategory', 'General'] },
             count: { $sum: 1 },
           },
         },
@@ -141,17 +141,6 @@ class AdminOrderService {
       }
       if (vendorPhones.length > 0) {
         orMatches.push({ vendorPhone: { $in: vendorPhones } });
-      }
-
-      // Backward compatibility for Dhobi / Laundry
-      if (catUpper === 'DHOBI' || catUpper === 'LAUNDRY') {
-        orMatches.push(
-          { orderCategory: /^(DHOBI|LAUNDRY)$/i },
-          { orderCategory: { $exists: false } },
-          { orderCategory: null },
-          { orderCategory: '' },
-          { vendorName: /dhobi|laundry|washerman|cleanwash/i }
-        );
       }
 
       andConditions.push({ $or: orMatches });

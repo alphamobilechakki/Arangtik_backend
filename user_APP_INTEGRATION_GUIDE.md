@@ -989,10 +989,12 @@ When the user types a number or picks a contact from their device:
       "vendorId": "VND-489201",
       "name": "CleanWash Express",
       "phone": "919876543210",
+      "category": "Dhobi",
       "businessName": "CleanWash Express Laundromat",
       "rating": 5,
       "totalOrdersHandled": 14,
-      "isVerified": true
+      "isVerified": true,
+      "offeredServices": ["Dry Cleaning", "Ironing", "Washing"]
     }
   }
 }
@@ -1010,48 +1012,177 @@ When the user types a number or picks a contact from their device:
       "vendorId": null,
       "name": "",
       "phone": "919876543210",
+      "category": "Dhobi",
       "businessName": "",
-      "isVerified": false
+      "isVerified": false,
+      "offeredServices": []
     }
   }
 }
 ```
-> **Mobile UI Tip:** If `isRegistered === true`, automatically fill and lock the vendor name input and show a green **"Verified Vendor"** checkmark badge. If `false`, keep the vendor name field editable so the user can label their local laundry/dhobi.
+> **Mobile UI Tip:** If `isRegistered === true`, automatically fill and lock the vendor name input, show a green **"Verified Vendor"** checkmark badge, and display their `offeredServices`. If `false`, keep the vendor name field editable so the user can label their local laundry/dhobi.
 
 ---
 
-#### D. Create Laundry Work Order
-- **Method:** `POST`
-- **Path:** `/api/v1/laundry/orders`
+#### C.1 Find Eligible Vendors for Selected Services
+When a customer selects services for their wardrobe clothes (e.g. 4 dresses for *Dry Cleaning* and 6 dresses for *Ironing*), use this endpoint to find only those registered vendors in the category that offer **ALL** required services.
+
+- **Method:** `POST` *(or `GET /api/v1/laundry/vendors/eligible?requiredServices=Dry Cleaning,Ironing`)*
+- **Path:** `/api/v1/laundry/vendors/eligible` *(Universal alias: `/api/vendor/eligible`)*
 - **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
 - **Request Body:**
 ```json
 {
-  "vendorPhone": "919876543210",
-  "vendorName": "CleanWash Express",
-  "pickupDate": "2026-10-15T10:00:00.000Z",
-  "expectedDeliveryDate": "2026-10-17T18:00:00.000Z",
-  "specialInstructions": "Please handle delicate silk items with gentle wash",
-  "items": [
+  "category": "Dhobi",
+  "requiredServices": [
+    "Dry Cleaning",
+    "Ironing"
+  ]
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Eligible vendors retrieved successfully",
+  "data": [
     {
-      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d8e",
-      "serviceType": "WASH_AND_IRON",
-      "specialInstructions": "Mild starch on collar"
-    },
-    {
-      "wardrobeItemId": "670b8a2c9e2d3f4a5b6c7d8f",
-      "serviceType": "DRY_CLEAN",
-      "specialInstructions": "Dry clean only"
+      "_id": "670c5e1b4f1a2c3d4e5f6a7b",
+      "vendorId": "VND-489201",
+      "name": "CleanWash Express",
+      "phone": "919876543210",
+      "category": "Dhobi",
+      "offeredServices": [
+        "Dry Cleaning",
+        "Ironing",
+        "Washing",
+        "Premium Cleaning"
+      ],
+      "rating": 5.0,
+      "isVerified": true
     }
   ]
 }
 ```
-> **Service Types Allowed:** `WASH` | `IRON` | `DRY_CLEAN` | `WASH_AND_IRON` | `OTHER`
-> 
+
+---
+
+#### D. Create Laundry / Wardrobe Work Order (Multi-Dress & Multi-Service Selection)
+Supports assigning distinct services to each dress in an order. For example, selecting 10 dresses from Almari: 4 for *Dry Cleaning* and 6 for *Ironing*.
+
+- **Method:** `POST`
+- **Path:** `/api/v1/laundry/orders`
+- **Headers:** `Authorization: Bearer <TOKEN>`, `Content-Type: application/json`
+- **Request Body (10-Dress Multi-Service Example):**
+```json
+{
+  "vendorPhone": "919876543210",
+  "vendorName": "CleanWash Express",
+  "category": "Dhobi",
+  "pickupDate": "2026-10-25T10:00:00.000Z",
+  "expectedDeliveryDate": "2026-10-27T18:00:00.000Z",
+  "specialInstructions": "Handle formal blazers with gentle chemical dry clean; starch collars on shirts.",
+  "items": [
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d01",
+      "serviceName": "Dry Cleaning",
+      "serviceId": "67b1234567890abcdef12345",
+      "serviceType": "DRY_CLEAN",
+      "specialInstructions": "Special chemical dry clean"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d02",
+      "serviceName": "Dry Cleaning",
+      "serviceId": "67b1234567890abcdef12345",
+      "serviceType": "DRY_CLEAN"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d03",
+      "serviceName": "Dry Cleaning",
+      "serviceId": "67b1234567890abcdef12345",
+      "serviceType": "DRY_CLEAN"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d04",
+      "serviceName": "Dry Cleaning",
+      "serviceId": "67b1234567890abcdef12345",
+      "serviceType": "DRY_CLEAN"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d05",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d06",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d07",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d08",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d09",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    },
+    {
+      "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d10",
+      "serviceName": "Ironing",
+      "serviceId": "67b1234567890abcdef12346",
+      "serviceType": "IRON"
+    }
+  ]
+}
+```
+
+| Field | Type | Mandatory? | Description |
+| :--- | :--- | :--- | :--- |
+| `vendorPhone` | String | **Yes** | 10-digit mobile number of the laundry vendor |
+| `vendorName` | String | Optional | Name of the vendor |
+| `category` | String | Optional | Service category (defaults to `'Dhobi'`) |
+| `pickupDate` | Date/String | Optional | Scheduled pickup date |
+| `expectedDeliveryDate` | Date/String | Optional | Expected return delivery date |
+| `items` | Array | **Yes** | List of clothes selected from user's Almari |
+| `items[i].wardrobeItemId` | String | **Yes** | MongoDB ID of the dress/garment |
+| `items[i].serviceName` | String | Optional | Name of service chosen (e.g. `'Dry Cleaning'`, `'Ironing'`) |
+| `items[i].serviceId` | String | Optional | Reference ID of the category service |
+| `items[i].serviceType` | String | Optional | Service code (defaults to `'WASH_AND_IRON'`) |
+| `items[i].specialInstructions` | String | Optional | Specific instructions for this particular dress |
+
+> 🧺 **Vendor Eligibility Validation Rule:**
+> When ordering with a registered vendor, the backend validates that the vendor offers **ALL** requested services (`requestedServices`). If the vendor does not offer one or more of the selected services, the backend rejects the order with **HTTP 400 Bad Request**:
+> ```json
+> {
+>   "success": false,
+>   "statusCode": 400,
+>   "message": "Selected vendor does not offer all required services for this order: Dry Cleaning",
+>   "data": {
+>     "vendorName": "Local Milkman",
+>     "missingServices": ["Dry Cleaning"],
+>     "vendorOfferedServices": ["Milk"]
+>   }
+> }
+> ```
+
 > 🧺 **Garment Status & Duplicate Prevention Rules:**
 > 1. **Automatic Inactive Transition:** When order is created, all included garments (`wardrobeItemId`) automatically become `INACTIVE`.
 > 2. **Duplicate Order Rejection (HTTP 400):** If an item is already `INACTIVE` (already out for laundry), creating another order returns **HTTP 400** (`"Garment '<name>' is already in laundry (status: Inactive) and cannot be sent again until returned."`).
 > 3. **Excluded from Outfits:** Inactive garments are hidden from AI Outfit Suggestions until returned.
+> 4. **PDF Generation:** The generated work order PDF prominently includes each garment's chosen service (e.g. *Dry Cleaning*, *Ironing*) on both the Summary Table and Garment Profile inspection cards.
 
 - **Response (201 Created):**
 ```json
@@ -1061,17 +1192,30 @@ When the user types a number or picks a contact from their device:
   "message": "Laundry Work Order created and dispatched successfully",
   "data": {
     "_id": "670d8f1e2a3b4c5d6e7f8a9b",
-    "orderNumber": "WO-20261014-4821",
+    "orderNumber": "WO-20261025-4821",
     "userName": "Rahul Sharma",
     "userPhone": "919888800001",
     "vendorName": "CleanWash Express",
     "vendorPhone": "919876543210",
     "isRegisteredVendor": true,
-    "pickupDate": "2026-10-15T10:00:00.000Z",
-    "expectedDeliveryDate": "2026-10-17T18:00:00.000Z",
+    "pickupDate": "2026-10-25T10:00:00.000Z",
+    "expectedDeliveryDate": "2026-10-27T18:00:00.000Z",
     "status": "PENDING_PICKUP",
-    "totalItems": 2,
-    "pdfUrl": "https://api.arangtik.com/uploads/work-orders/WO-20261014-4821.pdf",
+    "totalItems": 10,
+    "requestedServices": [
+      "Dry Cleaning",
+      "Ironing"
+    ],
+    "items": [
+      {
+        "wardrobeItemId": "670b8a1c9e2d3f4a5b6c7d01",
+        "name": "Navy Blue Blazer",
+        "serviceName": "Dry Cleaning",
+        "serviceType": "DRY_CLEAN",
+        "imageUrl": "https://api.arangtik.com/uploads/garment_1.jpg"
+      }
+    ],
+    "pdfUrl": "https://api.arangtik.com/uploads/work-orders/WO-20261025-4821.pdf",
     "whatsappNotification": {
       "sent": true,
       "templateUsed": "laundry_order_registered",

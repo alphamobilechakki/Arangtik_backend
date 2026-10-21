@@ -18,5 +18,9 @@ router.use('/vendors', adminVendorRoutes);
 const adminOrderRoutes = require('./order/adminOrder.routes');
 router.use('/orders', adminOrderRoutes);
 
+// Admin Submodule: Services Management (/api/admin/services)
+const categoryServiceRoutes = require('./vendorCategory/categoryService.routes');
+router.use('/services', categoryServiceRoutes);
+
 module.exports = router;
 

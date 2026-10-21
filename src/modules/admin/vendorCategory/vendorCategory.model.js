@@ -1,6 +1,66 @@
 const mongoose = require('mongoose');
 const { formatUploadUrl } = require('../../../utils/url.util');
 
+const serviceSubSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Service name is required'],
+      trim: true,
+      maxlength: [100, 'Service name cannot exceed 100 characters'],
+    },
+    code: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: [500, 'Description cannot exceed 500 characters'],
+    },
+    icon: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sortOrder: {
+      type: Number,
+      default: 0,
+    },
+    price: {
+      type: Number,
+      default: 0,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+serviceSubSchema.pre('validate', function (next) {
+  if (!this.code && this.name) {
+    this.code = this.name
+      .toUpperCase()
+      .trim()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+  next();
+});
+
 const vendorCategorySchema = new mongoose.Schema(
   {
     name: {
@@ -18,7 +78,7 @@ const vendorCategorySchema = new mongoose.Schema(
     icon: {
       type: String,
       trim: true,
-      default: '🧺',
+      default: '',
     },
     image: {
       type: String,
@@ -45,6 +105,10 @@ const vendorCategorySchema = new mongoose.Schema(
       type: Number,
       default: 0,
       index: true,
+    },
+    services: {
+      type: [serviceSubSchema],
+      default: [],
     },
   },
   {

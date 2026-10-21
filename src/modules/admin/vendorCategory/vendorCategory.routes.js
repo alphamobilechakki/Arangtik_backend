@@ -37,4 +37,18 @@ router.delete(
   vendorCategoryController.deleteCategory
 );
 
+// ==========================================
+// 3. Category Services Nested Routes
+// ==========================================
+const categoryServiceController = require('./categoryService.controller');
+const { validateCreateService } = require('./categoryService.validation');
+
+router.get('/:categoryId/services', categoryServiceController.getServicesByCategory);
+router.post(
+  '/:categoryId/services',
+  protectAdmin,
+  validateCreateService,
+  categoryServiceController.createService
+);
+
 module.exports = router;

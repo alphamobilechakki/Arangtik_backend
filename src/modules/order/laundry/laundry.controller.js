@@ -22,6 +22,28 @@ class LaundryController {
   });
 
   /**
+   * @desc    Find eligible vendors offering requested services
+   * @route   POST /api/v1/laundry/vendors/eligible
+   *          GET /api/v1/laundry/vendors/eligible
+   * @access  Private (User)
+   */
+  getEligibleVendors = asyncHandler(async (req, res) => {
+    let category = req.body?.category || req.query?.category;
+    if (!category) {
+      const VendorCategory = require('../../admin/vendorCategory/vendorCategory.model');
+      const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+      category = firstCat?.name || '';
+    }
+    const requiredServices =
+      req.body?.requiredServices || req.body?.services || req.query?.services;
+    const vendors = await vendorService.getEligibleVendors({
+      category,
+      requiredServices,
+    });
+    return ApiResponse.success(res, vendors, 'Eligible vendors retrieved successfully');
+  });
+
+  /**
    * @desc    Create a new Laundry Work Order
    * @route   POST /api/v1/laundry/orders
    * @access  Private

@@ -20,18 +20,19 @@ const orderItemSchema = new mongoose.Schema(
     },
 
     // 2. Service & Special Instructions
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CategoryService',
+      default: null,
+    },
+    serviceName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     serviceType: {
       type: String,
-      enum: [
-        'WASH',
-        'IRON',
-        'DRY_CLEAN',
-        'WASH_AND_IRON',
-        'ALTERATION',
-        'STITCHING',
-        'DELIVERY',
-        'OTHER',
-      ],
+      trim: true,
       default: 'WASH_AND_IRON',
     },
     specialInstructions: {
@@ -92,7 +93,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Order category is required'],
       trim: true,
-      default: 'Dhobi',
+      default: 'General',
     },
     orderType: {
       type: String,
@@ -166,6 +167,11 @@ const orderSchema = new mongoose.Schema(
     totalItems: {
       type: Number,
       default: 0,
+    },
+    requestedServices: {
+      type: [{ type: String, trim: true }],
+      default: [],
+      index: true,
     },
     subtotal: {
       type: Number,
@@ -253,11 +259,19 @@ orderSchema.pre('validate', function (next) {
     const today = new Date();
     const yyyymmdd = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const prefix = this.orderCategory === 'Dhobi' ? 'WO' : 'ORD';
+    const prefix = this.orderType === 'LAUNDRY_WORK_ORDER' || this.orderCategory?.toUpperCase().includes('WASH') ? 'WO' : 'ORD';
     this.orderNumber = `${prefix}-${yyyymmdd}-${randomSuffix}`;
   }
   if (Array.isArray(this.items)) {
     this.totalItems = this.items.length;
+    this.requestedServices = [
+      ...new Set(
+        this.items
+          .map((item) => item.serviceName || item.serviceType)
+          .filter(Boolean)
+          .map((s) => String(s).trim())
+      ),
+    ];
   }
   next();
 });

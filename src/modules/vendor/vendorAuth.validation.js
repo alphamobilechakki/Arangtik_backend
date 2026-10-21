@@ -118,6 +118,14 @@ const validateUpdateProfile = (req, res, next) => {
   next();
 };
 
+const validateUpdateVendorServices = (req, res, next) => {
+  const { services } = req.body;
+  if (!services || !Array.isArray(services)) {
+    return next(new ApiError(400, 'Services must be provided as an array'));
+  }
+  next();
+};
+
 module.exports = {
   validateSendOtp,
   validateVerifyOtp,
@@ -127,4 +135,5 @@ module.exports = {
   validateResetPassword,
   validateUpdateCategories,
   validateUpdateProfile,
+  validateUpdateVendorServices,
 };

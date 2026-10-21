@@ -323,6 +323,8 @@ Deactivates a category (`isActive = false`). Existing registered vendors keep th
 
 ---
 
+---
+
 ### 2.6 Permanent Delete Category (Hard Delete)
 Permanently deletes the category document from MongoDB.
 
@@ -337,6 +339,104 @@ Permanently deletes the category document from MongoDB.
     "message": "Category \"Car Wash\" permanently deleted"
   }
   ```
+
+---
+
+### 2.7 Dynamic Category Service Management (`/api/admin/services` & `/api/admin/vendor-categories/:categoryId/services`)
+
+Admin can create, update, activate, deactivate, and manage unlimited services under any category (e.g. *Washerman* -> *Dry Cleaning*, *Ironing*, *Washing*, *Premium Cleaning*; *Milkman* -> *Milk*, *Paneer*, *Curd*, *Ghee*).
+
+#### A. Create Service Under Category
+- **Method:** `POST`
+- **Path:** `/api/admin/vendor-categories/:categoryId/services` *(or `/api/admin/services` with `categoryId` in body)*
+- **Headers:** `Authorization: Bearer <ADMIN_JWT>` or `x-api-key: <ADMIN_SYNC_API_KEY>`
+- **Request Body:**
+  ```json
+  {
+    "name": "Dry Cleaning",
+    "description": "Specialized chemical solvent cleaning for delicate garments",
+    "price": 60,
+    "icon": "✨",
+    "sortOrder": 1,
+    "isActive": true
+  }
+  ```
+  | Field | Type | Required | Description |
+  |---|---|:---:|---|
+  | `name` | String | **Yes** | Service name (max 100 chars, unique within category). |
+  | `description` | String | No | Detailed description of the service. |
+  | `price` | Number | No | Base / default price in INR (default: `0`). |
+  | `icon` | String | No | Service icon or emoji. |
+  | `sortOrder` | Number | No | Display sorting priority. |
+  | `isActive` | Boolean | No | Default: `true`. |
+- **Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 201,
+    "message": "Category service created successfully",
+    "data": {
+      "_id": "67b1234567890abcdef12345",
+      "categoryId": "67b0ef123456789abcdef001",
+      "categoryName": "Dhobi",
+      "name": "Dry Cleaning",
+      "code": "DRY_CLEANING",
+      "description": "Specialized chemical solvent cleaning for delicate garments",
+      "price": 60,
+      "icon": "✨",
+      "isActive": true,
+      "sortOrder": 1
+    }
+  }
+  ```
+
+#### B. List Services for a Specific Category
+- **Method:** `GET`
+- **Path:** `/api/admin/vendor-categories/:categoryId/services` *(Query param: `?includeInactive=true`)*
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Category services retrieved successfully",
+    "data": [
+      { "_id": "...", "name": "Dry Cleaning", "code": "DRY_CLEANING", "price": 60, "isActive": true },
+      { "_id": "...", "name": "Ironing", "code": "IRONING", "price": 15, "isActive": true },
+      { "_id": "...", "name": "Washing", "code": "WASHING", "price": 30, "isActive": true },
+      { "_id": "...", "name": "Premium Cleaning", "code": "PREMIUM_CLEANING", "price": 100, "isActive": true }
+    ]
+  }
+  ```
+
+#### C. List All Services Across Categories
+- **Method:** `GET`
+- **Path:** `/api/admin/services?category=Dhobi&includeInactive=false`
+- **Response (200 OK):** Returns all services grouped or filtered by category.
+
+#### D. Update Service Details (PATCH)
+- **Method:** `PATCH`
+- **Path:** `/api/admin/services/:id`
+- **Request Body (Partial update):**
+  ```json
+  {
+    "price": 75,
+    "description": "Updated premium solvent cleaning"
+  }
+  ```
+
+#### E. Activate / Deactivate Service Status
+- **Method:** `PATCH`
+- **Path:** `/api/admin/services/:id/status`
+- **Request Body:**
+  ```json
+  {
+    "isActive": false
+  }
+  ```
+
+#### F. Delete Service (Soft or Hard Delete)
+- **Method:** `DELETE`
+- **Path:** `/api/admin/services/:id` *(Soft delete)* or `/api/admin/services/:id?hard=true` *(Hard delete)*
 
 ---
 

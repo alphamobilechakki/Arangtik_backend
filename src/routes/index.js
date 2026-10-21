@@ -42,7 +42,7 @@ const outfitRoutes = require('../modules/outfit/outfit.routes');
 router.use('/outfit', outfitRoutes);
 router.use('/v1/outfit', outfitRoutes);
 
-// Universal Orders Routes (Dhobi, Kitchen, Tailor, Doodh Wala)
+// Universal Orders Routes (Multi-Category Service Work Orders)
 const orderRoutes = require('../modules/order/order.routes');
 router.use('/orders', orderRoutes);
 router.use('/v1/orders', orderRoutes);
@@ -68,6 +68,11 @@ router.use('/categories', vendorCategoryRoutes);
 router.use('/v1/categories', vendorCategoryRoutes);
 router.use('/vendor-categories', vendorCategoryRoutes);
 router.use('/v1/vendor-categories', vendorCategoryRoutes);
+
+// Category Services Routes (Public / Customer / Vendor discovery)
+const categoryServiceRoutes = require('../modules/admin/vendorCategory/categoryService.routes');
+router.use('/services', categoryServiceRoutes);
+router.use('/v1/services', categoryServiceRoutes);
 
 // Admin Module Routes
 const adminRoutes = require('../modules/admin/admin.routes');

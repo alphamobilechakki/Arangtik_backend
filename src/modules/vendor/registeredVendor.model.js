@@ -25,18 +25,34 @@ const registeredVendorSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Vendor category is required'],
       trim: true,
-      default: 'Dhobi',
       index: true,
     },
     primaryCategory: {
       type: String,
       trim: true,
-      default: 'Dhobi',
       index: true,
     },
     categories: {
       type: [{ type: String, trim: true }],
-      default: ['Dhobi'],
+      default: [],
+      index: true,
+    },
+    services: [
+      {
+        serviceId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'CategoryService',
+          default: null,
+        },
+        name: { type: String, required: true, trim: true },
+        code: { type: String, trim: true },
+        isOffered: { type: Boolean, default: true },
+        price: { type: Number, default: 0 },
+      },
+    ],
+    offeredServices: {
+      type: [{ type: String, trim: true }],
+      default: [],
       index: true,
     },
     password: {
@@ -115,27 +131,40 @@ registeredVendorSchema.index({ category: 1, status: 1 });
 registeredVendorSchema.index({ primaryCategory: 1, status: 1 });
 registeredVendorSchema.index({ categories: 1, status: 1 });
 registeredVendorSchema.index({ isRegistered: 1, status: 1 });
+registeredVendorSchema.index({ offeredServices: 1, status: 1 });
+registeredVendorSchema.index({ category: 1, offeredServices: 1, status: 1 });
 
-// Ensure categories array, primaryCategory, and legacy category remain strictly in sync
+// Ensure categories array, primaryCategory, legacy category, and offeredServices remain strictly in sync dynamically
 registeredVendorSchema.pre('save', function (next) {
-  if (!Array.isArray(this.categories) || this.categories.length === 0) {
-    const defaultCat = this.primaryCategory || this.category || 'Dhobi';
-    this.categories = [defaultCat];
-  } else {
-    // Deduplicate and trim categories
+  if (Array.isArray(this.categories) && this.categories.length > 0) {
     this.categories = [...new Set(this.categories.map((c) => String(c).trim()).filter(Boolean))];
-    if (this.categories.length === 0) {
-      this.categories = ['Dhobi'];
-    }
+  } else if (this.primaryCategory || this.category) {
+    const singleCat = String(this.primaryCategory || this.category).trim();
+    this.categories = singleCat ? [singleCat] : [];
+  } else {
+    this.categories = [];
   }
 
   // Ensure primaryCategory is valid and part of categories
   if (!this.primaryCategory || !this.categories.includes(this.primaryCategory)) {
-    this.primaryCategory = this.categories[0];
+    this.primaryCategory = this.categories[0] || this.category || '';
   }
 
   // Keep legacy single-category field in sync with primaryCategory
-  this.category = this.primaryCategory;
+  this.category = this.primaryCategory || this.category || '';
+
+  // Keep offeredServices array in sync with active offered services
+  if (Array.isArray(this.services)) {
+    this.offeredServices = [
+      ...new Set(
+        this.services
+          .filter((s) => s && s.isOffered !== false && s.name)
+          .map((s) => String(s.name).trim())
+      ),
+    ];
+  } else {
+    this.offeredServices = [];
+  }
 
   next();
 });

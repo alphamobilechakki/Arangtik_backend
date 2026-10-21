@@ -6,6 +6,7 @@ const LaundryOrder = Order;
 require('../../auth/user.model');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 const ApiError = require('../../../utils/apiError');
+const VendorCategory = require('../vendorCategory/vendorCategory.model');
 
 class AdminVendorService {
   /**
@@ -90,32 +91,43 @@ class AdminVendorService {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
-    const filter = {};
+    const conditions = [];
 
     if (status && status !== 'ALL') {
-      filter.status = status;
+      conditions.push({ status });
     }
 
     if (category && category !== 'ALL') {
-      filter.category = new RegExp(`^${category.trim()}$`, 'i');
+      const catRegex = new RegExp(`^${category.trim()}$`, 'i');
+      conditions.push({
+        $or: [
+          { category: catRegex },
+          { primaryCategory: catRegex },
+          { categories: catRegex },
+        ],
+      });
     }
 
     if (isVerified !== undefined && isVerified !== '' && isVerified !== 'ALL') {
-      filter.isVerified = isVerified === 'true' || isVerified === true;
+      conditions.push({ isVerified: isVerified === 'true' || isVerified === true });
     }
 
     if (search && search.trim()) {
       const q = search.trim();
       const regex = new RegExp(q, 'i');
-      filter.$or = [
-        { name: regex },
-        { phone: regex },
-        { vendorId: regex },
-        { businessName: regex },
-        { 'address.city': regex },
-        { 'address.state': regex },
-      ];
+      conditions.push({
+        $or: [
+          { name: regex },
+          { phone: regex },
+          { vendorId: regex },
+          { businessName: regex },
+          { 'address.city': regex },
+          { 'address.state': regex },
+        ],
+      });
     }
+
+    const filter = conditions.length > 0 ? { $and: conditions } : {};
 
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const sortOptions = { [sortBy || 'createdAt']: sortDirection };
@@ -277,10 +289,10 @@ class AdminVendorService {
    * 6. Create a New Registered Vendor Directly by Admin
    */
   async createRegisteredVendor(data) {
-    const {
+    let {
       name,
       phone,
-      category = 'Dhobi',
+      category,
       categories,
       primaryCategory,
       businessName = '',
@@ -290,6 +302,11 @@ class AdminVendorService {
       isVerified = true,
       password,
     } = data;
+
+    if (!category || category === 'Dhobi') {
+      const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+      category = firstCat?.name || 'General';
+    }
 
     const formattedPhone = formatPhoneNumber(phone);
     if (!formattedPhone || formattedPhone.length < 10) {
@@ -304,9 +321,13 @@ class AdminVendorService {
 
     const initialCategories =
       Array.isArray(categories) && categories.length > 0
-        ? categories
-        : [String(category).trim() || 'Dhobi'];
-    const initialPrimaryCat = primaryCategory || initialCategories[0] || 'Dhobi';
+        ? categories.map((c) => String(c).trim()).filter(Boolean)
+        : category ? [String(category).trim()] : [];
+    const initialPrimaryCat = primaryCategory || initialCategories[0] || (category ? String(category).trim() : '');
+
+    if (!initialPrimaryCat) {
+      throw new ApiError(400, 'Vendor service category is required');
+    }
 
     const vendor = await RegisteredVendor.create({
       name: String(name).trim(),
@@ -447,14 +468,16 @@ class AdminVendorService {
     let vendor = await RegisteredVendor.findOne({ phone: formattedPhone });
 
     if (!vendor) {
-      const vendorName = convertData.name || unreg.name || 'Laundry Vendor';
-      const category = convertData.category || 'Dhobi';
+      const vendorName = convertData.name || unreg.name || 'Vendor';
+      const category = convertData.category ? String(convertData.category).trim() : 'General';
       const businessName = convertData.businessName || '';
 
       vendor = await RegisteredVendor.create({
         name: vendorName.trim(),
         phone: formattedPhone,
-        category: category.trim(),
+        category: category,
+        primaryCategory: category,
+        categories: [category],
         businessName: businessName.trim(),
         status: 'ACTIVE',
         isRegistered: true,
@@ -467,7 +490,14 @@ class AdminVendorService {
       // Existing vendor record: ensure isRegistered is true
       vendor.isRegistered = true;
       if (convertData.name) vendor.name = convertData.name.trim();
-      if (convertData.category) vendor.category = convertData.category.trim();
+      if (convertData.category) {
+        const cat = String(convertData.category).trim();
+        vendor.category = cat;
+        vendor.primaryCategory = cat;
+        if (!vendor.categories || !vendor.categories.includes(cat)) {
+          vendor.categories = [...(vendor.categories || []), cat];
+        }
+      }
       if (convertData.businessName) vendor.businessName = convertData.businessName.trim();
       vendor.totalOrdersHandled = Math.max(vendor.totalOrdersHandled || 0, unreg.totalOrders || 0);
       await vendor.save();

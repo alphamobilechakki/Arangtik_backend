@@ -10,6 +10,7 @@ const startServer = async () => {
     // 1. Establish MongoDB Database Connection
     await connectDB();
 
+
     // 2. Start HTTP Listener
     app.listen(PORT, () => {
       console.log('==================================================');

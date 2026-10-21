@@ -7,6 +7,7 @@ const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
 const User = require('../../auth/user.model');
 const ApiError = require('../../../utils/apiError');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
+const VendorCategory = require('../../admin/vendorCategory/vendorCategory.model');
 
 class LaundryOrderService {
   /**
@@ -121,8 +122,14 @@ class LaundryOrderService {
           : wardrobeItem.attributes.fabric) || '';
       }
 
+      const rawService = rawItem.serviceName || rawItem.service || rawItem.serviceType || 'WASH_AND_IRON';
+      const resolvedServiceName = rawItem.serviceName || rawItem.service || String(rawService).replace(/_/g, ' ');
+
       processedItems.push({
         wardrobeItemId: wardrobeItem._id,
+        serviceId: rawItem.serviceId || null,
+        serviceName: resolvedServiceName,
+        serviceType: rawItem.serviceType || resolvedServiceName,
         name: wardrobeItem.name, // Strictly from database
         category: wardrobeItem.category || '', // Strictly from database
         subCategory: wardrobeItem.subCategory || '', // Strictly from database
@@ -130,7 +137,6 @@ class LaundryOrderService {
         fabric: resolvedFabric, // Strictly from database
         brand: wardrobeItem.brand || '', // Strictly from database
         imageUrl: primaryImg, // Strictly from database
-        serviceType: rawItem.serviceType || 'WASH_AND_IRON',
         specialInstructions: rawItem.specialInstructions || rawItem.notes || '',
       });
     }
@@ -147,11 +153,50 @@ class LaundryOrderService {
         ? vendorRecord.vendor.name
         : vendorName || vendorRecord.vendor.name) || 'Laundry Vendor';
 
-    // Explicit orderCategory: Laundry work orders are explicitly 'Dhobi'
-    const orderCategory =
+    // Collect requested services from all items
+    const requestedServices = [
+      ...new Set(
+        processedItems
+          .map((i) => i.serviceName || i.serviceType)
+          .filter(Boolean)
+          .map((s) => String(s).trim())
+      ),
+    ];
+
+    // If assigned vendor is registered, verify they provide ALL requested services
+    if (vendorRecord.isRegistered && vendorRecord.vendor) {
+      const RegisteredVendor = require('../../vendor/registeredVendor.model');
+      const vendorDoc = await RegisteredVendor.findById(vendorRecord.vendor._id).lean();
+      if (vendorDoc && Array.isArray(vendorDoc.offeredServices) && vendorDoc.offeredServices.length > 0) {
+        const vendorOfferedLower = vendorDoc.offeredServices.map((s) => String(s).trim().toLowerCase());
+        const missingServices = requestedServices.filter(
+          (reqService) => !vendorOfferedLower.includes(reqService.toLowerCase())
+        );
+
+        if (missingServices.length > 0) {
+          throw new ApiError(
+            400,
+            `Vendor "${resolvedVendorName}" does not provide the requested service(s): ${missingServices.join(
+              ', '
+            )}. Please select a vendor eligible for all required services.`
+          );
+        }
+      }
+    }
+
+    // Dynamic orderCategory: uses provided category, vendor's category, or first active category
+    let orderCategory =
       (payload.orderCategory && String(payload.orderCategory).trim()) ||
-      (payload.category && String(payload.category).trim()) ||
-      'Dhobi';
+      (payload.category && String(payload.category).trim());
+
+    if (!orderCategory) {
+      if (vendorRecord.isRegistered && vendorRecord.vendor?.category) {
+        orderCategory = vendorRecord.vendor.category;
+      } else {
+        const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+        orderCategory = firstCat?.name || 'General';
+      }
+    }
 
     // 6. Create Initial Work Order directly in universal 'orders' collection
     const order = new Order({
@@ -169,6 +214,7 @@ class LaundryOrderService {
       specialInstructions: specialInstructions ? String(specialInstructions).trim() : '',
       items: processedItems,
       totalItems: processedItems.length,
+      requestedServices,
       status: 'PENDING_PICKUP',
       statusHistory: [
         {
@@ -290,9 +336,13 @@ class LaundryOrderService {
    * Get user's laundry work orders with filtering & pagination
    */
   async getUserOrders(userId, query = {}) {
-    const { status, page = 1, limit = 20, vendorPhone } = query;
+    const { status, page = 1, limit = 20, vendorPhone, category, orderCategory } = query;
 
-    const filter = { userId, orderCategory: 'Dhobi' };
+    const filter = { userId };
+    const targetCat = category || orderCategory;
+    if (targetCat && targetCat !== 'ALL') {
+      filter.orderCategory = new RegExp(`^${targetCat.trim()}$`, 'i');
+    }
     if (status) {
       filter.status = status;
     }
