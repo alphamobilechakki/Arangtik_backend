@@ -259,7 +259,7 @@ orderSchema.pre('validate', function (next) {
     const today = new Date();
     const yyyymmdd = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const prefix = this.orderType === 'LAUNDRY_WORK_ORDER' || this.orderCategory?.toUpperCase().includes('WASH') ? 'WO' : 'ORD';
+    const prefix = this.orderType === 'PRODUCT' ? 'ORD' : 'WO';
     this.orderNumber = `${prefix}-${yyyymmdd}-${randomSuffix}`;
   }
   if (Array.isArray(this.items)) {
@@ -272,6 +272,13 @@ orderSchema.pre('validate', function (next) {
           .map((s) => String(s).trim())
       ),
     ];
+    if (!this.subtotal && !this.totalAmount) {
+      const sum = this.items.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 1), 0);
+      if (sum > 0) {
+        this.subtotal = sum;
+        this.totalAmount = sum + (this.deliveryFee || 0);
+      }
+    }
   }
   next();
 });

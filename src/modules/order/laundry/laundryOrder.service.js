@@ -125,11 +125,19 @@ class LaundryOrderService {
       const rawService = rawItem.serviceName || rawItem.service || rawItem.serviceType || 'WASH_AND_IRON';
       const resolvedServiceName = rawItem.serviceName || rawItem.service || String(rawService).replace(/_/g, ' ');
 
+      const rawPrice =
+        typeof rawItem.price === 'number' && !isNaN(rawItem.price)
+          ? rawItem.price
+          : !isNaN(parseFloat(rawItem.price))
+          ? parseFloat(rawItem.price)
+          : 0;
+
       processedItems.push({
         wardrobeItemId: wardrobeItem._id,
         serviceId: rawItem.serviceId || null,
         serviceName: resolvedServiceName,
         serviceType: rawItem.serviceType || resolvedServiceName,
+        price: Math.max(0, rawPrice),
         name: wardrobeItem.name, // Strictly from database
         category: wardrobeItem.category || '', // Strictly from database
         subCategory: wardrobeItem.subCategory || '', // Strictly from database
@@ -215,6 +223,8 @@ class LaundryOrderService {
       items: processedItems,
       totalItems: processedItems.length,
       requestedServices,
+      subtotal: processedItems.reduce((acc, it) => acc + (it.price || 0), 0),
+      totalAmount: processedItems.reduce((acc, it) => acc + (it.price || 0), 0),
       status: 'PENDING_PICKUP',
       statusHistory: [
         {
