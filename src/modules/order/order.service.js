@@ -47,8 +47,14 @@ class OrderService {
       Order.countDocuments(filter),
     ]);
 
+    const formattedOrders = orders.map((order) => ({
+      ...order,
+      payment: order.payment || { status: 'UNPAID' },
+      paymentStatus: order.payment?.status || 'UNPAID',
+    }));
+
     return {
-      orders,
+      orders: formattedOrders,
       pagination: {
         total: totalCount,
         page: pageNum,

@@ -21,7 +21,7 @@
 8. [🧊 Series 7: 3D Garment Mesh Reconstruction (TripoSR Engine)](#-series-7-3d-garment-mesh-reconstruction-triposr-engine)
 9. [✨ Series 8: Smart AI Outfit Recommendations & Styling](#-series-8-smart-ai-outfit-recommendations--styling)
 10. [🏷️ Series 9: Service Categories & Live Rate Card Discovery](#-series-9-service-categories--live-rate-card-discovery)
-11. [🧺 Series 10: Laundry & Service Work Orders (Customer Dispatch)](#-series-10-laundry--service-work-orders-customer-dispatch)
+11. [🧺 Series 10: Laundry & Service Work Orders & Payment Transactions (Customer Dispatch)](#-series-10-laundry--service-work-orders-customer-dispatch)
 12. [🔔 Series 11: Push Notifications (FCM) & In-App Notification Inbox](#-series-11-push-notifications-fcm--in-app-notification-inbox)
 13. [🖼️ Series 12: Image & Media URL Resolution Protocol](#-series-12-image--media-url-resolution-protocol)
 14. [🚀 Series 13: Ready-to-Use Mobile Integration Client (Flutter & React Native)](#-series-13-ready-to-use-mobile-integration-client-flutter--react-native)
@@ -1202,7 +1202,7 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
 #### Query Parameters
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `status` | String | No | Filter by status: `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `CANCELLED` |
+| `status` | String | No | Filter by status: `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`, `PARTIALLY_DELIVERED`, `DELIVERED`, `CANCELLED` |
 | `category` | String | No | Filter by trade category (e.g. `Washerman`, `Tailor`) |
 | `page` | Integer | No | Page number (Default: `1`) |
 | `limit` | Integer | No | Page limit (Default: `20`) |
@@ -1218,13 +1218,16 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
       {
         "_id": "67c3344556677889900aabbc",
         "orderNumber": "ORD-2026-0042",
-        "status": "PENDING_PICKUP",
+        "status": "PARTIALLY_DELIVERED",
         "vendorName": "CleanWash Express",
         "vendorPhone": "9876543210",
-        "totalGarments": 3,
-        "totalCost": 80,
+        "totalGarments": 5,
+        "deliveredItemsCount": 3,
+        "deliveredAmount": 60,
+        "totalCost": 100,
         "pickupDate": "2026-02-19T09:00:00.000Z",
         "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
+        "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf",
         "createdAt": "2026-02-18T17:30:00.000Z"
       }
     ],
@@ -1250,16 +1253,23 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
     "order": {
       "_id": "67c3344556677889900aabbc",
       "orderNumber": "ORD-2026-0042",
-      "status": "PENDING_PICKUP",
+      "status": "PARTIALLY_DELIVERED",
       "vendorName": "CleanWash Express",
       "vendorPhone": "9876543210",
       "orderCategory": "Washerman",
-      "totalGarments": 3,
-      "totalCost": 80,
+      "totalGarments": 5,
+      "deliveredItemsCount": 3,
+      "deliveredAmount": 60,
+      "totalCost": 100,
       "pickupDate": "2026-02-19T09:00:00.000Z",
       "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
       "specialInstructions": "Please handle the silk suit gently",
       "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf",
+      "payment": {
+        "status": "PAID",
+        "paidAt": "2026-10-23T10:15:00.000Z",
+        "updatedBy": "USER"
+      },
       "items": [
         {
           "wardrobeItemId": "67b12345abcdef0123456789",
@@ -1267,14 +1277,34 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
           "serviceType": "IRON",
           "serviceName": "iron and press",
           "price": 20,
+          "status": "DELIVERED",
+          "deliveredAt": "2026-10-23T10:15:00.000Z",
           "imageUrl": "http://localhost:8083/uploads/garment_987654.png"
+        },
+        {
+          "wardrobeItemId": "67c11223344556677889900a",
+          "name": "Silk Party Kurta",
+          "serviceType": "DRY_CLEAN",
+          "serviceName": "dry",
+          "price": 40,
+          "status": "DELIVERED",
+          "deliveredAt": "2026-10-23T10:15:00.000Z",
+          "imageUrl": "http://localhost:8083/uploads/garment_112233.png"
+        },
+        {
+          "wardrobeItemId": "67e556677889900aabbcc001",
+          "name": "Formal Trousers",
+          "serviceType": "IRON",
+          "serviceName": "iron and press",
+          "price": 40,
+          "status": "PENDING"
         }
       ],
       "timeline": [
         {
-          "status": "PENDING_PICKUP",
-          "timestamp": "2026-02-18T17:30:00.000Z",
-          "note": "Work order generated and WhatsApp dispatched"
+          "status": "PARTIALLY_DELIVERED",
+          "timestamp": "2026-10-23T10:15:00.000Z",
+          "note": "Delivered 3 garments out of 5"
         }
       ]
     }
@@ -1326,6 +1356,120 @@ Customers can cancel an active order before processing. This immediately reverts
   "success": true,
   "statusCode": 200,
   "message": "WhatsApp work order slip resent to vendor successfully"
+}
+```
+
+---
+
+### 10.8 Update Order Payment Status (Customer Self-Service)
+Enables the customer to mark their order payment as `PAID`. Synchronizes in real-time with the vendor app, transactions ledger, and work order PDF.
+
+- **Method:** `PATCH`
+- **Path:** `/api/orders/:id/payment` *(alias: `/api/laundry/orders/:id/payment`)*
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+- **Content-Type:** `application/json`
+
+#### Validation Rules:
+1. **Delivery Prerequisite:** Payment status can **ONLY** be changed when order status is `DELIVERED`, `PARTIALLY_DELIVERED`, or `PARTIALLY_DONE`. Attempting to mark payment on an undelivered order returns `400 Bad Request`.
+2. **Permanent Lock:** Once an order payment is set to `PAID`, it is permanently locked and cannot be changed back to `UNPAID`.
+3. **Automatic PDF Sync:** Setting payment to `PAID` immediately updates and re-renders the official PDF slip with a green **PAID** collection badge!
+
+#### Request Body
+```json
+{
+  "status": "PAID",
+  "note": "Payment completed via UPI/Cash"
+}
+```
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Order payment marked as PAID successfully",
+  "data": {
+    "order": {
+      "_id": "67c3344556677889900aabbc",
+      "orderNumber": "ORD-2026-0042",
+      "status": "PARTIALLY_DELIVERED",
+      "deliveredItemsCount": 3,
+      "deliveredAmount": 60,
+      "totalCost": 100,
+      "payment": {
+        "status": "PAID",
+        "paidAt": "2026-10-23T10:15:00.000Z",
+        "updatedBy": "USER"
+      }
+    },
+    "transaction": {
+      "_id": "67c445566778899aabbcc001",
+      "transactionNumber": "TXN-20261023-0001",
+      "orderNumber": "ORD-2026-0042",
+      "amount": 60,
+      "totalAmount": 100,
+      "deliveredAmount": 60,
+      "deliveredItemsCount": 3,
+      "totalItems": 5,
+      "orderStatus": "PARTIALLY_DELIVERED",
+      "status": "PAID",
+      "paidAt": "2026-10-23T10:15:00.000Z",
+      "updatedBy": "USER"
+    }
+  }
+}
+```
+
+---
+
+### 10.9 Get Customer Order Transactions Ledger
+Fetches all transaction ledger entries for orders placed by the authenticated customer.
+
+- **Method:** `GET`
+- **Path:** `/api/orders/transactions`
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `status` | String | No | Filter by status: `ALL` (default), `PAID`, or `UNPAID` |
+| `page` | Integer | No | Page number (Default: `1`) |
+| `limit` | Integer | No | Page limit (Default: `20`) |
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Order transactions retrieved successfully",
+  "data": {
+    "transactions": [
+      {
+        "_id": "67c445566778899aabbcc001",
+        "transactionNumber": "TXN-20261023-0001",
+        "orderNumber": "ORD-2026-0042",
+        "orderCategory": "Washerman",
+        "vendorName": "CleanWash Express",
+        "vendorPhone": "919876543210",
+        "amount": 60,
+        "totalAmount": 100,
+        "deliveredAmount": 60,
+        "deliveredItemsCount": 3,
+        "totalItems": 5,
+        "orderStatus": "PARTIALLY_DELIVERED",
+        "status": "PAID",
+        "paidAt": "2026-10-23T10:15:00.000Z",
+        "updatedBy": "USER",
+        "createdAt": "2026-10-23T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
 }
 ```
 

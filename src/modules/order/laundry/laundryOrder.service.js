@@ -247,6 +247,18 @@ class LaundryOrderService {
       );
     }
 
+    // 6.2. Initialize universal order transaction
+    try {
+      const transactionService = require('../transaction.service');
+      await transactionService.syncOrderTransaction(order, {
+        status: order.payment?.status || 'UNPAID',
+        updatedBy: 'USER',
+        note: 'Order placed',
+      });
+    } catch (txnErr) {
+      console.warn('[Initial Transaction Sync Warning]:', txnErr.message);
+    }
+
     // 7. Generate PDF Work Order
     try {
       const pdfResult = await laundryPdfService.generateWorkOrderPdf(order);
@@ -407,7 +419,11 @@ class LaundryOrderService {
   /**
    * Update Work Order Status (User self-service per Requirement 9 & 10)
    */
-  async updateOrderStatus(userId, orderId, { status, note }) {
+  async updateOrderStatus(
+    userId,
+    orderId,
+    { status, note, paymentStatus, deliveredItemIds, deliveredCount } = {}
+  ) {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       throw new ApiError(400, 'Invalid Order ID format');
     }
@@ -426,6 +442,8 @@ class LaundryOrderService {
       'IN_PROCESS',
       'READY_FOR_DELIVERY',
       'DELIVERED',
+      'PARTIALLY_DELIVERED',
+      'PARTIALLY_DONE',
       'CANCELLED',
     ];
 
@@ -458,36 +476,176 @@ class LaundryOrderService {
       }
     }
 
-    order.status = status;
+    // Handle Item Delivery Statuses
+    if (status === 'DELIVERED') {
+      order.status = 'DELIVERED';
+      if (!order.deliveredAt) order.deliveredAt = new Date();
+      if (Array.isArray(order.items)) {
+        order.items.forEach((it) => {
+          it.status = 'DELIVERED';
+          it.deliveredAt = it.deliveredAt || new Date();
+        });
+      }
+      order.deliveredItemsCount = order.items?.length || 0;
+      order.deliveredAmount = order.totalAmount || 0;
+    } else if (status === 'PARTIALLY_DELIVERED' || status === 'PARTIALLY_DONE') {
+      if (Array.isArray(order.items)) {
+        if (Array.isArray(deliveredItemIds) && deliveredItemIds.length > 0) {
+          const idStrs = deliveredItemIds.map(String);
+          order.items.forEach((it) => {
+            if (idStrs.includes(String(it._id)) || idStrs.includes(String(it.wardrobeItemId))) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+            }
+          });
+        } else if (typeof deliveredCount === 'number' && deliveredCount > 0) {
+          let count = 0;
+          order.items.forEach((it) => {
+            if (count < deliveredCount) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+              count++;
+            }
+          });
+        } else {
+          const alreadyDone = order.items.filter((it) => it.status === 'DELIVERED').length;
+          if (alreadyDone === 0 && order.items.length > 0) {
+            order.items[0].status = 'DELIVERED';
+            order.items[0].deliveredAt = new Date();
+          }
+        }
+
+        const deliveredCountNow = order.items.filter((it) => it.status === 'DELIVERED').length;
+        if (deliveredCountNow === order.items.length) {
+          order.status = 'DELIVERED';
+          if (!order.deliveredAt) order.deliveredAt = new Date();
+        } else {
+          order.status = 'PARTIALLY_DELIVERED';
+        }
+
+        order.deliveredItemsCount = deliveredCountNow;
+        order.deliveredAmount = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .reduce((sum, it) => sum + (it.price || 0), 0);
+      } else {
+        order.status = 'PARTIALLY_DELIVERED';
+      }
+    } else {
+      order.status = status;
+    }
+
+    if (paymentStatus) {
+      const targetOrderStatus = order.status;
+      const payableStatuses = ['DELIVERED', 'PARTIALLY_DELIVERED', 'PARTIALLY_DONE'];
+      if (!payableStatuses.includes(targetOrderStatus)) {
+        throw new ApiError(
+          400,
+          `Payment status cannot be updated because the order is not yet DELIVERED or PARTIALLY_DELIVERED (current status: ${targetOrderStatus})`
+        );
+      }
+
+      if (order.payment?.status === 'PAID') {
+        throw new ApiError(
+          400,
+          'Payment has already been marked as PAID and cannot be changed again'
+        );
+      }
+
+      const upperPayment = String(paymentStatus).trim().toUpperCase();
+      if (['PAID', 'UNPAID'].includes(upperPayment)) {
+        if (!order.payment) order.payment = {};
+        order.payment.status = upperPayment;
+        order.payment.updatedBy = 'USER';
+        if (upperPayment === 'PAID') {
+          order.payment.paidAt = new Date();
+        } else {
+          order.payment.paidAt = null;
+        }
+      }
+    }
+
     order.statusHistory.push({
-      status,
+      status: order.status,
       changedBy: 'USER',
       changedAt: new Date(),
       note: note
         ? String(note).trim()
         : status === 'CANCELLED'
         ? 'Order cancelled by customer'
-        : `Status changed to ${status}`,
+        : `Status changed to ${order.status}`,
     });
 
     await order.save();
 
-    // Sync wardrobe items status: DELIVERED/CANCELLED => ACTIVE, in-progress => INACTIVE
-    const itemIds = (order.items || []).map((it) => it.wardrobeItemId).filter(Boolean);
-    if (itemIds.length > 0) {
-      if (status === 'DELIVERED' || status === 'CANCELLED') {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'ACTIVE' } }
-        );
+    // Synchronize transaction record
+    try {
+      const transactionService = require('../transaction.service');
+      await transactionService.syncOrderTransaction(order, {
+        status: order.payment?.status || 'UNPAID',
+        updatedBy: 'USER',
+        note: note || `Order updated to ${order.status}`,
+      });
+    } catch (txnErr) {
+      console.warn('[Transaction Sync Notice]:', txnErr.message);
+    }
+
+    // Sync wardrobe items status:
+    // DELIVERED / CANCELLED => ALL ACTIVE
+    // PARTIALLY_DELIVERED => delivered items ACTIVE, pending items remain INACTIVE
+    // In-progress => ALL INACTIVE
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      if (order.status === 'DELIVERED' || order.status === 'CANCELLED') {
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+      } else if (order.status === 'PARTIALLY_DELIVERED') {
+        const activeIds = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+        const inactiveIds = order.items
+          .filter((it) => it.status !== 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+
+        if (activeIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: activeIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+        if (inactiveIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: inactiveIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       } else if (
-        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(status)
+        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(order.status)
       ) {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'INACTIVE' } }
-        );
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       }
+    }
+
+    // Regenerate work order PDF with up-to-date partial delivery & payment details
+    try {
+      const laundryPdfService = require('./laundryPdf.service');
+      const pdfResult = await laundryPdfService.generateWorkOrderPdf(order);
+      order.pdfUrl = pdfResult.fileUrl;
+      order.pdfPath = pdfResult.filePath;
+      await order.save();
+    } catch (pdfErr) {
+      console.warn('[PDF Regeneration Notice]:', pdfErr.message);
     }
 
     // Dispatch FCM status update notification to customer

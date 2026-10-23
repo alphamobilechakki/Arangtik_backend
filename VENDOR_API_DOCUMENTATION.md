@@ -17,7 +17,7 @@
 3. [🔐 Series 2: Vendor Authentication & Onboarding Lifecycle](#-series-2-vendor-authentication--onboarding-lifecycle)
 4. [👤 Series 3: Vendor Profile & Multi-Trade Categories Configuration](#-series-3-vendor-profile--multi-trade-categories-configuration)
 5. [💰 Series 4: Service Offerings & Custom Rate Card Configuration](#-series-4-service-offerings--custom-rate-card-configuration)
-6. [📋 Series 5: Vendor Work Orders Management (Vendor Hub)](#-series-5-vendor-work-orders-management-vendor-hub)
+6. [📋 Series 5: Vendor Work Orders & Payment Transactions (Vendor Hub)](#-series-5-vendor-work-orders--payment-transactions-vendor-hub)
 7. [⚙️ Series 6: Critical Business Rules, Role Separation & State Sync](#-series-6-critical-business-rules-role-separation--state-sync)
 8. [🔔 Series 7: Push Notifications (FCM) & Events for Vendor App](#-series-7-push-notifications-fcm--events-for-vendor-app)
 9. [🖼️ Series 8: Image & Media URL Resolution Protocol](#-series-8-image--media-url-resolution-protocol)
@@ -596,9 +596,9 @@ The vendor ticks which services they offer and sets their price per garment.
 
 ---
 
-## 📋 Series 5: Vendor Work Orders Management (Vendor Hub)
+## 📋 Series 5: Vendor Work Orders & Payment Transactions (Vendor Hub)
 
-The primary operational hub for partners to accept, manage, and progress customer orders.
+The primary operational hub for partners to accept, manage, progress customer orders, and track order payment transactions.
 
 ---
 
@@ -719,17 +719,41 @@ Progress the order through its lifecycle.
 - `PICKED_UP`: Garments collected from customer home.
 - `IN_PROCESS`: Washing / Ironing / Dry Cleaning underway.
 - `READY_FOR_DELIVERY`: Processed, packed, and ready to return.
-- `DELIVERED`: Delivered back to customer (Marks order complete).
+- `PARTIALLY_DELIVERED` *(or `PARTIALLY_DONE`)*: Partial order handover (e.g., 3 out of 5 clothes delivered, remaining 2 clothes still in process/pending).
+- `DELIVERED`: Full delivery completed (All garments returned to customer).
 - `REJECTED`: Vendor declines or rejects the order (Mandatory note).
 - ❌ **`CANCELLED` IS STRICTLY PROHIBITED FOR VENDORS** *(Only customers can cancel)*.
 
-#### Request Body
+#### Request Body (Full Delivery)
 ```json
 {
-  "status": "IN_PROCESS",
-  "note": "Garments have been washed, ironing underway"
+  "status": "DELIVERED",
+  "note": "Garments cleaned and delivered to customer",
+  "paymentStatus": "PAID"
 }
 ```
+
+#### Request Body (Partial Delivery — Item-Wise or Count-Wise)
+```json
+{
+  "status": "PARTIALLY_DELIVERED",
+  "note": "Delivered 3 garments today, 2 garments are still under dry cleaning",
+  "deliveredItemIds": [
+    "67b12345abcdef0123456789",
+    "67c11223344556677889900a",
+    "67d3344556677889900aabbc"
+  ],
+  "paymentStatus": "PAID"
+}
+```
+*Alternative: If specific item IDs are not selected on UI, pass `"deliveredCount": 3` to mark the first 3 items as delivered.*
+
+> **⚡ Partial Delivery Core Behaviors:**
+> 1. **Wardrobe Auto-Sync:** Only the items that were actually delivered are restored back to `ACTIVE` in customer Almari! Remaining undelivered clothes remain securely locked as `INACTIVE`.
+> 2. **Auto-Advance to Full Delivery:** If all items in an order are delivered, the backend automatically sets order status to `DELIVERED`.
+> 3. **Ledger & Transaction Synchronization:** Calculates `deliveredAmount` (price of delivered items) and automatically updates the order's Transaction record (`transaction.amount = deliveredAmount`, `transaction.deliveredAmount`, `transaction.deliveredItemsCount`).
+> 4. **Dynamic Work Order PDF Update:** Regenerates the official PDF receipt with item-wise checklist statuses (`Delivered ✓` vs `Pending ⏳`), full billing breakdown (Subtotal, Total, Delivered Payable Amount), and payment badge!
+> 5. **One-Way Final Payment Lock:** Once payment is marked as `"PAID"`, it is permanently locked and cannot be altered back to `"UNPAID"`. Payment status can only be modified when order is `DELIVERED` or `PARTIALLY_DELIVERED`.
 
 #### Success Response (`200 OK`)
 ```json
@@ -740,7 +764,146 @@ Progress the order through its lifecycle.
   "data": {
     "_id": "67c3344556677889900aabbc",
     "orderNumber": "ORD-2026-0042",
-    "status": "IN_PROCESS"
+    "status": "PARTIALLY_DELIVERED",
+    "deliveredItemsCount": 3,
+    "deliveredAmount": 60,
+    "totalCost": 100,
+    "payment": {
+      "status": "PAID",
+      "paidAt": "2026-10-23T10:15:00.000Z",
+      "updatedBy": "VENDOR"
+    },
+    "items": [
+      {
+        "wardrobeItemId": "67b12345abcdef0123456789",
+        "name": "Navy Blue Linen Shirt",
+        "price": 20,
+        "status": "DELIVERED",
+        "deliveredAt": "2026-10-23T10:15:00.000Z"
+      },
+      {
+        "wardrobeItemId": "67c11223344556677889900a",
+        "name": "Silk Party Kurta",
+        "price": 40,
+        "status": "DELIVERED",
+        "deliveredAt": "2026-10-23T10:15:00.000Z"
+      },
+      {
+        "wardrobeItemId": "67e556677889900aabbcc001",
+        "name": "Formal Trousers",
+        "price": 40,
+        "status": "PENDING"
+      }
+    ],
+    "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf"
+  }
+}
+```
+
+---
+
+### 5.4 Update Order Payment Status (PAID / UNPAID)
+Enables vendor to mark an assigned order's payment status as `PAID` or `UNPAID` at any point. Synchronizes automatically across customer view and transactions ledger.
+
+- **Method:** `PATCH`
+- **Path:** `/api/vendor/orders/:id/payment`
+- **Auth Required:** `Yes (Bearer <VENDOR_TOKEN>)`
+- **Content-Type:** `application/json`
+
+#### Request Body
+```json
+{
+  "status": "PAID",
+  "note": "Payment collected from customer"
+}
+```
+> **Status Rule:** Must be strictly `"PAID"` or `"UNPAID"`. By default, all orders start as `"UNPAID"`.
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Order payment marked as PAID successfully",
+  "data": {
+    "order": {
+      "_id": "67c3344556677889900aabbc",
+      "orderNumber": "ORD-2026-0042",
+      "payment": {
+        "status": "PAID",
+        "paidAt": "2026-10-23T10:15:00.000Z",
+        "updatedBy": "VENDOR"
+      }
+    },
+    "transaction": {
+      "_id": "67c445566778899aabbcc001",
+      "transactionNumber": "TXN-20261023-0001",
+      "orderNumber": "ORD-2026-0042",
+      "amount": 80,
+      "status": "PAID",
+      "paidAt": "2026-10-23T10:15:00.000Z",
+      "updatedBy": "VENDOR"
+    }
+  }
+}
+```
+
+---
+
+### 5.5 Get Vendor Payment Transactions Ledger
+Fetches the complete ledger table of order transactions for the authenticated vendor, along with financial aggregate statistics (Total Collected, Pending, Gross Volume).
+
+- **Method:** `GET`
+- **Path:** `/api/vendor/transactions`
+- **Auth Required:** `Yes (Bearer <VENDOR_TOKEN>)`
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `status` | String | No | Filter by payment status: `ALL` (default), `PAID`, or `UNPAID` |
+| `search` | String | No | Search by order number (`ORD-...`), transaction number (`TXN-...`), customer name, or phone |
+| `page` | Integer | No | Page number (Default: `1`) |
+| `limit` | Integer | No | Page limit (Default: `20`) |
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Vendor transactions retrieved successfully",
+  "data": {
+    "transactions": [
+      {
+        "_id": "67c445566778899aabbcc001",
+        "transactionNumber": "TXN-20261023-0001",
+        "orderId": "67c3344556677889900aabbc",
+        "orderNumber": "ORD-2026-0042",
+        "vendorPhone": "919876543210",
+        "vendorName": "CleanWash Express",
+        "userName": "Rahul Sharma",
+        "userPhone": "919876543210",
+        "orderCategory": "Washerman",
+        "amount": 80,
+        "status": "PAID",
+        "paidAt": "2026-10-23T10:15:00.000Z",
+        "updatedBy": "VENDOR",
+        "createdAt": "2026-10-23T10:00:00.000Z"
+      }
+    ],
+    "stats": {
+      "totalTransactions": 14,
+      "totalAmount": 1120,
+      "paidCount": 10,
+      "paidAmount": 800,
+      "unpaidCount": 4,
+      "unpaidAmount": 320
+    },
+    "pagination": {
+      "total": 14,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
   }
 }
 ```
@@ -752,18 +915,23 @@ Progress the order through its lifecycle.
 ### 1. Progressive Lifecycle Diagram
 
 ```
-[ Step 1: PENDING_PICKUP ] ──► [ Step 2: PICKED_UP ] ──► [ Step 3: IN_PROCESS ] ──► [ Step 4: READY_FOR_DELIVERY ] ──► [ Step 5: DELIVERED (Complete) ]
-         │                                                                                                                      │
-         ├─── Vendor Rejection: REJECTED (with reason) ────────────────────────────────────────────────────────────────────────┤
-         │                                                                                                                      ▼
-         └─── Customer Cancellation: CANCELLED ───────────────────────────────────────► All garments automatically revert to status: ACTIVE
+[ Step 1: PENDING_PICKUP ] ──► [ Step 2: PICKED_UP ] ──► [ Step 3: IN_PROCESS ] ──► [ Step 4: READY_FOR_DELIVERY ]
+         │                                                                                      │                 │
+         ├─── Vendor Rejection: REJECTED (with reason)                                          ▼                 ▼
+         │                                                                             [ PARTIALLY_DELIVERED ] [ DELIVERED ]
+         └─── Customer Cancellation: CANCELLED                                                  │                 │
+                                                                                                ▼                 ▼
+                                                                                   Only delivered clothes    All garments
+                                                                                   revert to: ACTIVE         revert to: ACTIVE
 ```
 
 ### 2. Role Separation & Terminal Rules
 - **Customer Only:** `CANCELLED` (Customer can cancel if vendor hasn't picked up).
 - **Vendor Only:** `REJECTED` (Vendor can decline if shop is overloaded or address out of range).
-- **Garment Auto-Sync:** When an order reaches `DELIVERED`, `REJECTED`, or `CANCELLED`, all wardrobe clothes in that order automatically revert from `INACTIVE` back to `ACTIVE` in the customer's Almari.
-- **Instant Customer Push Notifications:** When a vendor updates status (`PICKED_UP`, `IN_PROCESS`, `DELIVERED`), the backend dispatches an instant FCM push notification to the customer's phone!
+- **Garment Auto-Sync:**
+  - Full Delivery (`DELIVERED`), `REJECTED`, or `CANCELLED`: All clothes in that order automatically revert from `INACTIVE` back to `ACTIVE` in customer's Almari.
+  - Partial Delivery (`PARTIALLY_DELIVERED`): Only the garments specifically marked as delivered revert to `ACTIVE`; undelivered garments remain safely protected as `INACTIVE`.
+- **Instant Customer Push Notifications:** When a vendor updates status (`PICKED_UP`, `IN_PROCESS`, `PARTIALLY_DELIVERED`, `DELIVERED`), the backend dispatches an instant FCM push notification to the customer's phone!
 
 ---
 

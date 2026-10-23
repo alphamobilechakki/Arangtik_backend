@@ -57,10 +57,15 @@ router.post('/eligible', vendorController.getEligibleVendors);
 router.get('/:id/services', vendorController.getVendorServices);
 
 // ==========================================
-// 4. Vendor Work Orders (Protected by Vendor JWT)
+// 4. Vendor Work Orders & Payment Transactions (Protected by Vendor JWT)
 // ==========================================
+const transactionController = require('../order/transaction.controller');
+const { validateUpdatePaymentStatus } = require('../order/transaction.validation');
+
 router.get('/orders', protectVendor, vendorController.getVendorOrders);
 router.get('/orders/:id', protectVendor, vendorController.getVendorOrderDetails);
 router.patch('/orders/:id/status', protectVendor, vendorController.updateVendorOrderStatus);
+router.patch('/orders/:id/payment', protectVendor, validateUpdatePaymentStatus, transactionController.updateVendorOrderPayment);
+router.get('/transactions', protectVendor, transactionController.getVendorTransactions);
 
 module.exports = router;

@@ -207,7 +207,7 @@ class AdminOrderService {
     const totalPages = Math.ceil(totalRecords / limitNum) || 1;
 
     return {
-      orders,
+      orders: orders.map((o) => this._normalizeOrder(o)),
       pagination: {
         currentPage: pageNum,
         perPage: limitNum,
@@ -216,6 +216,37 @@ class AdminOrderService {
         hasNextPage: pageNum < totalPages,
         hasPrevPage: pageNum > 1,
       },
+    };
+  }
+
+  /**
+   * Helper to normalize order financial figures consistently
+   */
+  _normalizeOrder(order) {
+    if (!order) return order;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemsSum = items.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
+    const subtotal =
+      typeof order.subtotal === 'number' && order.subtotal > 0 ? order.subtotal : itemsSum;
+    const deliveryFee = Number(order.deliveryFee) || 0;
+    const totalAmount =
+      typeof order.totalAmount === 'number' && order.totalAmount > 0
+        ? order.totalAmount
+        : subtotal + deliveryFee;
+    const deliveredAmount =
+      typeof order.deliveredAmount === 'number' && order.deliveredAmount > 0
+        ? order.deliveredAmount
+        : items
+            .filter((it) => it.status === 'DELIVERED')
+            .reduce((sum, it) => sum + (Number(it.price) || 0), 0);
+
+    return {
+      ...order,
+      subtotal,
+      deliveryFee,
+      totalAmount,
+      totalCost: totalAmount,
+      deliveredAmount,
     };
   }
 
@@ -239,19 +270,21 @@ class AdminOrderService {
       throw new ApiError(404, 'Order not found');
     }
 
-    return order;
+    return this._normalizeOrder(order);
   }
 
   /**
    * 4. Admin Update Order Status (Override / Advance workflow)
    */
-  async updateOrderStatus(id, { status, note = '' }) {
+  async updateOrderStatus(id, { status, note = '', deliveredItemIds, deliveredCount } = {}) {
     const validStatuses = [
       'PENDING_PICKUP',
       'PICKED_UP',
       'IN_PROCESS',
       'READY_FOR_DELIVERY',
       'DELIVERED',
+      'PARTIALLY_DELIVERED',
+      'PARTIALLY_DONE',
       'CANCELLED',
       'REJECTED',
     ];
@@ -272,31 +305,126 @@ class AdminOrderService {
     }
 
     const previousStatus = order.status;
-    order.status = status;
+
+    if (status === 'DELIVERED') {
+      order.status = 'DELIVERED';
+      if (!order.deliveredAt) order.deliveredAt = new Date();
+      if (Array.isArray(order.items)) {
+        order.items.forEach((it) => {
+          it.status = 'DELIVERED';
+          it.deliveredAt = it.deliveredAt || new Date();
+        });
+      }
+      order.deliveredItemsCount = order.items?.length || 0;
+      order.deliveredAmount = order.totalAmount || 0;
+    } else if (status === 'PARTIALLY_DELIVERED' || status === 'PARTIALLY_DONE') {
+      if (Array.isArray(order.items)) {
+        if (Array.isArray(deliveredItemIds) && deliveredItemIds.length > 0) {
+          const idStrs = deliveredItemIds.map(String);
+          order.items.forEach((it) => {
+            if (idStrs.includes(String(it._id)) || idStrs.includes(String(it.wardrobeItemId))) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+            }
+          });
+        } else if (typeof deliveredCount === 'number' && deliveredCount > 0) {
+          let count = 0;
+          order.items.forEach((it) => {
+            if (count < deliveredCount) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+              count++;
+            }
+          });
+        } else {
+          const alreadyDone = order.items.filter((it) => it.status === 'DELIVERED').length;
+          if (alreadyDone === 0 && order.items.length > 0) {
+            order.items[0].status = 'DELIVERED';
+            order.items[0].deliveredAt = new Date();
+          }
+        }
+
+        const deliveredCountNow = order.items.filter((it) => it.status === 'DELIVERED').length;
+        if (deliveredCountNow === order.items.length) {
+          order.status = 'DELIVERED';
+          if (!order.deliveredAt) order.deliveredAt = new Date();
+        } else {
+          order.status = 'PARTIALLY_DELIVERED';
+        }
+
+        order.deliveredItemsCount = deliveredCountNow;
+        order.deliveredAmount = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .reduce((sum, it) => sum + (it.price || 0), 0);
+      } else {
+        order.status = 'PARTIALLY_DELIVERED';
+      }
+    } else {
+      order.status = status;
+    }
 
     order.statusHistory.push({
-      status,
+      status: order.status,
       changedBy: 'ADMIN',
       changedAt: new Date(),
-      note: note ? String(note).trim() : `Admin status update from ${previousStatus} to ${status}`,
+      note: note ? String(note).trim() : `Admin status update from ${previousStatus} to ${order.status}`,
     });
 
     await order.save();
 
     // 1. Sync Wardrobe Items Status
-    const itemIds = (order.items || []).map((it) => it.wardrobeItemId).filter(Boolean);
-    if (itemIds.length > 0) {
-      if (['DELIVERED', 'CANCELLED', 'REJECTED'].includes(status)) {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'ACTIVE' } }
-        );
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      if (['DELIVERED', 'CANCELLED', 'REJECTED'].includes(order.status)) {
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+      } else if (order.status === 'PARTIALLY_DELIVERED') {
+        const activeIds = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+        const inactiveIds = order.items
+          .filter((it) => it.status !== 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+
+        if (activeIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: activeIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+        if (inactiveIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: inactiveIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       } else {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'INACTIVE' } }
-        );
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       }
+    }
+
+    // Synchronize transaction record
+    try {
+      const transactionService = require('../../order/transaction.service');
+      await transactionService.syncOrderTransaction(order, {
+        status: order.payment?.status || 'UNPAID',
+        updatedBy: 'ADMIN',
+        note: note || `Admin updated order to ${order.status}`,
+      });
+    } catch (txnErr) {
+      console.warn('[Transaction Sync Notice]:', txnErr.message);
     }
 
     // 2. Increment vendor's totalOrdersHandled if newly DELIVERED
@@ -337,7 +465,7 @@ class AdminOrderService {
       console.warn('[FCM Notification Error]:', fcmErr.message);
     }
 
-    return order;
+    return this._normalizeOrder(order.toObject ? order.toObject() : order);
   }
 
   /**

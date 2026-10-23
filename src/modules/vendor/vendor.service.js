@@ -307,6 +307,10 @@ class VendorService {
       ];
     }
 
+    if (query.paymentStatus && query.paymentStatus !== 'ALL') {
+      filter['payment.status'] = String(query.paymentStatus).toUpperCase();
+    }
+
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
@@ -320,8 +324,14 @@ class VendorService {
       LaundryOrder.countDocuments(filter),
     ]);
 
+    const formattedOrders = orders.map((order) => ({
+      ...order,
+      payment: order.payment || { status: 'UNPAID' },
+      paymentStatus: order.payment?.status || 'UNPAID',
+    }));
+
     return {
-      orders,
+      orders: formattedOrders,
       pagination: {
         total: totalCount,
         page: pageNum,
@@ -364,7 +374,11 @@ class VendorService {
   /**
    * Update order status by vendor (self-service PATCH)
    */
-  async updateVendorOrderStatus(vendor, orderId, { status, note }) {
+  async updateVendorOrderStatus(
+    vendor,
+    orderId,
+    { status, note, paymentStatus, deliveredItemIds, deliveredCount } = {}
+  ) {
     if (!vendor) {
       throw new ApiError(401, 'Vendor authentication required');
     }
@@ -387,6 +401,8 @@ class VendorService {
       'IN_PROCESS',
       'READY_FOR_DELIVERY',
       'DELIVERED',
+      'PARTIALLY_DELIVERED',
+      'PARTIALLY_DONE',
       'REJECTED',
     ];
 
@@ -426,20 +442,110 @@ class VendorService {
     }
 
     const previousStatus = order.status;
-    order.status = status;
+
+    // Handle Item Delivery Statuses
+    if (status === 'DELIVERED') {
+      order.status = 'DELIVERED';
+      if (!order.deliveredAt) order.deliveredAt = new Date();
+      if (Array.isArray(order.items)) {
+        order.items.forEach((it) => {
+          it.status = 'DELIVERED';
+          it.deliveredAt = it.deliveredAt || new Date();
+        });
+      }
+      order.deliveredItemsCount = order.items?.length || 0;
+      order.deliveredAmount = order.totalAmount || 0;
+    } else if (status === 'PARTIALLY_DELIVERED' || status === 'PARTIALLY_DONE') {
+      if (Array.isArray(order.items)) {
+        if (Array.isArray(deliveredItemIds) && deliveredItemIds.length > 0) {
+          const idStrs = deliveredItemIds.map(String);
+          order.items.forEach((it) => {
+            if (idStrs.includes(String(it._id)) || idStrs.includes(String(it.wardrobeItemId))) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+            }
+          });
+        } else if (typeof deliveredCount === 'number' && deliveredCount > 0) {
+          let count = 0;
+          order.items.forEach((it) => {
+            if (count < deliveredCount) {
+              it.status = 'DELIVERED';
+              it.deliveredAt = it.deliveredAt || new Date();
+              count++;
+            }
+          });
+        } else {
+          // If no specific item IDs passed, ensure at least currently delivered or first item marked
+          const alreadyDone = order.items.filter((it) => it.status === 'DELIVERED').length;
+          if (alreadyDone === 0 && order.items.length > 0) {
+            order.items[0].status = 'DELIVERED';
+            order.items[0].deliveredAt = new Date();
+          }
+        }
+
+        const deliveredCountNow = order.items.filter((it) => it.status === 'DELIVERED').length;
+        if (deliveredCountNow === order.items.length) {
+          order.status = 'DELIVERED';
+          if (!order.deliveredAt) order.deliveredAt = new Date();
+        } else {
+          order.status = 'PARTIALLY_DELIVERED';
+        }
+
+        order.deliveredItemsCount = deliveredCountNow;
+        order.deliveredAmount = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .reduce((sum, it) => sum + (it.price || 0), 0);
+      } else {
+        order.status = 'PARTIALLY_DELIVERED';
+      }
+    } else {
+      order.status = status;
+    }
+
+    // Handle payment status update if supplied by vendor (strictly PAID or UNPAID)
+    if (paymentStatus) {
+      const targetOrderStatus = order.status;
+      const payableStatuses = ['DELIVERED', 'PARTIALLY_DELIVERED', 'PARTIALLY_DONE'];
+      if (!payableStatuses.includes(targetOrderStatus)) {
+        throw new ApiError(
+          400,
+          `Payment status cannot be updated because the order is not yet DELIVERED or PARTIALLY_DELIVERED (current status: ${targetOrderStatus})`
+        );
+      }
+
+      if (order.payment?.status === 'PAID') {
+        throw new ApiError(
+          400,
+          'Payment has already been marked as PAID and cannot be changed again'
+        );
+      }
+
+      const upperPayment = String(paymentStatus).trim().toUpperCase();
+      if (['PAID', 'UNPAID'].includes(upperPayment)) {
+        if (!order.payment) order.payment = {};
+        order.payment.status = upperPayment;
+        order.payment.updatedBy = 'VENDOR';
+        if (upperPayment === 'PAID') {
+          order.payment.paidAt = new Date();
+        } else {
+          order.payment.paidAt = null;
+        }
+      }
+    }
+
     order.statusHistory.push({
-      status,
+      status: order.status,
       changedBy: 'VENDOR',
       changedAt: new Date(),
       note: note
         ? String(note).trim()
         : status === 'REJECTED'
         ? `Order rejected by vendor ${vendor.name}`
-        : `Status changed to ${status} by vendor ${vendor.name}`,
+        : `Status changed to ${order.status} by vendor ${vendor.name}`,
     });
 
-    // If marked as DELIVERED and wasn't before, update vendor totalOrdersHandled
-    if (status === 'DELIVERED' && previousStatus !== 'DELIVERED') {
+    // If newly DELIVERED, update vendor totalOrdersHandled
+    if (order.status === 'DELIVERED' && previousStatus !== 'DELIVERED') {
       try {
         const VendorModel = require('./registeredVendor.model');
         await VendorModel.findByIdAndUpdate(vendor._id, {
@@ -452,23 +558,76 @@ class VendorService {
 
     await order.save();
 
-    // Sync wardrobe items status: DELIVERED/REJECTED => ACTIVE, in-progress => INACTIVE
+    // Synchronize transaction record
+    try {
+      const transactionService = require('../order/transaction.service');
+      await transactionService.syncOrderTransaction(order, {
+        status: order.payment?.status || 'UNPAID',
+        updatedBy: 'VENDOR',
+        note: note || `Order updated to ${order.status}`,
+      });
+    } catch (txnErr) {
+      console.warn('[Transaction Sync Notice]:', txnErr.message);
+    }
+
+    // Sync wardrobe items status:
+    // DELIVERED / REJECTED => ALL ACTIVE
+    // PARTIALLY_DELIVERED => delivered items ACTIVE, pending items remain INACTIVE
+    // In-progress => ALL INACTIVE
     const WardrobeItem = require('../wardrobe/wardrobeItem.model');
-    const itemIds = (order.items || []).map((it) => it.wardrobeItemId).filter(Boolean);
-    if (itemIds.length > 0) {
-      if (status === 'DELIVERED' || status === 'REJECTED') {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'ACTIVE' } }
-        );
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      if (order.status === 'DELIVERED' || order.status === 'REJECTED') {
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+      } else if (order.status === 'PARTIALLY_DELIVERED') {
+        const activeIds = order.items
+          .filter((it) => it.status === 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+        const inactiveIds = order.items
+          .filter((it) => it.status !== 'DELIVERED')
+          .map((it) => it.wardrobeItemId)
+          .filter(Boolean);
+
+        if (activeIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: activeIds } },
+            { $set: { status: 'ACTIVE' } }
+          );
+        }
+        if (inactiveIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: inactiveIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       } else if (
-        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(status)
+        ['PENDING_PICKUP', 'PICKED_UP', 'IN_PROCESS', 'READY_FOR_DELIVERY'].includes(order.status)
       ) {
-        await WardrobeItem.updateMany(
-          { _id: { $in: itemIds } },
-          { $set: { status: 'INACTIVE' } }
-        );
+        const allItemIds = order.items.map((it) => it.wardrobeItemId).filter(Boolean);
+        if (allItemIds.length > 0) {
+          await WardrobeItem.updateMany(
+            { _id: { $in: allItemIds } },
+            { $set: { status: 'INACTIVE' } }
+          );
+        }
       }
+    }
+
+    // Regenerate work order PDF with up-to-date partial delivery & payment details
+    try {
+      const laundryPdfService = require('../order/laundry/laundryPdf.service');
+      const pdfResult = await laundryPdfService.generateWorkOrderPdf(order);
+      order.pdfUrl = pdfResult.fileUrl;
+      order.pdfPath = pdfResult.filePath;
+      await order.save();
+    } catch (pdfErr) {
+      console.warn('[PDF Regeneration Notice]:', pdfErr.message);
     }
 
     // Dispatch FCM status notification to the customer

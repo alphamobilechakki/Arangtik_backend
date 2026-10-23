@@ -194,7 +194,7 @@ class LaundryPdfService {
       doc.rect(rightColX, cardY, colWidth, cardHeight).stroke(cardBorder);
 
       doc.fillColor(primaryColor).fontSize(9.5).font('Helvetica-Bold');
-      doc.text('VENDOR DETAILS & STATUS', rightColX + 12, cardY + 12);
+      doc.text('VENDOR DETAILS & PARTNER INFO', rightColX + 12, cardY + 12);
       doc.strokeColor(cardBorder).moveTo(rightColX + 12, cardY + 25).lineTo(rightColX + 242, cardY + 25).stroke();
 
       doc.fillColor(darkColor).fontSize(11).font('Helvetica-Bold');
@@ -229,22 +229,23 @@ class LaundryPdfService {
       }
 
       // 4. Master Garments Summary Checklist & Page Index
-      doc.fillColor(darkColor).fontSize(11.5).font('Helvetica-Bold');
+      doc.fillColor(darkColor).fontSize(11).font('Helvetica-Bold');
       doc.text('ORDER SUMMARY & GARMENT INDEX', 36, tableStartY);
 
-      const tableTop = tableStartY + 16;
-      const rowHeight = 30;
+      const tableTop = tableStartY + 15;
+      const rowHeight = 22;
 
-      // Table Header Row
-      doc.rect(36, tableTop, 523, 24).fill(primaryColor);
-      doc.fillColor('#FFFFFF').fontSize(8.5).font('Helvetica-Bold');
-      doc.text('#', 44, tableTop + 7, { width: 25 });
-      doc.text('GARMENT NAME', 75, tableTop + 7, { width: 230 });
-      doc.text('CATEGORY', 310, tableTop + 7, { width: 100 });
-      doc.text('SERVICE REQUESTED', 415, tableTop + 7, { width: 95 });
-      doc.text('PAGE', 515, tableTop + 7, { width: 35, align: 'right' });
+      // Table Header Row (No status column)
+      doc.rect(36, tableTop, 523, 20).fill(primaryColor);
+      doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold');
+      doc.text('#', 42, tableTop + 6, { width: 22 });
+      doc.text('GARMENT NAME', 68, tableTop + 6, { width: 195 });
+      doc.text('CATEGORY', 270, tableTop + 6, { width: 85 });
+      doc.text('SERVICE', 360, tableTop + 6, { width: 95 });
+      doc.text('PRICE', 460, tableTop + 6, { width: 50, align: 'right' });
+      doc.text('PAGE', 515, tableTop + 6, { width: 35, align: 'right' });
 
-      let currentY = tableTop + 24;
+      let currentY = tableTop + 20;
 
       if (Array.isArray(order.items)) {
         order.items.forEach((item, index) => {
@@ -254,47 +255,102 @@ class LaundryPdfService {
           doc.rect(36, currentY, 523, rowHeight).fill(isEven ? '#FFFFFF' : '#F8FAFC');
           doc.rect(36, currentY, 523, rowHeight).stroke(cardBorder);
 
-          doc.fillColor(mutedColor).fontSize(8.5).font('Helvetica');
-          doc.text(String(index + 1), 44, currentY + 9, { width: 25 });
+          doc.fillColor(mutedColor).fontSize(8).font('Helvetica');
+          doc.text(String(index + 1), 42, currentY + 6, { width: 22 });
 
-          doc.fillColor(darkColor).fontSize(9.5).font('Helvetica-Bold');
-          doc.text(item.name || 'Garment Item', 75, currentY + 9, {
-            width: 230,
+          doc.fillColor(darkColor).fontSize(8.5).font('Helvetica-Bold');
+          doc.text(item.name || 'Garment Item', 68, currentY + 6, {
+            width: 195,
             ellipsis: true,
           });
 
-          doc.fillColor(mutedColor).fontSize(8.5).font('Helvetica');
-          doc.text(item.category || 'General', 310, currentY + 9, {
-            width: 100,
+          doc.fillColor(mutedColor).fontSize(8).font('Helvetica');
+          doc.text(item.category || 'General', 270, currentY + 6, {
+            width: 85,
             ellipsis: true,
           });
 
           const serviceName = item.serviceName || (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
-          doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold');
-          doc.text(serviceName, 415, currentY + 9, { width: 95, ellipsis: true });
+          doc.fillColor(primaryColor).fontSize(8).font('Helvetica-Bold');
+          doc.text(serviceName, 360, currentY + 6, { width: 95, ellipsis: true });
 
-          doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold');
-          doc.text(`P. ${itemPageNumber}`, 515, currentY + 9, { width: 35, align: 'right' });
+          // Item Price
+          doc.fillColor(darkColor).fontSize(8.5).font('Helvetica-Bold');
+          doc.text(`₹${item.price || 0}`, 460, currentY + 6, { width: 50, align: 'right' });
+
+          doc.fillColor(primaryColor).fontSize(8).font('Helvetica-Bold');
+          doc.text(`P. ${itemPageNumber}`, 515, currentY + 6, { width: 35, align: 'right' });
 
           currentY += rowHeight;
         });
       }
 
-      // Page 1 Footer Note
-      const page1FooterY = Math.max(currentY + 20, 740);
-      doc.rect(36, page1FooterY, 523, 40).fill('#EEF2FF');
-      doc.rect(36, page1FooterY, 523, 40).stroke('#C7D2FE');
+      // 5. Master Financial & Billing Breakdown Card (No status sections)
+      const billingCardY = currentY + 12;
+      const billingCardHeight = 84;
+      doc.rect(36, billingCardY, 523, billingCardHeight).fill('#F8FAFC');
+      doc.rect(36, billingCardY, 523, billingCardHeight).stroke(cardBorder);
 
-      doc.fillColor(primaryDark).fontSize(8.5).font('Helvetica-Bold');
-      doc.text('📸 DEDICATED FULL-PAGE GARMENT PROFILES ATTACHED:', 46, page1FooterY + 8);
-      doc.fillColor(primaryColor).fontSize(8).font('Helvetica');
+      // Card Header
+      doc.rect(36, billingCardY, 523, 18).fill(primaryColor);
+      doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold');
+      doc.text('ORDER BILLING & FINANCIAL CALCULATION', 46, billingCardY + 5);
+
+      const r1 = billingCardY + 25;
+      const r2 = billingCardY + 42;
+      const r3 = billingCardY + 59;
+
+      // Left Column: Order Metadata
+      doc.fillColor(darkColor).fontSize(8).font('Helvetica-Bold');
+      doc.text('Order Number:', 46, r1);
+      doc.fillColor(primaryDark).font('Helvetica-Bold');
+      doc.text(order.orderNumber, 140, r1);
+
+      doc.fillColor(darkColor).font('Helvetica-Bold');
+      doc.text('Service Category:', 46, r2);
+      doc.fillColor(darkColor).font('Helvetica');
+      doc.text(order.orderCategory || 'Laundry', 140, r2);
+
+      doc.fillColor(darkColor).font('Helvetica-Bold');
+      doc.text('Total Clothes:', 46, r3);
+      doc.fillColor(mutedColor).font('Helvetica');
+      doc.text(`${totalItems} Garments`, 140, r3);
+
+      // Divider Line between columns
+      doc.strokeColor(cardBorder).moveTo(275, billingCardY + 20).lineTo(275, billingCardY + 80).stroke();
+
+      // Right Column: Financial Calculation
+      const col2X = 285;
+      doc.fillColor(darkColor).fontSize(8).font('Helvetica-Bold');
+      doc.text('Items Subtotal:', col2X, r1);
+      doc.fillColor(darkColor).font('Helvetica');
+      doc.text(`₹${order.subtotal || order.totalAmount || 0}`, col2X + 170, r1, { width: 95, align: 'right' });
+
+      doc.fillColor(darkColor).font('Helvetica-Bold');
+      doc.text('Delivery & Handling:', col2X, r2);
+      doc.fillColor(darkColor).font('Helvetica');
+      doc.text(`₹${order.deliveryFee || 0}`, col2X + 170, r2, { width: 95, align: 'right' });
+
+      doc.fillColor(darkColor).font('Helvetica-Bold');
+      doc.text('Total Order Amount:', col2X, r3);
+      doc.fillColor(primaryDark).fontSize(9.5).font('Helvetica-Bold');
+      doc.text(`₹${order.totalAmount || 0}`, col2X + 170, r3, { width: 95, align: 'right' });
+
+      // Page 1 Footer Note
+      const page1FooterY = Math.max(billingCardY + billingCardHeight + 8, 775);
+      doc.rect(36, page1FooterY, 523, 30).fill('#EEF2FF');
+      doc.rect(36, page1FooterY, 523, 30).stroke('#C7D2FE');
+
+      doc.fillColor(primaryDark).fontSize(8).font('Helvetica-Bold');
+      doc.text('📸 DEDICATED FULL-PAGE GARMENT PROFILES ATTACHED:', 44, page1FooterY + 6);
+      doc.fillColor(primaryColor).fontSize(7.5).font('Helvetica');
       doc.text(
-        'Each selected dress has a dedicated full page with large clear photo, dress name, and service instructions on Pages 2 to ' +
+        'Each selected dress has a dedicated full page with large photo, service instructions & rate on Pages 2 to ' +
           totalPages +
           '.',
-        46,
-        page1FooterY + 20,
-        { width: 500 }
+        44,
+        page1FooterY + 16,
+        { width: 505 }
       );
 
       // =========================================================================
@@ -381,17 +437,21 @@ class LaundryPdfService {
 
           doc.strokeColor(cardBorder).moveTo(48, detailsCardY + 54).lineTo(547, detailsCardY + 54).stroke();
 
-          // Service Requested Highlight Banner
+          // Service Requested & Price Highlight Banner
           const serviceY = detailsCardY + 64;
           doc.rect(48, serviceY, 499, 40).fill('#EEF2FF');
           doc.rect(48, serviceY, 499, 40).stroke(primaryColor);
 
-          doc.fillColor(primaryColor).fontSize(9).font('Helvetica-Bold');
-          doc.text('SERVICE REQUESTED:', 60, serviceY + 14);
+          doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold');
+          doc.text('SERVICE & RATE:', 60, serviceY + 14);
 
           const serviceName = item.serviceName || (item.serviceType || 'WASH_AND_IRON').replace(/_/g, ' ');
-          doc.fillColor(primaryDark).fontSize(12).font('Helvetica-Bold');
-          doc.text(serviceName, 185, serviceY + 12);
+          doc.fillColor(primaryDark).fontSize(10.5).font('Helvetica-Bold');
+          doc.text(serviceName, 160, serviceY + 13, { width: 155, ellipsis: true });
+
+          // Rate
+          doc.fillColor(darkColor).fontSize(11).font('Helvetica-Bold');
+          doc.text(`Rate: ₹${item.price || 0}`, 350, serviceY + 13, { width: 180, align: 'right' });
 
           // Special Instructions Alert Box
           const itemNoteY = serviceY + 50;

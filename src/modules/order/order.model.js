@@ -77,6 +77,16 @@ const orderItemSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    status: {
+      type: String,
+      enum: ['PENDING', 'DELIVERED', 'RETURNED'],
+      default: 'PENDING',
+      index: true,
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
   },
   { _id: true }
 );
@@ -186,19 +196,24 @@ const orderSchema = new mongoose.Schema(
       default: 0,
     },
     payment: {
-      method: {
-        type: String,
-        enum: ['COD', 'ONLINE', 'WALLET', 'UPI'],
-        default: 'COD',
-      },
       status: {
         type: String,
-        enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
-        default: 'PENDING',
+        enum: ['UNPAID', 'PAID'],
+        default: 'UNPAID',
+        index: true,
       },
       transactionId: {
         type: String,
         default: null,
+      },
+      paidAt: {
+        type: Date,
+        default: null,
+      },
+      updatedBy: {
+        type: String,
+        enum: ['USER', 'VENDOR', 'ADMIN', 'SYSTEM'],
+        default: 'SYSTEM',
       },
     },
     status: {
@@ -209,10 +224,27 @@ const orderSchema = new mongoose.Schema(
         'IN_PROCESS',
         'READY_FOR_DELIVERY',
         'DELIVERED',
+        'PARTIALLY_DELIVERED',
+        'PARTIALLY_DONE',
         'CANCELLED',
         'REJECTED',
       ],
       default: 'PENDING_PICKUP',
+    },
+    deliveredItemsCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    deliveredAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    partialDeliveryNotes: {
+      type: String,
+      trim: true,
+      default: '',
     },
     statusHistory: [
       {
@@ -298,6 +330,11 @@ orderSchema.pre('save', function (next) {
   next();
 });
 
+// Universal Payment Status Virtual
+orderSchema.virtual('paymentStatus').get(function () {
+  return this.payment?.status || 'UNPAID';
+});
+
 // High-Performance Universal Query Indexes
 orderSchema.index({ orderCategory: 1 });
 orderSchema.index({ orderCategory: 1, createdAt: -1 });
@@ -307,6 +344,8 @@ orderSchema.index({ vendorPhone: 1, createdAt: -1 });
 orderSchema.index({ vendorPhone: 1, orderCategory: 1, createdAt: -1 });
 orderSchema.index({ vendorId: 1, orderCategory: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
+orderSchema.index({ vendorPhone: 1, 'payment.status': 1 });
+orderSchema.index({ userId: 1, 'payment.status': 1 });
 
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema, 'orders');
 

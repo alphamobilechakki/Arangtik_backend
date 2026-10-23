@@ -687,7 +687,8 @@ Full control over customer work orders. Supports direct category indexing (`orde
   - `limit` *(number, default 10, max 100)*
   - `search` *(string, searches orderNumber, userPhone, userName, vendorPhone, vendorName)*
   - `category` *(string, e.g. `'Dhobi'`, `'Tailor'`, `'Doodh Wala'`, `'ALL'`)*
-  - `status` *(string, `'ALL'` | `'PENDING_PICKUP'` | `'PICKED_UP'` | `'IN_PROCESS'` | `'READY_FOR_DELIVERY'` | `'DELIVERED'` | `'CANCELLED'` | `'REJECTED'`)*
+  - `status` *(string, `'ALL'` | `'PENDING_PICKUP'` | `'PICKED_UP'` | `'IN_PROCESS'` | `'READY_FOR_DELIVERY'` | `'PARTIALLY_DELIVERED'` | `'DELIVERED'` | `'CANCELLED'` | `'REJECTED'`)*
+  - `paymentStatus` *(string, `'ALL'` | `'PAID'` | `'UNPAID'`)*
   - `serviceType` *(string, `'ALL'` | `'WASH'` | `'IRON'` | `'DRY_CLEAN'` | `'WASH_AND_IRON'`)*
   - `isRegisteredVendor` *(boolean, `'true'` | `'false'`)*
   - `startDate`, `endDate` *(ISO date strings)*
@@ -699,21 +700,31 @@ Full control over customer work orders. Supports direct category indexing (`orde
 ### 5.3 Work Order Details & Garments Breakdown
 - **Method:** `GET`
 - **Path:** `/api/admin/orders/:id`
-- Returns full snapshot including user info, vendor info, item thumbnails, attributes (fabric, color, brand), and timestamped audit history.
+- Returns full snapshot including user info, vendor info, item thumbnails, attributes (fabric, color, brand), timestamped audit history, binary payment status (`payment.status`: `'UNPAID'` or `'PAID'`), partial delivery details (`deliveredItemsCount`, `deliveredAmount`, individual item `status: 'DELIVERED' | 'PENDING'`), and dynamically computed PDF slip link (`pdfUrl`).
 
 ---
 
 ### 5.4 Admin Status Override
-Allows administrator to advance or intervene on an order status.
-- Automatically syncs connected closet garments (`ACTIVE`/`INACTIVE`).
+Allows administrator to advance or intervene on an order status (including Partial Delivery).
+- Automatically syncs connected closet garments (`ACTIVE`/`INACTIVE`) — for partial delivery, selectively restores only the delivered clothes to `ACTIVE`.
+- Automatically synchronizes ledger transaction amount with delivered clothes.
+- Automatically regenerates official work order PDF with financial billing breakdown.
 - Automatically dispatches FCM push notification to the customer mobile app.
 - **Method:** `PATCH`
 - **Path:** `/api/admin/orders/:id/status`
-- **Request Body:**
+- **Request Body (Full Delivery):**
 ```json
 {
   "status": "DELIVERED",
   "note": "Admin confirmed order handover"
+}
+```
+- **Request Body (Partial Delivery):**
+```json
+{
+  "status": "PARTIALLY_DELIVERED",
+  "note": "Admin marked partial delivery (3 of 5 garments)",
+  "deliveredItemIds": ["67b12345abcdef0123456789", "67c11223344556677889900a"]
 }
 ```
 

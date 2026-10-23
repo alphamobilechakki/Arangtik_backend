@@ -22,6 +22,11 @@ router.route('/orders/:id')
 // Status Update (PATCH per Arangtik Rule 4)
 router.patch('/orders/:id/status', laundryController.updateOrderStatus);
 
+// Payment Status Update (PATCH per Arangtik Rule 4)
+const transactionController = require('../transaction.controller');
+const { validateUpdatePaymentStatus } = require('../transaction.validation');
+router.patch('/orders/:id/payment', validateUpdatePaymentStatus, transactionController.updateUserOrderPayment);
+
 // Re-send WhatsApp PDF to Vendor
 router.post('/orders/:id/resend-whatsapp', laundryController.resendWhatsApp);
 
