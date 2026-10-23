@@ -895,10 +895,24 @@ Recommends harmonious outfit combinations strictly using the user's available cl
 
 ---
 
-### 9.1 Get All Active Vendor Categories
+### 9.1 Get Vendor Categories (With Dynamic Storage Resolution)
+Fetches vendor categories. Supports automatic storage scoping (`storeType`, `wardrobeId`, `itemId`) so the mobile app only displays services relevant to the active storage container (e.g., Wardrobe / Almari clothes vs. Kitchen appliances), eliminating the need for the customer to manually select a category!
+
 - **Method:** `GET`
 - **Path:** `/api/categories` *(alias: `/api/vendor/categories`)*
+- **Direct Storage Routes:**
+  - `GET /api/categories/store-type/:storeType` *(e.g. `GET /api/categories/store-type/WARDROBE`)*
+  - `GET /api/categories/by-wardrobe/:wardrobeId` *(Auto-fetches categories assigned to that wardrobe's `storeType`)*
 - **Auth Required:** `No (Public)`
+- **Query Parameters (Optional):**
+  | Parameter | Type | Required | Default | Description |
+  |---|---|:---:|---|---|
+  | `storeType` | String | No | - | Storage filter (`WARDROBE`, `KITCHEN`, `ELECTRONICS`, `HOUSEHOLD`, `VALUABLES`, `OTHER`). |
+  | `wardrobeId` | String (ObjectId) | No | - | Resolves the wardrobe container's `storeType` and returns matching categories. |
+  | `itemId` | String (ObjectId) | No | - | Resolves the dress/item's wardrobe container `storeType` and returns matching categories. |
+
+> [!TIP]
+> **Zero Customer Friction:** When a user initiates a service or laundry work order from their Almari, call `GET /api/categories?storeType=WARDROBE` or `GET /api/categories/by-wardrobe/:wardrobeId`. The app immediately receives the assigned category (e.g. *Washerman / Laundry*) without forcing the user to pick one manually!
 
 #### Success Response (`200 OK`)
 ```json
@@ -914,6 +928,9 @@ Recommends harmonious outfit combinations strictly using the user's available cl
       "icon": "🧺",
       "description": "Laundry, Dry Cleaning & Garment Care",
       "imageUrl": "http://localhost:8083/uploads/category_washerman.png",
+      "storeTypes": [
+        "WARDROBE"
+      ],
       "sortOrder": 1,
       "services": [
         {
@@ -939,6 +956,10 @@ Recommends harmonious outfit combinations strictly using the user's available cl
       "icon": "🥛",
       "description": "Fresh Milk & Dairy Delivery",
       "imageUrl": "http://localhost:8083/uploads/category_dairy.png",
+      "storeTypes": [
+        "HOUSEHOLD",
+        "OTHER"
+      ],
       "sortOrder": 2
     }
   ]
@@ -1656,8 +1677,8 @@ export const addGarment = async (fileUri: string, wardrobeId?: string, forceAdd 
 - [ ] **Token Storage:** Store JWT in secure hardware keychain (`flutter_secure_storage` / `expo-secure-store` / `react-native-keychain`).
 - [ ] **HTTP Method Rule:** Strictly use `PATCH` for any update endpoint (e.g. `PATCH /api/auth/profile`, `PATCH /api/wardrobe/items/:id`). **Never use `PUT`**.
 - [ ] **Inactive Garment Guardrail:** Any dress with `status === 'INACTIVE'` is currently in laundry. Disable selection for outfit styling or new laundry orders until returned.
-- [ ] **Duplicate Handling:** When `duplicateDetected === true`, display the side-by-side comparison modal with a prompt: *"Same Dress"* (close) vs *"Different Dress"* (re-call with `forceAdd: true`).
-- [ ] **Live Rates:** Always fetch categories from `GET /api/categories` and vendor rates from `GET /api/laundry/vendors/lookup?phone=...` without hardcoding service prices.
+- [ ] **Dynamic Categories & Storage Scoping:** When loading services for a storage unit (e.g. Wardrobe / Almari), fetch categories with storage scope via `GET /api/categories?storeType=WARDROBE` or `GET /api/categories/by-wardrobe/:wardrobeId` so relevant categories are auto-selected without requiring manual customer selection.
+- [ ] **Live Rates:** Always fetch categories dynamically and vendor rates from `GET /api/laundry/vendors/lookup?phone=...` without hardcoding service prices.
 - [ ] **FCM Registration:** Pass `fcmToken` in `POST /api/auth/verify-otp` on login, and call `POST /api/notifications/device-token` on token refresh.
 - [ ] **FCM Deep Linking:** Navigate based on `data.type` (`LAUNDRY_ORDER_STATUS`, `GARMENT_3D_COMPLETED`, `WARDROBE_DIGITIZED`).
 - [ ] **Media URLs:** Resolve all image and 3D model paths using the `resolveMediaUrl()` utility function.

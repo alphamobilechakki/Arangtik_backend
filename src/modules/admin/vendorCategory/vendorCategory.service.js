@@ -9,7 +9,18 @@ class VendorCategoryService {
    * Create a new vendor category
    */
   async createCategory(payload = {}, file = null) {
-    const { name, code, icon, image, imageUrl, description, sortOrder, isActive } = payload;
+    const {
+      name,
+      code,
+      icon,
+      image,
+      imageUrl,
+      description,
+      sortOrder,
+      isActive,
+      storeTypes,
+      storeType,
+    } = payload;
 
     if (!name || !String(name).trim()) {
       throw new ApiError(400, 'Vendor category name is required');
@@ -31,6 +42,23 @@ class VendorCategoryService {
       finalImageUrl = formatUploadUrl(finalImageUrl);
     }
 
+    // Normalize storeTypes (default to ['WARDROBE'])
+    const rawStores = storeTypes !== undefined ? storeTypes : storeType;
+    let finalStoreTypes = ['WARDROBE'];
+    if (rawStores !== undefined && rawStores !== null) {
+      const list = Array.isArray(rawStores)
+        ? rawStores
+        : typeof rawStores === 'string'
+        ? rawStores.split(',').map((s) => s.trim())
+        : [];
+      const valid = list
+        .map((s) => String(s).trim().toUpperCase())
+        .filter((s) => VendorCategory.ALLOWED_STORE_TYPES.includes(s));
+      if (valid.length > 0) {
+        finalStoreTypes = [...new Set(valid)];
+      }
+    }
+
     const category = await VendorCategory.create({
       name: trimmedName,
       code: code ? String(code).trim().toUpperCase() : undefined,
@@ -40,21 +68,75 @@ class VendorCategoryService {
       description: description ? String(description).trim() : '',
       sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
+      storeTypes: finalStoreTypes,
     });
 
     return category;
   }
 
   /**
-   * Get all categories with optional inactive filter
+   * Get all categories with optional inactive filter and storage type filtering
    */
   async getAllCategories(options = {}) {
-    const { includeInactive = false } = options;
+    const { includeInactive = false, storeType, wardrobeId, itemId, itemIds } = options;
+
+    let targetStoreType = storeType ? String(storeType).trim().toUpperCase() : null;
+
+    // 1. Resolve storeType from wardrobeId if provided and targetStoreType not directly provided
+    if (!targetStoreType && wardrobeId) {
+      try {
+        const Wardrobe = require('../../wardrobe/wardrobe.model');
+        const wardrobe = await Wardrobe.findById(wardrobeId).select('storeType');
+        if (wardrobe && wardrobe.storeType) {
+          targetStoreType = String(wardrobe.storeType).trim().toUpperCase();
+        }
+      } catch (err) {
+        // Fallback silently if invalid ObjectId or not found
+      }
+    }
+
+    // 2. Resolve storeType from itemId or itemIds
+    if (!targetStoreType && (itemId || itemIds)) {
+      try {
+        const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
+        const Wardrobe = require('../../wardrobe/wardrobe.model');
+        const rawTargetId = itemId || (Array.isArray(itemIds) ? itemIds[0] : String(itemIds).split(',')[0]);
+        const targetId = String(rawTargetId).trim();
+        if (targetId) {
+          const item = await WardrobeItem.findById(targetId).select('wardrobeId');
+          if (item && item.wardrobeId) {
+            const wardrobe = await Wardrobe.findById(item.wardrobeId).select('storeType');
+            if (wardrobe && wardrobe.storeType) {
+              targetStoreType = String(wardrobe.storeType).trim().toUpperCase();
+            }
+          }
+        }
+      } catch (err) {
+        // Fallback silently
+      }
+    }
 
     const query = includeInactive ? {} : { isActive: true };
+
+    if (targetStoreType) {
+      if (targetStoreType === 'WARDROBE') {
+        // For WARDROBE, also match legacy records where storeTypes is empty or undefined
+        query.$or = [
+          { storeTypes: 'WARDROBE' },
+          { storeTypes: { $exists: false } },
+          { storeTypes: { $size: 0 } },
+        ];
+      } else {
+        query.storeTypes = targetStoreType;
+      }
+    }
+
     const categories = await VendorCategory.find(query).sort({ sortOrder: 1, name: 1, createdAt: 1 });
     return categories.map((cat) => {
       const doc = cat.toObject ? cat.toObject() : { ...cat };
+      if (!doc.storeTypes || doc.storeTypes.length === 0) {
+        doc.storeTypes = ['WARDROBE'];
+      }
       if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
       if (doc.image) doc.image = formatUploadUrl(doc.image);
       const finalImg = doc.imageUrl || doc.image;
@@ -86,6 +168,9 @@ class VendorCategoryService {
     }
 
     const doc = category.toObject ? category.toObject() : { ...category };
+    if (!doc.storeTypes || doc.storeTypes.length === 0) {
+      doc.storeTypes = ['WARDROBE'];
+    }
     if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
     if (doc.image) doc.image = formatUploadUrl(doc.image);
     const finalImg = doc.imageUrl || doc.image;
@@ -159,6 +244,20 @@ class VendorCategoryService {
     if (updateData.description !== undefined) category.description = String(updateData.description).trim();
     if (updateData.sortOrder !== undefined) category.sortOrder = Number(updateData.sortOrder);
     if (updateData.isActive !== undefined) category.isActive = Boolean(updateData.isActive);
+
+    if (updateData.storeTypes !== undefined || updateData.storeType !== undefined) {
+      const rawStores =
+        updateData.storeTypes !== undefined ? updateData.storeTypes : updateData.storeType;
+      const list = Array.isArray(rawStores)
+        ? rawStores
+        : typeof rawStores === 'string'
+        ? rawStores.split(',').map((s) => s.trim())
+        : [];
+      const valid = list
+        .map((s) => String(s).trim().toUpperCase())
+        .filter((s) => VendorCategory.ALLOWED_STORE_TYPES.includes(s));
+      category.storeTypes = valid.length > 0 ? [...new Set(valid)] : ['WARDROBE'];
+    }
 
     await category.save();
 

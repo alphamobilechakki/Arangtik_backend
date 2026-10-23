@@ -11,6 +11,8 @@ const {
 // ==========================================
 // 1. Vendor Category Read Routes (Public & Admin)
 // ==========================================
+router.get('/store-type/:storeType', vendorCategoryController.getCategoriesByStoreType);
+router.get('/by-wardrobe/:wardrobeId', vendorCategoryController.getCategoriesByWardrobe);
 router.get('/', vendorCategoryController.getAllCategories);
 router.get('/:id', vendorCategoryController.getCategoryById);
 

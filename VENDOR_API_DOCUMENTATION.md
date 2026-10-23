@@ -90,6 +90,10 @@ Fetches all trade categories so the vendor app can render category selection pil
 - **Method:** `GET`
 - **Path:** `/api/vendor/categories` *(aliases: `/api/vendor/auth/categories`, `/api/categories`)*
 - **Auth Required:** `No (Public)`
+- **Query Parameters (Optional):**
+  | Parameter | Type | Required | Description |
+  |---|---|:---:|---|
+  | `storeType` | String | No | Filter by storage domain (e.g. `WARDROBE`, `KITCHEN`, `ELECTRONICS`, `HOUSEHOLD`, `VALUABLES`, `OTHER`). |
 
 #### Success Response (`200 OK`)
 ```json
@@ -105,6 +109,7 @@ Fetches all trade categories so the vendor app can render category selection pil
       "icon": "🧺",
       "description": "Laundry, Dry Cleaning & Garment Care",
       "imageUrl": "http://localhost:8083/uploads/category_washerman.png",
+      "storeTypes": ["WARDROBE"],
       "sortOrder": 1,
       "services": [
         {

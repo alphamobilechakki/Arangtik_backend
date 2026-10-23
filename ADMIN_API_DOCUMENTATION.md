@@ -151,12 +151,14 @@ Creates a new vendor service category in the unified database.
     "icon": "🚗",
     "description": "Doorstep vehicle wash and auto detailing",
     "sortOrder": 10,
-    "isActive": true
+    "isActive": true,
+    "storeTypes": ["OTHER"]
   }
   ```
   | Field | Type | Required | Description |
   |---|---|:---:|---|
-  | `name` | String | **Yes** | Unique category name (e.g. `"Car Wash"`, `"Maid Service"`). Case-insensitive unique check. |
+  | `name` | String | **Yes** | Unique category name (e.g. `"Car Wash"`, `"Dhobi"`). Case-insensitive unique check. |
+  | `storeTypes` | Array[String] / String | No | Target storages this category applies to (default: `["WARDROBE"]`). Supported: `WARDROBE`, `KITCHEN`, `ELECTRONICS`, `HOUSEHOLD`, `VALUABLES`, `OTHER`. |
   | `icon` | String | No | Emoji or icon identifier (default: `"🧺"`). |
   | `description`| String | No | Brief explanation of the service (max 300 chars). |
   | `sortOrder` | Number | No | Sort order in mobile app selection list (default: `0`). Lower numbers appear first. |
@@ -176,13 +178,14 @@ Creates a new vendor service category in the unified database.
       "description": "Doorstep vehicle wash and auto detailing",
       "isActive": true,
       "sortOrder": 10,
+      "storeTypes": ["OTHER"],
       "createdAt": "2026-10-17T11:00:00.000Z",
       "updatedAt": "2026-10-17T11:00:00.000Z"
     }
   }
   ```
 - **Error Responses:**
-  - `400 Bad Request`: Missing or empty `name`.
+  - `400 Bad Request`: Missing or empty `name`, or invalid storage type in `storeTypes`.
   - `401 Unauthorized`: Missing admin credentials.
   - `403 Forbidden`: Insufficient permissions or invalid API key.
   - `409 Conflict`: Category with this name already exists.
@@ -190,13 +193,19 @@ Creates a new vendor service category in the unified database.
 ---
 
 ### 2.2 List All Categories
-Fetches all categories. Admin panel can pass `?includeInactive=true` to view both active and deactivated categories.
+Fetches all categories. Supports storage type filtering (`storeType`, `wardrobeId`, `itemId`) so user/frontend flows only get the categories assigned to that storage (e.g. Wardrobe vs Kitchen).
 
 - **Method:** `GET`
-- **Path:** `/api/admin/vendor-categories`
+- **Path:** `/api/admin/vendor-categories` *(Also accessible publicly via `/api/categories`)*
+- **Storage Direct Routes:**
+  - `GET /api/categories/store-type/:storeType` (e.g., `/api/categories/store-type/WARDROBE`, `/api/categories/store-type/KITCHEN`)
+  - `GET /api/categories/by-wardrobe/:wardrobeId`
 - **Query Parameters:**
   | Parameter | Type | Required | Default | Description |
   |---|---|:---:|---|---|
+  | `storeType` | String | No | - | Storage filter (`WARDROBE`, `KITCHEN`, `ELECTRONICS`, etc.). Only returns categories assigned to this storage. |
+  | `wardrobeId` | String (ObjectId) | No | - | Resolves wardrobe storage type and returns assigned categories. |
+  | `itemId` | String (ObjectId) | No | - | Resolves garment/item's wardrobe storage type and returns assigned categories. |
   | `includeInactive` | Boolean | No | `false` | When `true`, returns inactive/deactivated categories too. |
 
 - **Response (200 OK):**

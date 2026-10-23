@@ -14,14 +14,59 @@ class VendorCategoryController {
   });
 
   /**
-   * @desc    Get all vendor categories (public or admin)
-   * @route   GET /api/admin/vendor-categories
+   * @desc    Get all vendor categories (public or admin) with optional storage filtering
+   * @route   GET /api/admin/vendor-categories, GET /api/categories
    * @access  Public / Admin
    */
   getAllCategories = asyncHandler(async (req, res) => {
     const includeInactive = req.query.includeInactive === 'true';
-    const categories = await vendorCategoryService.getAllCategories({ includeInactive });
+    const { storeType, wardrobeId, itemId, itemIds } = req.query;
+    const categories = await vendorCategoryService.getAllCategories({
+      includeInactive,
+      storeType,
+      wardrobeId,
+      itemId,
+      itemIds,
+    });
     return ApiResponse.success(res, categories, 'Vendor categories retrieved successfully');
+  });
+
+  /**
+   * @desc    Get categories filtered by storage type (e.g. WARDROBE, KITCHEN)
+   * @route   GET /api/categories/store-type/:storeType
+   * @access  Public / Admin
+   */
+  getCategoriesByStoreType = asyncHandler(async (req, res) => {
+    const includeInactive = req.query.includeInactive === 'true';
+    const { storeType } = req.params;
+    const categories = await vendorCategoryService.getAllCategories({
+      includeInactive,
+      storeType,
+    });
+    return ApiResponse.success(
+      res,
+      categories,
+      `Categories for storage "${storeType}" retrieved successfully`
+    );
+  });
+
+  /**
+   * @desc    Get categories automatically assigned to a wardrobe's storage type
+   * @route   GET /api/categories/by-wardrobe/:wardrobeId
+   * @access  Public / Admin
+   */
+  getCategoriesByWardrobe = asyncHandler(async (req, res) => {
+    const includeInactive = req.query.includeInactive === 'true';
+    const { wardrobeId } = req.params;
+    const categories = await vendorCategoryService.getAllCategories({
+      includeInactive,
+      wardrobeId,
+    });
+    return ApiResponse.success(
+      res,
+      categories,
+      `Categories for wardrobe "${wardrobeId}" retrieved successfully`
+    );
   });
 
   /**

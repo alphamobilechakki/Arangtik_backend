@@ -110,6 +110,12 @@ const vendorCategorySchema = new mongoose.Schema(
       type: [serviceSubSchema],
       default: [],
     },
+    storeTypes: {
+      type: [String],
+      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'VALUABLES', 'OTHER'],
+      default: ['WARDROBE'],
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -118,7 +124,16 @@ const vendorCategorySchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate normalized code before validation if not specified
+const ALLOWED_STORE_TYPES = [
+  'WARDROBE',
+  'KITCHEN',
+  'ELECTRONICS',
+  'HOUSEHOLD',
+  'VALUABLES',
+  'OTHER',
+];
+
+// Auto-generate normalized code before validation if not specified & normalize storeTypes
 vendorCategorySchema.pre('validate', function (next) {
   if (!this.code && this.name) {
     this.code = this.name
@@ -127,6 +142,23 @@ vendorCategorySchema.pre('validate', function (next) {
       .replace(/[^A-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
   }
+
+  // Normalize storeTypes to valid uppercase enum array
+  if (Array.isArray(this.storeTypes)) {
+    const cleaned = this.storeTypes
+      .map((s) => String(s).trim().toUpperCase())
+      .filter((s) => ALLOWED_STORE_TYPES.includes(s));
+    this.storeTypes = cleaned.length > 0 ? [...new Set(cleaned)] : ['WARDROBE'];
+  } else if (typeof this.storeTypes === 'string') {
+    const list = this.storeTypes
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => ALLOWED_STORE_TYPES.includes(s));
+    this.storeTypes = list.length > 0 ? [...new Set(list)] : ['WARDROBE'];
+  } else {
+    this.storeTypes = ['WARDROBE'];
+  }
+
   next();
 });
 
@@ -146,6 +178,10 @@ vendorCategorySchema.pre('save', function (next) {
   next();
 });
 
-module.exports =
+const VendorCategory =
   mongoose.models.VendorCategory ||
   mongoose.model('VendorCategory', vendorCategorySchema);
+
+VendorCategory.ALLOWED_STORE_TYPES = ALLOWED_STORE_TYPES;
+
+module.exports = VendorCategory;
