@@ -49,68 +49,6 @@ class VendorAuthController {
     );
   });
 
-  /**
-   * @desc    Register new vendor with selected category & OTP / direct
-   * @route   POST /api/vendor/auth/register
-   * @access  Public
-   */
-  register = asyncHandler(async (req, res) => {
-    const result = await vendorAuthService.registerVendor(req.body);
-    return ApiResponse.created(res, result, 'Vendor registered and logged in successfully');
-  });
-
-  /**
-   * @desc    Login vendor using phone and OTP (or password)
-   * @route   POST /api/vendor/auth/login
-   * @access  Public
-   */
-  login = asyncHandler(async (req, res) => {
-    const { phone, otp, password } = req.body;
-    const credential = otp || password;
-    const result = await vendorAuthService.loginVendor(phone, credential);
-    return ApiResponse.success(
-      res,
-      result,
-      result.token ? 'Vendor login successful' : 'OTP sent successfully to your WhatsApp number'
-    );
-  });
-
-  /**
-   * @desc    Forgot Password - Send OTP to registered WhatsApp number
-   * @route   POST /api/vendor/auth/forgot-password
-   * @access  Public
-   */
-  forgotPassword = asyncHandler(async (req, res) => {
-    const { phone } = req.body;
-    const result = await vendorAuthService.forgotPassword(phone);
-    return ApiResponse.success(
-      res,
-      result,
-      'Password reset OTP sent successfully to your WhatsApp number'
-    );
-  });
-
-  /**
-   * @desc    Verify OTP for password reset
-   * @route   POST /api/vendor/auth/verify-reset-otp
-   * @access  Public
-   */
-  verifyResetOtp = asyncHandler(async (req, res) => {
-    const { phone, otp } = req.body;
-    const result = await vendorAuthService.verifyResetOtp(phone, otp);
-    return ApiResponse.success(res, result, 'OTP verified successfully');
-  });
-
-  /**
-   * @desc    Reset password after OTP verification
-   * @route   POST /api/vendor/auth/reset-password
-   * @access  Public
-   */
-  resetPassword = asyncHandler(async (req, res) => {
-    const { phone, otp, newPassword } = req.body;
-    const result = await vendorAuthService.resetPassword(phone, otp, newPassword);
-    return ApiResponse.success(res, result, result.message);
-  });
 
   /**
    * @desc    Get currently logged in vendor profile

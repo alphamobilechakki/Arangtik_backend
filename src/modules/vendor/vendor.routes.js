@@ -6,10 +6,6 @@ const { protect, protectVendor } = require('../../middlewares/auth.middleware');
 const {
   validateSendOtp,
   validateVerifyOtp,
-  validateVendorRegister,
-  validateVendorLogin,
-  validateForgotPassword,
-  validateResetPassword,
   validateUpdateCategories,
   validateUpdateProfile,
 } = require('./vendorAuth.validation');
@@ -22,18 +18,9 @@ router.get('/categories', vendorAuthController.getCategories);
 router.get('/auth/categories', vendorAuthController.getCategories);
 router.get('/categories/:category/services', vendorAuthController.getCategoryServices);
 
-// Primary Mobile OTP Flow
+// Pure Passwordless WhatsApp OTP Flow (Login & Registration)
 router.post('/auth/send-otp', validateSendOtp, vendorAuthController.sendOtp);
 router.post('/auth/verify-otp', validateVerifyOtp, vendorAuthController.verifyOtp);
-
-// Registration & Login (Supports OTP & fallback)
-router.post('/auth/register', validateVendorRegister, vendorAuthController.register);
-router.post('/auth/login', validateVendorLogin, vendorAuthController.login);
-
-// Legacy Password Reset Flow
-router.post('/auth/forgot-password', validateForgotPassword, vendorAuthController.forgotPassword);
-router.post('/auth/verify-reset-otp', vendorAuthController.verifyResetOtp);
-router.post('/auth/reset-password', validateResetPassword, vendorAuthController.resetPassword);
 
 // ==========================================
 // 2. Vendor Profile & Category Management (Protected by Vendor JWT)

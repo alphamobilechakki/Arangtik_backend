@@ -54,10 +54,6 @@ const registeredVendorSchema = new mongoose.Schema(
       default: [],
       index: true,
     },
-    password: {
-      type: String,
-      select: false,
-    },
     isRegistered: {
       type: Boolean,
       default: true,
@@ -168,23 +164,6 @@ registeredVendorSchema.pre('save', function (next) {
   next();
 });
 
-const bcrypt = require('bcryptjs');
-
-// Hash password before save if modified
-registeredVendorSchema.pre('save', async function (next) {
-  if (!this.isModified('password') || !this.password) {
-    return next();
-  }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-// Instance method to compare password
-registeredVendorSchema.methods.comparePassword = async function (candidatePassword) {
-  if (!this.password || !candidatePassword) return false;
-  return bcrypt.compare(candidatePassword, this.password);
-};
 
 // Auto-generate human-friendly vendorId before validation if not present
 registeredVendorSchema.pre('validate', function (next) {
