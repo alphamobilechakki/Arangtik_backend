@@ -73,25 +73,7 @@ const protectVendor = asyncHandler(async (req, res, next) => {
 const { ADMIN_SYNC_API_KEY } = require('../config/env.config');
 
 const protectAdmin = asyncHandler(async (req, res, next) => {
-  // 1. Check for x-api-key header or query param
-  const apiKey =
-    req.headers['x-api-key'] ||
-    req.headers['X-API-KEY'] ||
-    req.query.api_key;
-
-  if (apiKey) {
-    if (
-      (ADMIN_SYNC_API_KEY && apiKey === ADMIN_SYNC_API_KEY) ||
-      apiKey === 'arangtik_admin_secret_2026'
-    ) {
-      req.isAdmin = true;
-      req.user = { role: 'admin', isServiceAdmin: true };
-      return next();
-    }
-    throw new ApiError(403, 'Forbidden: Invalid Admin API Key');
-  }
-
-  // 2. Check for Bearer token with admin role
+  // 1. Check for Bearer token first (represents an active logged-in admin session)
   let token;
   if (
     req.headers.authorization &&
@@ -111,8 +93,41 @@ const protectAdmin = asyncHandler(async (req, res, next) => {
       throw new ApiError(403, 'Forbidden: Admin access required');
     } catch (err) {
       if (err instanceof ApiError) throw err;
-      throw new ApiError(401, 'Invalid or expired admin token');
+      // If token verification failed, fall through to check apiKey if present
     }
+  }
+
+  // 2. Check for x-api-key header or query param (for service-to-service / external sync)
+  const apiKey =
+    req.headers['x-api-key'] ||
+    req.headers['X-API-KEY'] ||
+    req.query.api_key;
+
+  if (apiKey) {
+    if (
+      (ADMIN_SYNC_API_KEY && apiKey === ADMIN_SYNC_API_KEY) ||
+      apiKey === 'arangtik_admin_secret_2026'
+    ) {
+      req.isAdmin = true;
+      const Admin = require('../modules/admin/auth/admin.model');
+      const defaultAdmin = await Admin.findOne({ role: 'admin' });
+      req.user = {
+        id: defaultAdmin?._id || 'admin_service',
+        _id: defaultAdmin?._id || 'admin_service',
+        phone: defaultAdmin?.phone || '6202579799',
+        name: defaultAdmin?.name || 'Super Admin',
+        role: 'admin',
+        isAdmin: true,
+        isServiceAdmin: true,
+      };
+      return next();
+    }
+    throw new ApiError(403, 'Forbidden: Invalid Admin API Key');
+  }
+
+  // 3. If token was provided but failed and no valid apiKey
+  if (token) {
+    throw new ApiError(401, 'Invalid or expired admin token');
   }
 
   throw new ApiError(401, 'Unauthorized: Admin authorization required (provide Bearer token or x-api-key)');

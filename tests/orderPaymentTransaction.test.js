@@ -427,6 +427,8 @@ test('Order Payment & Transaction Synchronization Suite', async (t) => {
   });
 
   t.after(async () => {
+    await Order.deleteMany({ userId: testUserId });
+    await Transaction.deleteMany({ vendorPhone: testVendorPhone });
     await mongoose.connection.close();
   });
 });

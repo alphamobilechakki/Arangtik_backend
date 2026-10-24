@@ -3,8 +3,13 @@ const Order = require('../../order/order.model');
 const LaundryOrder = Order;
 const RegisteredVendor = require('../../vendor/registeredVendor.model');
 const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
-require('../../auth/user.model');
+const User = require('../../auth/user.model');
 const ApiError = require('../../../utils/apiError');
+
+function escapeRegex(string) {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 class AdminOrderService {
   /**
@@ -96,6 +101,7 @@ class AdminOrderService {
     category = 'ALL',
     serviceType = 'ALL',
     isRegisteredVendor = 'ALL',
+    paymentStatus = 'ALL',
     startDate,
     endDate,
     sortBy = 'createdAt',
@@ -107,22 +113,47 @@ class AdminOrderService {
 
     const andConditions = [];
 
-    // Status filter
+    // 1. Status filter
     if (status && status !== 'ALL') {
-      andConditions.push({ status });
+      const sTrim = String(status).trim().toUpperCase();
+      if (sTrim === 'PARTIALLY_DELIVERED' || sTrim === 'PARTIALLY_DONE') {
+        andConditions.push({ status: { $in: ['PARTIALLY_DELIVERED', 'PARTIALLY_DONE'] } });
+      } else if (sTrim === 'CANCELLED' || sTrim === 'CANCELED') {
+        andConditions.push({ status: { $in: ['CANCELLED', 'CANCELED'] } });
+      } else {
+        andConditions.push({ status: sTrim });
+      }
     }
 
-    // Dynamic Category filter (Automatically filters by whatever category admin creates or vendor has)
+    // 2. Payment Status filter
+    if (paymentStatus && paymentStatus !== 'ALL') {
+      const pUpper = String(paymentStatus).trim().toUpperCase();
+      if (pUpper === 'PAID') {
+        andConditions.push({ 'payment.status': 'PAID' });
+      } else if (pUpper === 'UNPAID') {
+        andConditions.push({
+          $or: [
+            { 'payment.status': 'UNPAID' },
+            { 'payment.status': { $exists: false } },
+            { payment: null },
+            { 'payment.status': { $ne: 'PAID' } },
+          ],
+        });
+      }
+    }
+
+    // 3. Dynamic Category filter (Automatically filters by whatever category admin creates or vendor has)
     if (category && category !== 'ALL') {
-      const catTrim = category.trim();
-      const catUpper = catTrim.toUpperCase();
+      const catTrim = String(category).trim();
+      const escapedCat = escapeRegex(catTrim);
+      const catRegex = new RegExp(`^${escapedCat}$`, 'i');
 
       // Find all registered vendors with this category
       const matchingVendors = await RegisteredVendor.find({
         $or: [
-          { category: new RegExp(`^${catTrim}$`, 'i') },
-          { primaryCategory: new RegExp(`^${catTrim}$`, 'i') },
-          { categories: new RegExp(`^${catTrim}$`, 'i') },
+          { category: catRegex },
+          { primaryCategory: catRegex },
+          { categories: catRegex },
         ],
       })
         .select('_id phone')
@@ -132,8 +163,8 @@ class AdminOrderService {
       const vendorPhones = matchingVendors.map((v) => v.phone).filter(Boolean);
 
       const orMatches = [
-        { orderCategory: new RegExp(`^${catTrim}$`, 'i') },
-        { vendorName: new RegExp(catTrim, 'i') },
+        { orderCategory: new RegExp(escapedCat, 'i') },
+        { vendorName: new RegExp(escapedCat, 'i') },
       ];
 
       if (vendorIds.length > 0) {
@@ -146,23 +177,46 @@ class AdminOrderService {
       andConditions.push({ $or: orMatches });
     }
 
-    // Service Type filter within order items
+    // 4. Service Type filter within order items or requestedServices
     if (serviceType && serviceType !== 'ALL') {
-      andConditions.push({ 'items.serviceType': serviceType });
-    }
-
-    // Registered Vendor filter
-    if (isRegisteredVendor !== undefined && isRegisteredVendor !== '' && isRegisteredVendor !== 'ALL') {
+      const trimmed = String(serviceType).trim();
+      const escapedService = escapeRegex(trimmed);
+      const normalizedWithSpaces = escapeRegex(trimmed.replace(/_/g, ' '));
+      const normalizedWithUnderscores = escapeRegex(trimmed.replace(/\s+/g, '_'));
+      const sRegex = new RegExp(`^(${escapedService}|${normalizedWithSpaces}|${normalizedWithUnderscores})$`, 'i');
       andConditions.push({
-        isRegisteredVendor: isRegisteredVendor === 'true' || isRegisteredVendor === true,
+        $or: [
+          { 'items.serviceType': sRegex },
+          { 'items.serviceName': sRegex },
+          { 'items.name': sRegex },
+          { requestedServices: sRegex },
+        ],
       });
     }
 
-    // Date range filter
+    // 5. Registered Vendor filter
+    if (isRegisteredVendor !== undefined && isRegisteredVendor !== '' && isRegisteredVendor !== 'ALL') {
+      const isReg = isRegisteredVendor === 'true' || isRegisteredVendor === true;
+      if (isReg) {
+        andConditions.push({ isRegisteredVendor: true });
+      } else {
+        andConditions.push({
+          $or: [
+            { isRegisteredVendor: false },
+            { isRegisteredVendor: { $exists: false } },
+            { isRegisteredVendor: null },
+          ],
+        });
+      }
+    }
+
+    // 6. Date range filter (Full local day range)
     if (startDate || endDate) {
       const dateFilter = {};
       if (startDate) {
-        dateFilter.$gte = new Date(startDate);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.$gte = start;
       }
       if (endDate) {
         const end = new Date(endDate);
@@ -172,20 +226,38 @@ class AdminOrderService {
       andConditions.push({ createdAt: dateFilter });
     }
 
-    // Search query: orderNumber, user details, vendor details, item names
+    // 7. Search query: orderNumber, user details, vendor details, item names, orderCategory
     if (search && search.trim()) {
       const q = search.trim();
-      const regex = new RegExp(q, 'i');
-      andConditions.push({
-        $or: [
-          { orderNumber: regex },
-          { userPhone: regex },
-          { userName: regex },
-          { vendorPhone: regex },
-          { vendorName: regex },
-          { 'items.name': regex },
-        ],
-      });
+      const escapedQ = escapeRegex(q);
+      const regex = new RegExp(escapedQ, 'i');
+
+      const orConditions = [
+        { orderNumber: regex },
+        { userPhone: regex },
+        { userName: regex },
+        { vendorPhone: regex },
+        { vendorName: regex },
+        { 'items.name': regex },
+        { orderCategory: regex },
+      ];
+
+      // Match users by name/phone/email
+      try {
+        const matchingUsers = await User.find({
+          $or: [{ name: regex }, { phone: regex }, { email: regex }],
+        })
+          .select('_id')
+          .lean();
+        const userIds = matchingUsers.map((u) => u._id);
+        if (userIds.length > 0) {
+          orConditions.push({ userId: { $in: userIds } });
+        }
+      } catch (err) {
+        // Fallback silently if User collection lookup fails
+      }
+
+      andConditions.push({ $or: orConditions });
     }
 
     const filter = andConditions.length > 0 ? { $and: andConditions } : {};

@@ -100,6 +100,46 @@ test('Admin Order Management Service & Workflows', async (t) => {
     assert.ok(found);
   });
 
+  await t.test('3b. getAllOrders paymentStatus filter works (PAID & UNPAID)', async () => {
+    // Current test order is UNPAID (no payment object)
+    const unpaidRes = await adminOrderService.getAllOrders({
+      paymentStatus: 'UNPAID',
+    });
+    const foundUnpaid = unpaidRes.orders.find((o) => o._id.toString() === testOrderId.toString());
+    assert.ok(foundUnpaid, 'Should find test order with UNPAID filter');
+
+    // PAID filter should NOT include this order
+    const paidRes = await adminOrderService.getAllOrders({
+      paymentStatus: 'PAID',
+    });
+    const foundPaid = paidRes.orders.find((o) => o._id.toString() === testOrderId.toString());
+    assert.strictEqual(foundPaid, undefined, 'Should not find unpaid order with PAID filter');
+  });
+
+  await t.test('3c. getAllOrders serviceType, vendorType, and safe search filters work', async () => {
+    // Service Type filter
+    const serviceRes = await adminOrderService.getAllOrders({
+      serviceType: 'WASH_AND_IRON',
+    });
+    const foundService = serviceRes.orders.find((o) => o._id.toString() === testOrderId.toString());
+    assert.ok(foundService, 'Should find order with WASH_AND_IRON service type');
+
+    // Safe search with special characters (e.g. +91 prefix) should NOT crash
+    const searchRes = await adminOrderService.getAllOrders({
+      search: '+919999111199',
+    });
+    assert.ok(Array.isArray(searchRes.orders), 'Search with regex characters should return array without crashing');
+
+    // Date range filter
+    const today = new Date().toISOString().split('T')[0];
+    const dateRes = await adminOrderService.getAllOrders({
+      startDate: today,
+      endDate: today,
+    });
+    const foundDate = dateRes.orders.find((o) => o._id.toString() === testOrderId.toString());
+    assert.ok(foundDate, 'Should find order created today');
+  });
+
   await t.test('4. getOrderById fetches full order by ID and orderNumber', async () => {
     const byId = await adminOrderService.getOrderById(testOrderId);
     assert.strictEqual(byId.orderNumber, testOrderNumber);

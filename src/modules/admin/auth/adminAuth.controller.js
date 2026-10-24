@@ -20,7 +20,7 @@ class AdminAuthController {
    * @access  Private (Admin)
    */
   getMe = asyncHandler(async (req, res) => {
-    const adminId = req.user?.id;
+    const adminId = req.user?.id || req.user?._id;
     const admin = await adminAuthService.getAdminProfile(adminId);
     return ApiResponse.success(res, admin, 'Admin profile fetched successfully');
   });
