@@ -364,7 +364,20 @@ const getWardrobes = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const result = await wardrobeService.getWardrobes(userId, req.query);
 
-  return ApiResponse.success(res, result, 'Wardrobe closets fetched successfully');
+  return ApiResponse.success(res, result, 'Wardrobes fetched successfully');
+});
+
+/**
+ * @desc    Delete a wardrobe container
+ * @route   DELETE /api/wardrobe/delete-wardrobe/:id OR /api/wardrobe/closets/:id
+ * @access  Private
+ */
+const deleteWardrobe = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const wardrobeId = req.params.id;
+  const result = await wardrobeService.deleteWardrobe(userId, wardrobeId);
+
+  return ApiResponse.success(res, result, 'Wardrobe container deleted successfully');
 });
 
 /**
@@ -384,6 +397,7 @@ const generateItem3D = asyncHandler(async (req, res) => {
 module.exports = {
   createWardrobe,
   getWardrobes,
+  deleteWardrobe,
   addItem,
   getAllItems,
   getItemDetails,

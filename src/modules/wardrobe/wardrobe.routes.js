@@ -27,6 +27,9 @@ router.post(
 router.get('/create-wardrobe', wardrobeController.getWardrobes);
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
 
+// Delete Wardrobe Container
+router.delete(['/delete-wardrobe/:id', '/closets/:id'], wardrobeController.deleteWardrobe);
+
 // Unified media upload handler for 1 to 100 photos (camera click, single dress, or bulk gallery)
 const uploadClothMedia = upload.fields([
   { name: 'photo', maxCount: 1 },

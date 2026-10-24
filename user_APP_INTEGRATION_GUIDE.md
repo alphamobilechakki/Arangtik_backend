@@ -1,7 +1,7 @@
 # 📱 Arangtik Mobile App — Complete User API Integration Guide
 
 > **Official Mobile Application API Contract & Integration Manual**  
-> **Target Audience:** Flutter, React Native, Native Android (Kotlin), and iOS (Swift) Engineers  
+> **Target Audience:** Flutter, React Native, Native Android (Kotlin), iOS (Swift), and Mobile AI Code Generators  
 > **Backend Base URL:** `http://localhost:8083/api` *(Production: `https://api.arangtik.com/api`)*  
 > **API Version:** `v1.2.0`  
 > **Authentication:** `Bearer JWT Token` (Header: `Authorization: Bearer <TOKEN>`)  
@@ -13,55 +13,56 @@
 
 1. [🌐 Series 0: Global Architecture, Environments & Headers](#-series-0-global-architecture-environments--headers)
 2. [🔐 Series 1: Authentication & Session Lifecycle](#-series-1-authentication--session-lifecycle)
-3. [👤 Series 2: User Profile & Biometric Face Reference](#-series-2-user-profile--biometric-face-reference)
-4. [🚪 Series 3: Digital Almari / Multi-Wardrobe Containers](#-series-3-digital-almari--multi-wardrobe-containers)
-5. [📸 Series 4: Camera & Gallery Clothes Ingestion (AI Vision & Anti-Duplicate)](#-series-4-camera--gallery-clothes-ingestion-ai-vision--anti-duplicate)
-6. [👥 Series 5: Event & Group Photo Biometric Filtering](#-series-5-event--group-photo-biometric-filtering)
-7. [👗 Series 6: Wardrobe Catalog, Filtering, Search & Clothing Management](#-series-6-wardrobe-catalog-filtering-search--clothing-management)
-8. [🧊 Series 7: 3D Garment Mesh Reconstruction (TripoSR Engine)](#-series-7-3d-garment-mesh-reconstruction-triposr-engine)
-9. [✨ Series 8: Smart AI Outfit Recommendations & Styling](#-series-8-smart-ai-outfit-recommendations--styling)
-10. [🏷️ Series 9: Service Categories & Live Rate Card Discovery](#-series-9-service-categories--live-rate-card-discovery)
-11. [🧺 Series 10: Laundry & Service Work Orders & Payment Transactions (Customer Dispatch)](#-series-10-laundry--service-work-orders-customer-dispatch)
-12. [🔔 Series 11: Push Notifications (FCM) & In-App Notification Inbox](#-series-11-push-notifications-fcm--in-app-notification-inbox)
-13. [🖼️ Series 12: Image & Media URL Resolution Protocol](#-series-12-image--media-url-resolution-protocol)
-14. [🚀 Series 13: Ready-to-Use Mobile Integration Client (Flutter & React Native)](#-series-13-ready-to-use-mobile-integration-client-flutter--react-native)
+3. [🏪 Series 2: Store Types (Dynamic Store Verticals)](#-series-2-store-types-dynamic-store-verticals)
+4. [🚪 Series 3: Digital Almari / User Wardrobes](#-series-3-digital-almari--user-wardrobes)
+5. [👤 Series 4: User Profile & Reference Face Biometrics](#-series-4-user-profile--reference-face-biometrics)
+6. [📸 Series 5: Clothes Ingestion (Camera & Gallery AI Vision)](#-series-5-clothes-ingestion-camera--gallery-ai-vision)
+7. [👥 Series 6: Event & Group Photo Face Verification](#-series-6-event--group-photo-face-verification)
+8. [👗 Series 7: Wardrobe Catalog, Filtering & Clothing CRUD](#-series-7-wardrobe-catalog-filtering--clothing-crud)
+9. [🧊 Series 8: 3D Garment Mesh Reconstruction (TripoSR Engine)](#-series-8-3d-garment-mesh-reconstruction-triposr-engine)
+10. [✨ Series 9: Smart AI Outfit Recommendations & Styling](#-series-9-smart-ai-outfit-recommendations--styling)
+11. [🏷️ Series 10: Service Categories & Live Rate Card Discovery](#-series-10-service-categories--live-rate-card-discovery)
+12. [🧺 Series 11: Work Orders & Payments (Customer Dispatch)](#-series-11-work-orders--payments-customer-dispatch)
+13. [🔔 Series 12: Push Notifications (FCM) & In-App Alerts](#-series-12-push-notifications-fcm--in-app-alerts)
+14. [🖼️ Series 13: Image & Media URL Resolution Protocol](#-series-13-image--media-url-resolution-protocol)
+15. [🚀 Series 14: Ready-to-Use Mobile Integration Clients (Flutter & React Native)](#-series-14-ready-to-use-mobile-integration-clients)
 
 ---
 
 ## 🌐 Series 0: Global Architecture, Environments & Headers
 
-### 1. Base URLs & Network Endpoints
+### 0.1 Base URLs & Network Endpoints
 
 | Environment | Base URL | Media Uploads URL | Notes |
 |---|---|---|---|
-| **Localhost (Dev)** | `http://localhost:8083/api` | `http://localhost:8083` | Web / Node server |
+| **Localhost (Dev Web)** | `http://localhost:8083/api` | `http://localhost:8083` | Web / Node server |
 | **Android Emulator** | `http://10.0.2.2:8083/api` | `http://10.0.2.2:8083` | Standard Android Studio AVD mapping |
-| **Physical Device (Wi-Fi)** | `http://192.168.x.x:8083/api` | `http://192.168.x.x:8083` | Replace with your computer's local LAN IP |
+| **Physical Device (Wi-Fi)** | `http://192.168.x.x:8083/api` | `http://192.168.x.x:8083` | Your PC's local LAN IP address |
 | **Production Cloud** | `https://api.arangtik.com/api` | `https://api.arangtik.com` | SSL Enabled CDN |
 
-### 2. Standard HTTP Headers
+### 0.2 Standard HTTP Headers
 
 ```http
 Content-Type: application/json
 Accept: application/json
 Authorization: Bearer <JWT_TOKEN>
 ```
-*Note: For endpoints that accept photos (`POST /api/wardrobe/add-item`, etc.), use `multipart/form-data` and do NOT manually specify `Content-Type: boundary=...` (let your HTTP client generate the multipart boundary automatically).*
+*Note: For multipart endpoints (`multipart/form-data`), omit `Content-Type` manually so your client auto-sets the boundary.*
 
-### 3. Global Response Format
+### 0.3 Global Response Envelope
 
-All responses follow a predictable envelope:
+All API endpoints strictly return this uniform JSON structure:
 
 ```json
-// HTTP 200 / 201 Success Response
+// Success Response (HTTP 200 / 201)
 {
   "success": true,
   "statusCode": 200,
-  "message": "Action completed successfully",
+  "message": "Operation completed successfully",
   "data": { ... }
 }
 
-// HTTP 400 / 401 / 403 / 404 / 409 / 500 Error Response
+// Error Response (HTTP 400 / 401 / 403 / 404 / 409 / 500)
 {
   "success": false,
   "statusCode": 400,
@@ -74,27 +75,7 @@ All responses follow a predictable envelope:
 
 ## 🔐 Series 1: Authentication & Session Lifecycle
 
-Arangtik uses passwordless mobile authentication via a 6-digit WhatsApp OTP. The user enters their phone number, receives an OTP on WhatsApp, and upon verification receives a JWT token.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Mobile App User
-    participant App as Mobile Client
-    participant API as Arangtik Backend
-    participant WA as WhatsApp OTP Gateway
-
-    User->>App: Enters Phone Number
-    App->>API: POST /api/auth/send-otp { phone: "919876543210" }
-    API->>WA: Dispatches 6-digit WhatsApp OTP
-    WA-->>User: Delivers WhatsApp Message with OTP
-    User->>App: Enters 6-digit OTP
-    App->>API: POST /api/auth/verify-otp { phone, otp, fcmToken, platform }
-    API-->>App: HTTP 200 { token, user, fcmToken, deviceRegistered: true }
-    App->>App: Stores JWT securely in Keychain / EncryptedSharedPreferences
-```
-
----
+Mobile authentication is passwordless via a 6-digit WhatsApp OTP.
 
 ### 1.1 Send OTP
 Dispatches a 6-digit verification code to the user's WhatsApp number.
@@ -110,7 +91,7 @@ Dispatches a 6-digit verification code to the user's WhatsApp number.
   "phone": "919876543210"
 }
 ```
-*Validation:* Phone number must include country code (e.g. `91` for India) without `+` or spaces (10–14 digits).
+*Rule: Phone number must include country code (e.g. `91` for India) without `+` or spaces (10–14 digits).*
 
 #### Success Response (`200 OK`)
 ```json
@@ -128,7 +109,7 @@ Dispatches a 6-digit verification code to the user's WhatsApp number.
 ---
 
 ### 1.2 Verify OTP & Login / Register
-Verifies the 6-digit OTP, registers the user if new, associates the device's FCM push token, and returns the authentication token.
+Verifies OTP, auto-creates user if new, registers device FCM push token, and returns JWT session token.
 
 - **Method:** `POST`
 - **Path:** `/api/auth/verify-otp`
@@ -156,7 +137,7 @@ Verifies the 6-digit OTP, registers the user if new, associates the device's FCM
   "statusCode": 200,
   "message": "Login successful",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY1ZjFh...",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
       "_id": "67a3f890b1234567890abcdef",
       "phone": "919876543210",
@@ -175,7 +156,7 @@ Verifies the 6-digit OTP, registers the user if new, associates the device's FCM
 ---
 
 ### 1.3 User Logout
-Clears the session on the backend and permanently revokes the device FCM push token.
+Invalidates session and unregisters the device push token.
 
 - **Method:** `POST`
 - **Path:** `/api/auth/logout`
@@ -188,7 +169,6 @@ Clears the session on the backend and permanently revokes the device FCM push to
   "fcmToken": "dK_3f9z...fcm_registration_token..."
 }
 ```
-*Note: If `fcmToken` is passed, only that device's token is deleted. If omitted, all device tokens for this user session are revoked.*
 
 #### Success Response (`200 OK`)
 ```json
@@ -201,13 +181,163 @@ Clears the session on the backend and permanently revokes the device FCM push to
 
 ---
 
-## 👤 Series 2: User Profile & Biometric Face Reference
+## 🏪 Series 2: Store Types (Dynamic Store Verticals)
 
-The user profile holds identity info and an optional enrolled reference face (powered by InsightFace) used to automatically detect the user in group and event photos.
+Fetches active store types configured by the admin (e.g. `Wardrobe`, `Kitchen`, `Household`). Mobile apps call this to populate store categories dynamically.
+
+### 2.1 List Store Types
+- **Method:** `GET`
+- **Path:** `/api/store-types`
+- **Auth Required:** `No (Public)`
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Store types retrieved successfully",
+  "data": [
+    {
+      "_id": "67b00112233445566778899a",
+      "name": "Wardrobe",
+      "code": "WARDROBE",
+      "imageUrl": "http://localhost:8083/uploads/store_wardrobe.png",
+      "isActive": true
+    },
+    {
+      "_id": "67b00112233445566778899b",
+      "name": "Kitchen",
+      "code": "KITCHEN",
+      "imageUrl": "http://localhost:8083/uploads/store_kitchen.png",
+      "isActive": true
+    }
+  ]
+}
+```
 
 ---
 
-### 2.1 Get Current User Profile
+## 🚪 Series 3: Digital Almari / User Wardrobes
+
+Users can organize clothes into one or more Almari containers (e.g. *"My Almari"*, *"Office Almari"*, *"Mummy Almari"*).
+
+### 3.1 List User Wardrobes
+Fetches all wardrobe containers owned by the authenticated user.
+Defaults to `storeType=WARDROBE` so only wardrobe almaris (and their accurate garment counts) are returned.
+
+- **Method:** `GET`
+- **Path:** `/api/wardrobe/get-wardrobes` *(alias: `/api/wardrobe/create-wardrobe`)*
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+- **Query Parameters (Optional):**
+  | Parameter | Type | Required | Default | Description |
+  |---|---|:---:|---|---|
+  | `storeType` | String | No | `WARDROBE` | Store vertical code (defaults to `WARDROBE`). |
+  | `storeTypeId` | String (ObjectId) | No | *None* | Optional StoreType `_id` |
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Wardrobes fetched successfully",
+  "data": [
+    {
+      "_id": "6ac8e4471dd51c1c79a52e6d",
+      "name": "My Almari",
+      "ownerName": "Rahul",
+      "storeType": "WARDROBE",
+      "storeTypeId": "67b00112233445566778899a",
+      "type": "PERSONAL",
+      "isDefault": true,
+      "itemCount": 24,
+      "coverImage": "http://localhost:8083/uploads/almari_cover.jpg",
+      "ownerFaceImage": "http://localhost:8083/uploads/rahul_face.jpg",
+      "isActive": true,
+      "createdAt": "2026-02-01T08:00:00.000Z"
+    },
+    {
+      "_id": "6cd0a6693ff73e3e90c74a8f",
+      "name": "Office Formal Almari",
+      "ownerName": "Rahul Sharma",
+      "storeType": "WARDROBE",
+      "storeTypeId": "67b00112233445566778899a",
+      "type": "PERSONAL",
+      "isDefault": false,
+      "itemCount": 12,
+      "coverImage": "",
+      "ownerFaceImage": "",
+      "isActive": true,
+      "createdAt": "2026-02-10T11:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### 3.2 Create New Wardrobe Container
+- **Method:** `POST`
+- **Path:** `/api/wardrobe/create-wardrobe`
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+- **Content-Type:** `multipart/form-data` or `application/json`
+
+#### Form Fields / JSON Body
+| Field | Type | Required | Description |
+|---|---|:---:|---|
+| `name` | String | Yes | Name of Almari (e.g. "Master Bedroom Almari") |
+| `ownerName` | String | No | Owner person's name |
+| `storeType` | String | No | Defaults to `WARDROBE` |
+| `storeTypeId` | String (ObjectId) | No | Optional dynamic StoreType ID |
+| `type` | String | No | `PERSONAL`, `FAMILY`, `CAPSULE`, `SHARED`, `SEASONAL` |
+| `isDefault` | Boolean | No | `true` or `false` |
+| `coverImage` | Binary File / String | No | Almari cover photo |
+| `ownerFaceImage` | Binary File / String | No | Owner face image |
+
+#### Success Response (`201 Created`)
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Wardrobe created successfully",
+  "data": {
+    "_id": "6cd0a6693ff73e3e90c74a8f",
+    "name": "Office Formal Almari",
+    "ownerName": "Rahul Sharma",
+    "storeType": "WARDROBE",
+    "storeTypeId": "67b00112233445566778899a",
+    "type": "PERSONAL",
+    "isDefault": false,
+    "itemCount": 0,
+    "createdAt": "2026-02-10T11:00:00.000Z"
+  }
+}
+```
+
+---
+
+### 3.3 Delete Wardrobe Container
+Deletes a non-default wardrobe / almari container. Any clothes previously inside are automatically reassigned to the user's default Almari.
+
+- **Method:** `DELETE`
+- **Path:** `/api/wardrobe/delete-wardrobe/:id` *(alias: `/api/wardrobe/closets/:id`)*
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Wardrobe container deleted successfully"
+}
+```
+
+---
+
+## 👤 Series 4: User Profile & Reference Face Biometrics
+
+Used to store identity data and an enrolled face reference (512-dimension embedding via InsightFace) to automatically verify whether clothes in photos belong to the user.
+
+### 4.1 Get Current User Profile
 - **Method:** `GET`
 - **Path:** `/api/auth/me` *(alias: `/api/auth/profile`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -236,11 +366,11 @@ The user profile holds identity info and an optional enrolled reference face (po
 
 ---
 
-### 2.2 Update Profile Attributes
-- **Method:** `PATCH` *(Strict Arangtik Rule: never use PUT)*
+### 4.2 Update Profile Attributes
+- **Method:** `PATCH` *(Never use PUT)*
 - **Path:** `/api/auth/profile`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
-- **Content-Type:** `application/json` (or `multipart/form-data`)
+- **Content-Type:** `application/json`
 
 #### Request Body
 ```json
@@ -270,18 +400,18 @@ The user profile holds identity info and an optional enrolled reference face (po
 
 ---
 
-### 2.3 Upload Profile Image & Enroll Reference Face
-Uploads a clear portrait/selfie. The backend automatically extracts and saves the 512-dimension face embedding for biometric clothing matching.
+### 4.3 Upload Profile Image & Enroll Face
+Uploads portrait/selfie and extracts 512-d face embedding for automatic biometric matching.
 
 - **Method:** `POST`
-- **Path:** `/api/auth/profile-image` *(alias: `POST /api/face-recognition/register`)*
+- **Path:** `/api/auth/profile-image` *(alias: `/api/face-recognition/register`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
 - **Content-Type:** `multipart/form-data`
 
 #### Multipart Form Fields
 | Field Name | Type | Description |
 |---|---|---|
-| `image` *(or `photo`)* | Binary File | Front-facing portrait photo (JPEG / PNG, max 10MB) |
+| `image` *(or `photo`)* | Binary File | Front-facing portrait photo (JPEG/PNG) |
 
 #### Success Response (`200 OK`)
 ```json
@@ -299,7 +429,7 @@ Uploads a clear portrait/selfie. The backend automatically extracts and saves th
 
 ---
 
-### 2.4 Check Reference Face Status
+### 4.4 Check Face Reference Status
 - **Method:** `GET`
 - **Path:** `/api/face-recognition/status`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -319,7 +449,7 @@ Uploads a clear portrait/selfie. The backend automatically extracts and saves th
 
 ---
 
-### 2.5 Delete Reference Face
+### 4.5 Delete Face Reference
 - **Method:** `DELETE`
 - **Path:** `/api/face-recognition/reference`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -335,103 +465,14 @@ Uploads a clear portrait/selfie. The backend automatically extracts and saves th
 
 ---
 
-## 🚪 Series 3: Digital Almari / Multi-Wardrobe Containers
+## 📸 Series 5: Clothes Ingestion (Camera & Gallery AI Vision)
 
-Users can manage multiple closets / almaris (e.g. *"My Wardrobe"*, *"Office Closet"*, *"Party Wear"*, *"Mummy's Almari"*).
+Primary Arangtik feature. The user snaps or selects a photo of a garment. The backend:
+1. Detects clothes and crops them cleanly.
+2. Extracts colors, category, subcategory, and pattern.
+3. Performs strict anti-duplicate check (visual similarity & perceptual hash).
 
----
-
-### 3.1 List User Wardrobes
-- **Method:** `GET`
-- **Path:** `/api/wardrobe/get-wardrobes` *(alias: `/api/wardrobe/create-wardrobe`)*
-- **Auth Required:** `Yes (Bearer <TOKEN>)`
-
-#### Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Wardrobes retrieved successfully",
-  "data": [
-    {
-      "_id": "6ac8e4471dd51c1c79a52e6d",
-      "name": "My Almari",
-      "ownerName": "Rahul",
-      "isDefault": true,
-      "itemCount": 24,
-      "createdAt": "2026-02-01T08:00:00.000Z"
-    },
-    {
-      "_id": "6bc9f5582ee62d2d89b63f7e",
-      "name": "Winter Collection",
-      "ownerName": "Rahul",
-      "isDefault": false,
-      "itemCount": 8,
-      "createdAt": "2026-02-15T12:00:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-### 3.2 Create New Wardrobe Container
-- **Method:** `POST`
-- **Path:** `/api/wardrobe/create-wardrobe`
-- **Auth Required:** `Yes (Bearer <TOKEN>)`
-- **Content-Type:** `multipart/form-data` or `application/json`
-
-#### Form Fields / JSON Body
-```json
-{
-  "name": "Office Formal Almari",
-  "ownerName": "Rahul Sharma",
-  "isDefault": false
-}
-```
-
-#### Success Response (`201 Created`)
-```json
-{
-  "success": true,
-  "statusCode": 201,
-  "message": "Wardrobe created successfully",
-  "data": {
-    "_id": "6cd0a6693ff73e3e90c74a8f",
-    "name": "Office Formal Almari",
-    "ownerName": "Rahul Sharma",
-    "isDefault": false,
-    "itemCount": 0
-  }
-}
-```
-
----
-
-## 📸 Series 4: Camera & Gallery Clothes Ingestion (AI Vision & Anti-Duplicate)
-
-This is the primary feature of Arangtik. The user captures or selects a photo of a garment. The backend performs:
-1. **Garment Detection & Background Removal** (Segmenting the clothes).
-2. **Attribute Extraction** (Primary color, category, subcategory, pattern).
-3. **Duplicate Prevention Check** (Comparing visual features and embeddings against existing clothes in the Almari).
-
-```mermaid
-graph TD
-    A[User captures / selects garment photo] --> B[App calls POST /api/wardrobe/add-item]
-    B --> C{AI Vision Engine: Check Duplicate}
-    C -- "Similarity < 85%" --> D[Save New Garment Item in Almari]
-    D --> E[Return duplicateDetected: false, item: { ... }]
-    C -- "Similarity >= 85%" --> F[Flag as Duplicate]
-    F --> G[Return duplicateDetected: true, similarityScore, existingItem: { ... }]
-    G --> H{Mobile UI prompts User: 'Same or Different?'}
-    H -- "It's a Different Dress" --> I[Call POST /api/wardrobe/add-item with forceAdd: true]
-    I --> D
-    H -- "It's the Same Dress" --> J[User Discards / Keeps Existing]
-```
-
----
-
-### 4.1 Extract & Add Item to Almari (Single Unified Action)
+### 5.1 Extract & Add Item to Almari (Direct Capture Mode)
 - **Method:** `POST`
 - **Path:** `/api/wardrobe/add-item` *(aliases: `/api/wardrobe/extract-item`, `/api/wardrobe/items`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -439,17 +480,15 @@ graph TD
 
 #### Multipart Form Fields
 | Field Name | Type | Required | Description |
-|---|---|---|---|
-| `photo` *(or `photos`, `image`, `file`)* | Binary File | Yes | Garment photograph from camera or gallery |
-| `wardrobeId` | String | No | Target Almari ID (defaults to user's default Almari) |
-| `forceAdd` | String / Bool | No | Set to `'true'` to force-save even if duplicate is flagged |
-| `name` | String | No | Optional custom garment name |
-| `category` | String | No | Optional override: `UPPER_WEAR`, `LOWER_WEAR`, `FULL_BODY`, `FOOTWEAR`, `ACCESSORIES` |
+|---|---|:---:|---|
+| `photo` *(or `photos`, `image`, `file`)* | Binary File | Yes | Garment photograph from camera/gallery |
+| `wardrobeId` | String | No | Target Almari ID (defaults to user default Almari) |
+| `forceAdd` | String / Boolean | No | Set to `'true'` to force-save even if duplicate is flagged |
+| `name` | String | No | Custom garment name |
+| `category` | String | No | `UPPER_WEAR`, `LOWER_WEAR`, `FULL_BODY`, `FOOTWEAR`, `ACCESSORIES` |
 
----
-
-#### Response Scenario A: Unique Dress (Newly Added to Almari)
-HTTP `201 Created` or `200 OK`:
+#### Scenario A: Unique Dress (Saved Successfully)
+`201 Created` or `200 OK`:
 ```json
 {
   "success": true,
@@ -480,10 +519,8 @@ HTTP `201 Created` or `200 OK`:
 }
 ```
 
----
-
-#### Response Scenario B: Duplicate Dress Flagged (Side-by-Side Comparison)
-HTTP `200 OK`:
+#### Scenario B: Duplicate Dress Flagged
+`200 OK`:
 ```json
 {
   "success": true,
@@ -501,20 +538,50 @@ HTTP `200 OK`:
       "color": "Navy Blue",
       "status": "ACTIVE",
       "primaryImage": "http://localhost:8083/uploads/garment_443322.png",
-      "wearCount": 4,
-      "lastWorn": "2026-02-10T11:00:00.000Z"
+      "wearCount": 4
     }
   }
 }
 ```
-> **Mobile Client Action:** Present a modal showing the newly captured photo next to `existingItem.primaryImage` with two options:
-> - **"Yes, it's the same dress"** ➔ Close modal and discard.
-> - **"No, this is a different dress"** ➔ Re-call `POST /api/wardrobe/add-item` with `forceAdd: 'true'` (or call with existing photo).
+*Mobile App Action:* Show a modal comparing the two dresses:
+- If user chooses *"Same Dress"* ➔ Discard.
+- If user chooses *"Different Dress"* ➔ Re-call with `forceAdd: 'true'`.
 
 ---
 
-### 4.2 Bulk Ingestion (Multiple Gallery Photos)
-Upload up to 100 photos at once (e.g. from a photoshoot or album).
+### 5.2 Scan Photo & Detect Garments (Pre-Analysis Mode)
+Pre-scans one or more photos to detect garments before saving to Almari.
+
+- **Method:** `POST`
+- **Path:** `/api/wardrobe/scan-item` *(aliases: `/api/wardrobe/scan`, `/api/wardrobe/analyze-photo`)*
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+- **Content-Type:** `multipart/form-data`
+
+#### Success Response (`200 OK`)
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Photo analyzed successfully with clothing recognition",
+  "data": {
+    "garmentsCount": 1,
+    "garments": [
+      {
+        "name": "Casual Cotton T-Shirt",
+        "category": "UPPER_WEAR",
+        "subCategory": "T_SHIRT",
+        "color": "White",
+        "croppedImageUrl": "http://localhost:8083/uploads/crop_white_tshirt.png"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.3 Bulk Ingestion (Multiple Gallery Photos)
+Upload up to 100 photos at once.
 
 - **Method:** `POST`
 - **Path:** `/api/wardrobe/add-item` *(alias: `/api/wardrobe/bulk-add-photos`)*
@@ -544,13 +611,11 @@ Upload up to 100 photos at once (e.g. from a photoshoot or album).
 
 ---
 
-## 👥 Series 5: Event & Group Photo Biometric Filtering
+## 👥 Series 6: Event & Group Photo Face Verification
 
-When a user selects group or event photos, the app can verify whether the user appears in each photo before extracting clothes.
+Checks whether the user appears in a group/event photo before extracting clothes.
 
----
-
-### 5.1 Verify Face in Photo
+### 6.1 Verify Face in Photo
 - **Method:** `POST`
 - **Path:** `/api/face-recognition/verify`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -559,7 +624,7 @@ When a user selects group or event photos, the app can verify whether the user a
 #### Multipart Form Fields
 | Field Name | Type | Description |
 |---|---|---|
-| `photo` *(or `image`)* | Binary File | Event / Group photograph |
+| `photo` *(or `image`)* | Binary File | Group photograph |
 | `threshold` | Number | Optional matching threshold (Default: `0.60`) |
 
 #### Success Response (`200 OK`)
@@ -579,20 +644,18 @@ When a user selects group or event photos, the app can verify whether the user a
 
 ---
 
-## 👗 Series 6: Wardrobe Catalog, Filtering, Search & Clothing Management
+## 👗 Series 7: Wardrobe Catalog, Filtering & Clothing CRUD
 
-Browse, filter, search, view, edit (strictly `PATCH`), and delete clothes in the Almari.
+Browse, filter, search, view, edit (`PATCH`), and delete clothes in the Almari.
 
----
-
-### 6.1 List Clothes / Wardrobe Items (Catalog with Pagination)
+### 7.1 List Clothes / Wardrobe Items (Catalog with Pagination)
 - **Method:** `GET`
 - **Path:** `/api/wardrobe/get-items` *(aliases: `/api/wardrobe/items`, `/api/wardrobe/get-all-items`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
 
 #### Query Parameters
 | Parameter | Type | Required | Example | Description |
-|---|---|---|---|---|
+|---|---|:---:|---|---|
 | `wardrobeId` | String | No | `6ac8e44...` | Filter by specific Almari |
 | `category` | String | No | `UPPER_WEAR` | `UPPER_WEAR`, `LOWER_WEAR`, `FULL_BODY`, `FOOTWEAR`, `ACCESSORIES` |
 | `subCategory` | String | No | `SHIRT` | `SHIRT`, `T_SHIRT`, `JEANS`, `TROUSERS`, `KURTA`, `SUIT`, `DRESS` |
@@ -644,7 +707,7 @@ Browse, filter, search, view, edit (strictly `PATCH`), and delete clothes in the
 
 ---
 
-### 6.2 Get Single Garment Details
+### 7.2 Get Single Garment Details
 - **Method:** `GET`
 - **Path:** `/api/wardrobe/get-item/:id` *(alias: `/api/wardrobe/items/:id`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -676,13 +739,13 @@ Browse, filter, search, view, edit (strictly `PATCH`), and delete clothes in the
 
 ---
 
-### 6.3 Update Garment Attributes (STRICT: PATCH ONLY)
+### 7.3 Update Garment Attributes (PATCH Only)
 - **Method:** `PATCH` *(Never use PUT)*
 - **Path:** `/api/wardrobe/edit-item/:id` *(aliases: `/api/wardrobe/update-item/:id`, `/api/wardrobe/items/:id`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
 - **Content-Type:** `application/json`
 
-#### Request Body (All fields optional)
+#### Request Body (All optional)
 ```json
 {
   "name": "Premium Italian Navy Shirt",
@@ -712,7 +775,7 @@ Browse, filter, search, view, edit (strictly `PATCH`), and delete clothes in the
 
 ---
 
-### 6.4 Delete Garment from Almari
+### 7.4 Delete Garment from Almari
 - **Method:** `DELETE`
 - **Path:** `/api/wardrobe/delete-item/:id` *(alias: `/api/wardrobe/items/:id`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -728,13 +791,11 @@ Browse, filter, search, view, edit (strictly `PATCH`), and delete clothes in the
 
 ---
 
-## 🧊 Series 7: 3D Garment Mesh Reconstruction (TripoSR Engine)
+## 🧊 Series 8: 3D Garment Mesh Reconstruction (TripoSR Engine)
 
-Generates an interactive 3D `.glb` mesh for any garment using the TripoSR neural reconstruction engine.
+Generates an interactive 3D `.glb` mesh for any garment using the TripoSR neural engine.
 
----
-
-### 7.1 Trigger 3D Model Generation
+### 8.1 Trigger 3D Model Generation
 - **Method:** `POST`
 - **Path:** `/api/wardrobe/generate-3d/:id` *(alias: `/api/wardrobe/items/:id/generate-3d`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -752,21 +813,15 @@ Generates an interactive 3D `.glb` mesh for any garment using the TripoSR neural
   }
 }
 ```
-> **Mobile Client Viewer:** Render the resulting `.glb` URL in:
-> - **Flutter:** `model_viewer_plus` widget
-> - **React Native:** `@react-three/fiber` / Google `<model-viewer>` in WebView
-> - **Android Native:** Filament or SceneView library
-> - **iOS Native:** SceneKit / RealityKit USDZ quick look
+*Mobile Viewers:* Render `.glb` URL using Flutter `model_viewer_plus`, React Native `@react-three/fiber` / Google `<model-viewer>`, or native SceneView.
 
 ---
 
-## ✨ Series 8: Smart AI Outfit Recommendations & Styling
+## ✨ Series 9: Smart AI Outfit Recommendations & Styling
 
-Recommends harmonious outfit combinations strictly using the user's available clothes. Clothes currently in laundry (`status: 'INACTIVE'`) are automatically excluded.
+Recommends harmonious outfit combinations using available clothes. Clothes currently in laundry (`status: 'INACTIVE'`) are automatically excluded.
 
----
-
-### 8.1 Generate Outfit Suggestions
+### 9.1 Generate Outfit Suggestions
 - **Method:** `POST`
 - **Path:** `/api/outfit/suggest` *(alias: `/api/outfit/generate`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -816,7 +871,7 @@ Recommends harmonious outfit combinations strictly using the user's available cl
 
 ---
 
-### 8.2 Save Favorite Outfit
+### 9.2 Save Favorite Outfit
 - **Method:** `POST`
 - **Path:** `/api/outfit/save`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -848,7 +903,7 @@ Recommends harmonious outfit combinations strictly using the user's available cl
 
 ---
 
-### 8.3 Get Saved Outfits
+### 9.3 Get Saved Outfits
 - **Method:** `GET`
 - **Path:** `/api/outfit/saved`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -873,7 +928,7 @@ Recommends harmonious outfit combinations strictly using the user's available cl
 
 ---
 
-### 8.4 Delete Saved Outfit
+### 9.4 Delete Saved Outfit
 - **Method:** `DELETE`
 - **Path:** `/api/outfit/saved/:id`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -889,30 +944,15 @@ Recommends harmonious outfit combinations strictly using the user's available cl
 
 ---
 
-## 🏷️ Series 9: Service Categories & Live Rate Card Discovery
+## 🏷️ Series 10: Service Categories & Live Rate Card Discovery
 
-**Zero Hardcoding Guarantee:** Categories (e.g. *Washerman*, *Doodh Wala*, *Tailor*) and their services/rates are 100% dynamic and fetched live from MongoDB.
+Categories (e.g. *Washerman*, *Doodh Wala*, *Tailor*) and services are 100% dynamic and live from MongoDB.
 
----
-
-### 9.1 Get Vendor Categories (With Dynamic Storage Resolution)
-Fetches vendor categories. Supports automatic storage scoping (`storeType`, `wardrobeId`, `itemId`) so the mobile app only displays services relevant to the active storage container (e.g., Wardrobe / Almari clothes vs. Kitchen appliances), eliminating the need for the customer to manually select a category!
-
+### 10.1 Get Vendor Categories (With Storage Scoping)
 - **Method:** `GET`
-- **Path:** `/api/categories` *(alias: `/api/vendor/categories`)*
-- **Direct Storage Routes:**
-  - `GET /api/categories/store-type/:storeType` *(e.g. `GET /api/categories/store-type/WARDROBE`)*
-  - `GET /api/categories/by-wardrobe/:wardrobeId` *(Auto-fetches categories assigned to that wardrobe's `storeType`)*
+- **Path:** `/api/categories`
+- **Direct Storage Scoped Route:** `GET /api/categories?storeType=WARDROBE`
 - **Auth Required:** `No (Public)`
-- **Query Parameters (Optional):**
-  | Parameter | Type | Required | Default | Description |
-  |---|---|:---:|---|---|
-  | `storeType` | String | No | - | Storage filter (`WARDROBE`, `KITCHEN`, `ELECTRONICS`, `HOUSEHOLD`, `VALUABLES`, `OTHER`). |
-  | `wardrobeId` | String (ObjectId) | No | - | Resolves the wardrobe container's `storeType` and returns matching categories. |
-  | `itemId` | String (ObjectId) | No | - | Resolves the dress/item's wardrobe container `storeType` and returns matching categories. |
-
-> [!TIP]
-> **Zero Customer Friction:** When a user initiates a service or laundry work order from their Almari, call `GET /api/categories?storeType=WARDROBE` or `GET /api/categories/by-wardrobe/:wardrobeId`. The app immediately receives the assigned category (e.g. *Washerman / Laundry*) without forcing the user to pick one manually!
 
 #### Success Response (`200 OK`)
 ```json
@@ -928,10 +968,7 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
       "icon": "🧺",
       "description": "Laundry, Dry Cleaning & Garment Care",
       "imageUrl": "http://localhost:8083/uploads/category_washerman.png",
-      "storeTypes": [
-        "WARDROBE"
-      ],
-      "sortOrder": 1,
+      "storeTypes": ["WARDROBE"],
       "services": [
         {
           "_id": "6ad89efdcb41a2627aecb421",
@@ -948,19 +985,6 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
           "isActive": true
         }
       ]
-    },
-    {
-      "_id": "6ad35971b52d7dd7d79f7038",
-      "name": "Doodh Wala",
-      "code": "DOODH_WALA",
-      "icon": "🥛",
-      "description": "Fresh Milk & Dairy Delivery",
-      "imageUrl": "http://localhost:8083/uploads/category_dairy.png",
-      "storeTypes": [
-        "HOUSEHOLD",
-        "OTHER"
-      ],
-      "sortOrder": 2
     }
   ]
 }
@@ -968,11 +992,10 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
 
 ---
 
-### 9.2 Get Services for a Specific Category
+### 10.2 Get Services for a Specific Category
 - **Method:** `GET`
-- **Path:** `/api/vendor/categories/:category/services` *(or `/api/categories/:categoryId/services`)*
+- **Path:** `/api/services?category=Washerman` *(or `/api/categories/:categoryId/services`)*
 - **Auth Required:** `No (Public)`
-- **Example:** `GET /api/vendor/categories/Washerman/services`
 
 #### Success Response (`200 OK`)
 ```json
@@ -987,16 +1010,6 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
       "code": "DRY",
       "price": 40,
       "isActive": true,
-      "categoryId": "6ad35971b52d7dd7d79f7035",
-      "categoryName": "Washerman"
-    },
-    {
-      "_id": "6ad9a67ee02e82bf9aaf7438",
-      "name": "cleaner",
-      "code": "CLEANER",
-      "price": 30,
-      "isActive": true,
-      "categoryId": "6ad35971b52d7dd7d79f7035",
       "categoryName": "Washerman"
     },
     {
@@ -1005,7 +1018,6 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
       "code": "IRON_AND_PRESS",
       "price": 20,
       "isActive": true,
-      "categoryId": "6ad35971b52d7dd7d79f7035",
       "categoryName": "Washerman"
     }
   ]
@@ -1014,43 +1026,16 @@ Fetches vendor categories. Supports automatic storage scoping (`storeType`, `war
 
 ---
 
-## 🧺 Series 10: Laundry & Service Work Orders (Customer Dispatch)
+## 🧺 Series 11: Work Orders & Payments (Customer Dispatch)
 
-Allows customers to select multiple dresses, assign specific services and rates to each dress (e.g. 2 for iron, 1 for dry cleaning), schedule pickup, and dispatch a branded PDF work order slip to the vendor via WhatsApp.
+Allows customers to select dresses, assign services and rates to each dress, schedule pickup, and dispatch a branded PDF work order slip to the vendor via WhatsApp.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Mobile App User
-    participant App as Mobile Client
-    participant API as Arangtik Backend
-    participant WA as WhatsApp PDF Slip
-
-    User->>App: Selects 3 dresses (e.g. 2 shirts, 1 suit)
-    User->>App: Enters vendor phone number: 9876543210
-    App->>API: GET /api/laundry/vendors/lookup?phone=9876543210
-    API-->>App: Returns Vendor Info + Live Configured Rates
-    App-->>User: Displays Vendor Name & Rates (Dry: ₹40, Iron: ₹20)
-    User->>App: Assigns: 2 Shirts -> Iron (₹20), 1 Suit -> Dry (₹40)
-    App->>App: Live Bill = (2 × 20) + (1 × 40) = ₹80
-    User->>App: Taps "Create Work Order"
-    App->>API: POST /api/laundry/orders { items: [...], vendorPhone, dates }
-    API->>API: Flags 3 dresses as status: 'INACTIVE' (in laundry)
-    API->>API: Generates branded PDF invoice
-    API->>WA: Sends PDF Work Order Slip to Vendor via WhatsApp
-    API-->>App: HTTP 201 { orderNumber: "ORD-2026-0042", pdfUrl: "..." }
-```
-
----
-
-### 10.1 Vendor Lookup (Check Phone & Load Rate Card)
-When the user types a vendor's mobile number, call this endpoint to check if they are a registered partner and retrieve their configured services and prices.
-
+### 11.1 Vendor Lookup (Check Phone & Load Rate Card)
 - **Method:** `GET`
 - **Path:** `/api/laundry/vendors/lookup?phone=9876543210`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
 
-#### Success Response (Registered Partner with Live Rates)
+#### Success Response (`200 OK`)
 ```json
 {
   "success": true,
@@ -1065,41 +1050,18 @@ When the user types a vendor's mobile number, call this endpoint to check if the
       "businessName": "CleanWash Express",
       "phone": "9876543210",
       "rating": 4.9,
-      "isVerified": true,
       "services": [
-        {
-          "name": "dry",
-          "code": "DRY",
-          "price": 40,
-          "isOffered": true
-        },
-        {
-          "name": "iron and press",
-          "code": "IRON_AND_PRESS",
-          "price": 20,
-          "isOffered": true
-        }
+        { "name": "dry", "code": "DRY", "price": 40, "isOffered": true },
+        { "name": "iron and press", "code": "IRON_AND_PRESS", "price": 20, "isOffered": true }
       ]
     }
   }
 }
 ```
 
-#### Success Response (Unregistered Number)
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Vendor not registered, direct contact supported",
-  "data": {
-    "isRegistered": false
-  }
-}
-```
-
 ---
 
-### 10.2 List Eligible Area Partners
+### 11.2 List Eligible Area Partners
 - **Method:** `GET`
 - **Path:** `/api/laundry/vendors/eligible?category=Washerman`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -1118,7 +1080,6 @@ When the user types a vendor's mobile number, call this endpoint to check if the
       "businessName": "CleanWash Express",
       "phone": "9876543210",
       "rating": 4.9,
-      "isVerified": true,
       "services": [ ... ]
     }
   ]
@@ -1127,8 +1088,8 @@ When the user types a vendor's mobile number, call this endpoint to check if the
 
 ---
 
-### 10.3 Create Work Order (Multi-Garment with Per-Dress Care)
-Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a branded PDF slip, and dispatches it via WhatsApp.
+### 11.3 Create Work Order (Multi-Garment with Per-Dress Care)
+Places order, marks selected garments as `status: 'INACTIVE'`, renders PDF invoice, and dispatches via WhatsApp.
 
 - **Method:** `POST`
 - **Path:** `/api/laundry/orders`
@@ -1143,27 +1104,20 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
   "orderCategory": "Washerman",
   "pickupDate": "2026-02-19T09:00:00.000Z",
   "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
-  "specialInstructions": "Please handle the silk suit gently",
+  "specialInstructions": "Handle silk kurta gently",
   "items": [
     {
       "wardrobeItemId": "67b12345abcdef0123456789",
       "serviceType": "IRON",
       "serviceName": "iron and press",
       "price": 20,
-      "specialInstructions": "Starch the collar firmly"
-    },
-    {
-      "wardrobeItemId": "67b98765fedcba9876543210",
-      "serviceType": "IRON",
-      "serviceName": "iron and press",
-      "price": 20
+      "specialInstructions": "Starch the collar"
     },
     {
       "wardrobeItemId": "67c11223344556677889900a",
       "serviceType": "DRY_CLEAN",
       "serviceName": "dry",
-      "price": 40,
-      "specialInstructions": "Delicate silk dry cleaning"
+      "price": 40
     }
   ]
 }
@@ -1181,11 +1135,8 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
     "status": "PENDING_PICKUP",
     "vendorName": "CleanWash Express",
     "vendorPhone": "9876543210",
-    "orderCategory": "Washerman",
-    "totalGarments": 3,
-    "totalCost": 80,
-    "pickupDate": "2026-02-19T09:00:00.000Z",
-    "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
+    "totalGarments": 2,
+    "totalCost": 60,
     "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf",
     "createdAt": "2026-02-18T17:30:00.000Z"
   }
@@ -1194,18 +1145,11 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
 
 ---
 
-### 10.4 List User Work Orders
+### 11.4 List User Work Orders
 - **Method:** `GET`
 - **Path:** `/api/laundry/orders`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `status` | String | No | Filter by status: `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`, `PARTIALLY_DELIVERED`, `DELIVERED`, `CANCELLED` |
-| `category` | String | No | Filter by trade category (e.g. `Washerman`, `Tailor`) |
-| `page` | Integer | No | Page number (Default: `1`) |
-| `limit` | Integer | No | Page limit (Default: `20`) |
+- **Query Parameters:** `status`, `category`, `page`, `limit`
 
 #### Success Response (`200 OK`)
 ```json
@@ -1218,17 +1162,12 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
       {
         "_id": "67c3344556677889900aabbc",
         "orderNumber": "ORD-2026-0042",
-        "status": "PARTIALLY_DELIVERED",
+        "status": "PENDING_PICKUP",
         "vendorName": "CleanWash Express",
         "vendorPhone": "9876543210",
-        "totalGarments": 5,
-        "deliveredItemsCount": 3,
-        "deliveredAmount": 60,
-        "totalCost": 100,
-        "pickupDate": "2026-02-19T09:00:00.000Z",
-        "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
-        "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf",
-        "createdAt": "2026-02-18T17:30:00.000Z"
+        "totalGarments": 2,
+        "totalCost": 60,
+        "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf"
       }
     ],
     "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
@@ -1238,7 +1177,7 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
 
 ---
 
-### 10.5 Get Work Order Details
+### 11.5 Get Work Order Details
 - **Method:** `GET`
 - **Path:** `/api/laundry/orders/:id`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -1253,60 +1192,12 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
     "order": {
       "_id": "67c3344556677889900aabbc",
       "orderNumber": "ORD-2026-0042",
-      "status": "PARTIALLY_DELIVERED",
-      "vendorName": "CleanWash Express",
-      "vendorPhone": "9876543210",
-      "orderCategory": "Washerman",
-      "totalGarments": 5,
-      "deliveredItemsCount": 3,
-      "deliveredAmount": 60,
-      "totalCost": 100,
-      "pickupDate": "2026-02-19T09:00:00.000Z",
-      "expectedDeliveryDate": "2026-02-21T18:00:00.000Z",
-      "specialInstructions": "Please handle the silk suit gently",
-      "pdfUrl": "http://localhost:8083/uploads/order_ORD-2026-0042.pdf",
-      "payment": {
-        "status": "PAID",
-        "paidAt": "2026-10-23T10:15:00.000Z",
-        "updatedBy": "USER"
-      },
-      "items": [
-        {
-          "wardrobeItemId": "67b12345abcdef0123456789",
-          "name": "Navy Blue Linen Shirt",
-          "serviceType": "IRON",
-          "serviceName": "iron and press",
-          "price": 20,
-          "status": "DELIVERED",
-          "deliveredAt": "2026-10-23T10:15:00.000Z",
-          "imageUrl": "http://localhost:8083/uploads/garment_987654.png"
-        },
-        {
-          "wardrobeItemId": "67c11223344556677889900a",
-          "name": "Silk Party Kurta",
-          "serviceType": "DRY_CLEAN",
-          "serviceName": "dry",
-          "price": 40,
-          "status": "DELIVERED",
-          "deliveredAt": "2026-10-23T10:15:00.000Z",
-          "imageUrl": "http://localhost:8083/uploads/garment_112233.png"
-        },
-        {
-          "wardrobeItemId": "67e556677889900aabbcc001",
-          "name": "Formal Trousers",
-          "serviceType": "IRON",
-          "serviceName": "iron and press",
-          "price": 40,
-          "status": "PENDING"
-        }
-      ],
-      "timeline": [
-        {
-          "status": "PARTIALLY_DELIVERED",
-          "timestamp": "2026-10-23T10:15:00.000Z",
-          "note": "Delivered 3 garments out of 5"
-        }
-      ]
+      "status": "DELIVERED",
+      "totalGarments": 2,
+      "totalCost": 60,
+      "payment": { "status": "PAID", "paidAt": "2026-02-21T10:00:00.000Z" },
+      "items": [ ... ],
+      "timeline": [ ... ]
     }
   }
 }
@@ -1314,8 +1205,8 @@ Places the order, sets all selected garments to `status: 'INACTIVE'`, creates a 
 
 ---
 
-### 10.6 Cancel Work Order (Customer Self-Service)
-Customers can cancel an active order before processing. This immediately reverts all garments in the order from `INACTIVE` back to `ACTIVE`.
+### 11.6 Cancel Work Order
+Reverts garments from `INACTIVE` back to `ACTIVE`.
 
 - **Method:** `PATCH`
 - **Path:** `/api/laundry/orders/:id/status`
@@ -1326,7 +1217,7 @@ Customers can cancel an active order before processing. This immediately reverts
 ```json
 {
   "status": "CANCELLED",
-  "note": "Customer cancelled order before pickup"
+  "note": "Customer cancelled before pickup"
 }
 ```
 
@@ -1345,40 +1236,19 @@ Customers can cancel an active order before processing. This immediately reverts
 
 ---
 
-### 10.7 Resend WhatsApp PDF to Vendor
-- **Method:** `POST`
-- **Path:** `/api/laundry/orders/:id/resend-whatsapp`
-- **Auth Required:** `Yes (Bearer <TOKEN>)`
-
-#### Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "WhatsApp work order slip resent to vendor successfully"
-}
-```
-
----
-
-### 10.8 Update Order Payment Status (Customer Self-Service)
-Enables the customer to mark their order payment as `PAID`. Synchronizes in real-time with the vendor app, transactions ledger, and work order PDF.
+### 11.7 Update Order Payment Status
+Allows customer to mark payment as `PAID` (available when order is `DELIVERED` or `PARTIALLY_DELIVERED`).
 
 - **Method:** `PATCH`
 - **Path:** `/api/orders/:id/payment` *(alias: `/api/laundry/orders/:id/payment`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
 - **Content-Type:** `application/json`
 
-#### Validation Rules:
-1. **Delivery Prerequisite:** Payment status can **ONLY** be changed when order status is `DELIVERED`, `PARTIALLY_DELIVERED`, or `PARTIALLY_DONE`. Attempting to mark payment on an undelivered order returns `400 Bad Request`.
-2. **Permanent Lock:** Once an order payment is set to `PAID`, it is permanently locked and cannot be changed back to `UNPAID`.
-3. **Automatic PDF Sync:** Setting payment to `PAID` immediately updates and re-renders the official PDF slip with a green **PAID** collection badge!
-
 #### Request Body
 ```json
 {
   "status": "PAID",
-  "note": "Payment completed via UPI/Cash"
+  "note": "Paid via UPI / Cash"
 }
 ```
 
@@ -1392,29 +1262,11 @@ Enables the customer to mark their order payment as `PAID`. Synchronizes in real
     "order": {
       "_id": "67c3344556677889900aabbc",
       "orderNumber": "ORD-2026-0042",
-      "status": "PARTIALLY_DELIVERED",
-      "deliveredItemsCount": 3,
-      "deliveredAmount": 60,
-      "totalCost": 100,
       "payment": {
         "status": "PAID",
-        "paidAt": "2026-10-23T10:15:00.000Z",
+        "paidAt": "2026-02-21T10:00:00.000Z",
         "updatedBy": "USER"
       }
-    },
-    "transaction": {
-      "_id": "67c445566778899aabbcc001",
-      "transactionNumber": "TXN-20261023-0001",
-      "orderNumber": "ORD-2026-0042",
-      "amount": 60,
-      "totalAmount": 100,
-      "deliveredAmount": 60,
-      "deliveredItemsCount": 3,
-      "totalItems": 5,
-      "orderStatus": "PARTIALLY_DELIVERED",
-      "status": "PAID",
-      "paidAt": "2026-10-23T10:15:00.000Z",
-      "updatedBy": "USER"
     }
   }
 }
@@ -1422,19 +1274,10 @@ Enables the customer to mark their order payment as `PAID`. Synchronizes in real
 
 ---
 
-### 10.9 Get Customer Order Transactions Ledger
-Fetches all transaction ledger entries for orders placed by the authenticated customer.
-
+### 11.8 Get Customer Order Transactions Ledger
 - **Method:** `GET`
-- **Path:** `/api/orders/transactions`
+- **Path:** `/api/orders/transactions?status=ALL&page=1&limit=20`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-|---|---|:---:|---|
-| `status` | String | No | Filter by status: `ALL` (default), `PAID`, or `UNPAID` |
-| `page` | Integer | No | Page number (Default: `1`) |
-| `limit` | Integer | No | Page limit (Default: `20`) |
 
 #### Success Response (`200 OK`)
 ```json
@@ -1448,52 +1291,39 @@ Fetches all transaction ledger entries for orders placed by the authenticated cu
         "_id": "67c445566778899aabbcc001",
         "transactionNumber": "TXN-20261023-0001",
         "orderNumber": "ORD-2026-0042",
-        "orderCategory": "Washerman",
-        "vendorName": "CleanWash Express",
-        "vendorPhone": "919876543210",
         "amount": 60,
-        "totalAmount": 100,
-        "deliveredAmount": 60,
-        "deliveredItemsCount": 3,
-        "totalItems": 5,
-        "orderStatus": "PARTIALLY_DELIVERED",
         "status": "PAID",
-        "paidAt": "2026-10-23T10:15:00.000Z",
-        "updatedBy": "USER",
-        "createdAt": "2026-10-23T10:00:00.000Z"
+        "paidAt": "2026-02-21T10:00:00.000Z"
       }
     ],
-    "pagination": {
-      "total": 1,
-      "page": 1,
-      "limit": 20,
-      "pages": 1
-    }
+    "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
   }
 }
 ```
 
 ---
 
-## 🔔 Series 11: Push Notifications (FCM) & In-App Notification Inbox
-
-Arangtik dispatches real-time push notifications for work order status changes, 3D model completions, and bulk photo ingestion.
-
-### 11.1 FCM Deep-Link Routing Map
-When the user taps a system notification in the background or lock screen, route the user based on `data.type`:
-
-| `data.type` | Target App Screen | Required Data Parameters | Action |
-|---|---|---|---|
-| `LAUNDRY_ORDER_STATUS` | Work Order Detail Screen | `orderId`, `orderNumber`, `status` | View latest order status |
-| `GARMENT_3D_COMPLETED` | 3D Interactive Mesh Viewer | `itemId`, `modelUrl` | View 3D garment |
-| `WARDROBE_DIGITIZED` | Almari Closet Screen | `wardrobeId`, `count` | View freshly extracted clothes |
-| `VENDOR_ACTIVATED` | Partner Dashboard | `vendorId` | Access partner portal |
+### 11.9 Download Work Order Invoice PDF
+- **Method:** `GET`
+- **Path:** `/api/orders/:id/pdf` *(alias: `/api/laundry/orders/:id/pdf`)*
+- **Auth Required:** `Yes (Bearer <TOKEN>)`
+- **Response Format:** Binary `application/pdf` stream
 
 ---
 
-### 11.2 Register / Refresh FCM Device Token
-Call this after login and whenever Firebase issues a refreshed FCM registration token (`onTokenRefresh`).
+## 🔔 Series 12: Push Notifications (FCM) & In-App Alerts
 
+### 12.1 FCM Deep-Link Routing Map
+
+| `data.type` | Target Mobile Screen | Action |
+|---|---|---|
+| `LAUNDRY_ORDER_STATUS` | Order Detail Screen | View latest status of work order |
+| `GARMENT_3D_COMPLETED` | 3D Interactive Mesh Viewer | View 3D garment |
+| `WARDROBE_DIGITIZED` | Almari Screen | View freshly extracted clothes |
+
+---
+
+### 12.2 Register Device Push Token
 - **Method:** `POST`
 - **Path:** `/api/notifications/device-token` *(alias: `/api/auth/device-token`)*
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -1515,42 +1345,13 @@ Call this after login and whenever Firebase issues a refreshed FCM registration 
 {
   "success": true,
   "statusCode": 200,
-  "message": "Device token registered successfully",
-  "data": {
-    "token": "dK_3f9z...",
-    "platform": "ANDROID",
-    "isActive": true
-  }
+  "message": "Device token registered successfully"
 }
 ```
 
 ---
 
-### 11.3 Remove Device Token
-- **Method:** `DELETE`
-- **Path:** `/api/notifications/device-token` *(alias: `/api/auth/device-token`)*
-- **Auth Required:** `Yes (Bearer <TOKEN>)`
-- **Content-Type:** `application/json`
-
-#### Request Body
-```json
-{
-  "token": "dK_3f9z...fcm_registration_token..."
-}
-```
-
-#### Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Device token removed successfully"
-}
-```
-
----
-
-### 11.4 Get In-App Notifications
+### 12.3 Get In-App Notifications
 - **Method:** `GET`
 - **Path:** `/api/notifications?page=1&limit=20&unreadOnly=false`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -1566,22 +1367,20 @@ Call this after login and whenever Firebase issues a refreshed FCM registration 
       {
         "_id": "67d11223344556677889900a",
         "title": "Laundry In Progress",
-        "body": "CleanWash Express has started washing your 3 garments.",
+        "body": "CleanWash Express has started processing your garments.",
         "type": "LAUNDRY_ORDER_STATUS",
-        "data": { "orderId": "67c3344556677889900aabbc", "orderNumber": "ORD-2026-0042" },
         "isRead": false,
         "createdAt": "2026-02-18T18:00:00.000Z"
       }
     ],
-    "unreadCount": 1,
-    "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
+    "unreadCount": 1
   }
 }
 ```
 
 ---
 
-### 11.5 Mark Notification as Read
+### 12.4 Mark Notification as Read
 - **Method:** `PATCH`
 - **Path:** `/api/notifications/:id/read`
 - **Auth Required:** `Yes (Bearer <TOKEN>)`
@@ -1597,34 +1396,18 @@ Call this after login and whenever Firebase issues a refreshed FCM registration 
 
 ---
 
-### 11.6 Mark All Notifications as Read
-- **Method:** `PATCH`
-- **Path:** `/api/notifications/read-all`
-- **Auth Required:** `Yes (Bearer <TOKEN>)`
+## 🖼️ Series 13: Image & Media URL Resolution Protocol
 
-#### Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "All notifications marked as read"
-}
-```
+The backend returns full URLs (`http://localhost:8083/uploads/abc.png`) or relative paths (`/uploads/abc.png`).
+Use this standard utility across your mobile app:
 
----
-
-## 🖼️ Series 12: Image & Media URL Resolution Protocol
-
-The backend may return image paths either as full URLs (`http://localhost:8083/uploads/abc.png`) or relative paths (`/uploads/abc.png`).
-
-Implement this single utility function across your mobile app:
-
-### Flutter / Dart Utility:
+### Flutter / Dart:
 ```dart
+import 'dart:io';
+
 String resolveMediaUrl(String? path, {String baseUrl = 'http://localhost:8083'}) {
   if (path == null || path.isEmpty) return '';
   if (path.startsWith('http://') || path.startsWith('https://')) {
-    // If running inside Android Emulator, translate localhost to 10.0.2.2
     if (Platform.isAndroid && path.contains('localhost')) {
       return path.replaceAll('localhost', '10.0.2.2');
     }
@@ -1636,7 +1419,7 @@ String resolveMediaUrl(String? path, {String baseUrl = 'http://localhost:8083'})
 }
 ```
 
-### React Native / TypeScript Utility:
+### React Native / TypeScript:
 ```typescript
 import { Platform } from 'react-native';
 
@@ -1656,9 +1439,9 @@ export function resolveMediaUrl(path?: string, baseUrl = 'http://localhost:8083'
 
 ---
 
-## 🚀 Series 13: Ready-to-Use Mobile Integration Client
+## 🚀 Series 14: Ready-to-Use Mobile Integration Clients
 
-### Flutter / Dart (`dio` Implementation)
+### Flutter / Dart (`dio` Client)
 
 ```dart
 import 'dart:io';
@@ -1689,7 +1472,6 @@ class ArangtikApiClient {
       },
       onError: (DioException error, handler) async {
         if (error.response?.statusCode == 401) {
-          // Token expired: clear secure storage & redirect to login screen
           await _storage.delete(key: 'jwt_token');
         }
         return handler.next(error);
@@ -1697,30 +1479,42 @@ class ArangtikApiClient {
     ));
   }
 
-  // 1. Send WhatsApp OTP
+  // 1. Send OTP
   Future<Map<String, dynamic>> sendOtp(String phone) async {
-    final response = await _dio.post('/auth/send-otp', data: {'phone': phone});
-    return response.data;
+    final res = await _dio.post('/auth/send-otp', data: {'phone': phone});
+    return res.data;
   }
 
-  // 2. Verify OTP & Register Device Token
+  // 2. Verify OTP
   Future<Map<String, dynamic>> verifyOtp({
     required String phone,
     required String otp,
     String? fcmToken,
   }) async {
-    final response = await _dio.post('/auth/verify-otp', data: {
+    final res = await _dio.post('/auth/verify-otp', data: {
       'phone': phone,
       'otp': otp,
       'fcmToken': fcmToken,
       'platform': Platform.isAndroid ? 'ANDROID' : 'IOS',
     });
-    final token = response.data['data']['token'];
+    final token = res.data['data']['token'];
     await _storage.write(key: 'jwt_token', value: token);
-    return response.data;
+    return res.data;
   }
 
-  // 3. Extract & Add Garment to Almari
+  // 3. Get Store Types
+  Future<List<dynamic>> getStoreTypes() async {
+    final res = await _dio.get('/store-types');
+    return res.data['data'];
+  }
+
+  // 4. Get User Wardrobes (defaults to WARDROBE)
+  Future<List<dynamic>> getWardrobes() async {
+    final res = await _dio.get('/wardrobe/get-wardrobes');
+    return res.data['data'];
+  }
+
+  // 5. Add Garment Photo to Almari
   Future<Map<String, dynamic>> addGarment({
     required File photoFile,
     String? wardrobeId,
@@ -1731,21 +1525,30 @@ class ArangtikApiClient {
       if (wardrobeId != null) 'wardrobeId': wardrobeId,
       'forceAdd': forceAdd.toString(),
     });
-    final response = await _dio.post('/wardrobe/add-item', data: formData);
-    return response.data;
+    final res = await _dio.post('/wardrobe/add-item', data: formData);
+    return res.data;
   }
 
-  // 4. Create Laundry Work Order
-  Future<Map<String, dynamic>> createLaundryOrder(Map<String, dynamic> payload) async {
-    final response = await _dio.post('/laundry/orders', data: payload);
-    return response.data;
+  // 6. List Wardrobe Clothes
+  Future<Map<String, dynamic>> getWardrobeItems({String? wardrobeId, int page = 1}) async {
+    final res = await _dio.get('/wardrobe/get-items', queryParameters: {
+      if (wardrobeId != null) 'wardrobeId': wardrobeId,
+      'page': page,
+    });
+    return res.data['data'];
+  }
+
+  // 7. Create Work Order
+  Future<Map<String, dynamic>> createOrder(Map<String, dynamic> payload) async {
+    final res = await _dio.post('/laundry/orders', data: payload);
+    return res.data;
   }
 }
 ```
 
 ---
 
-### React Native / TypeScript (`axios` Implementation)
+### React Native / TypeScript (`axios` Client)
 
 ```typescript
 import axios from 'axios';
@@ -1796,7 +1599,15 @@ export const verifyOtp = async (phone: string, otp: string, fcmToken?: string) =
   return res.data;
 };
 
-// 3. Extract & Add Garment
+// 3. Get Store Types
+export const getStoreTypes = () =>
+  api.get('/store-types').then(res => res.data.data);
+
+// 4. Get User Wardrobes (defaults to WARDROBE)
+export const getWardrobes = () =>
+  api.get('/wardrobe/get-wardrobes').then(res => res.data.data);
+
+// 5. Add Garment Photo to Almari
 export const addGarment = async (fileUri: string, wardrobeId?: string, forceAdd = false) => {
   const formData = new FormData();
   formData.append('photo', {
@@ -1812,17 +1623,158 @@ export const addGarment = async (fileUri: string, wardrobeId?: string, forceAdd 
   });
   return res.data;
 };
+
+// 6. List Wardrobe Clothes
+export const getWardrobeItems = (params?: { wardrobeId?: string; page?: number }) =>
+  api.get('/wardrobe/get-items', { params }).then(res => res.data.data);
+
+// 7. Create Work Order
+export const createOrder = (payload: any) =>
+  api.post('/laundry/orders', payload).then(res => res.data);
 ```
 
 ---
 
-## 📋 Mobile Developer Quick Reference Checklist
+## 📋 Integration Verification Checklist
 
-- [ ] **Token Storage:** Store JWT in secure hardware keychain (`flutter_secure_storage` / `expo-secure-store` / `react-native-keychain`).
-- [ ] **HTTP Method Rule:** Strictly use `PATCH` for any update endpoint (e.g. `PATCH /api/auth/profile`, `PATCH /api/wardrobe/items/:id`). **Never use `PUT`**.
-- [ ] **Inactive Garment Guardrail:** Any dress with `status === 'INACTIVE'` is currently in laundry. Disable selection for outfit styling or new laundry orders until returned.
-- [ ] **Dynamic Categories & Storage Scoping:** When loading services for a storage unit (e.g. Wardrobe / Almari), fetch categories with storage scope via `GET /api/categories?storeType=WARDROBE` or `GET /api/categories/by-wardrobe/:wardrobeId` so relevant categories are auto-selected without requiring manual customer selection.
-- [ ] **Live Rates:** Always fetch categories dynamically and vendor rates from `GET /api/laundry/vendors/lookup?phone=...` without hardcoding service prices.
-- [ ] **FCM Registration:** Pass `fcmToken` in `POST /api/auth/verify-otp` on login, and call `POST /api/notifications/device-token` on token refresh.
-- [ ] **FCM Deep Linking:** Navigate based on `data.type` (`LAUNDRY_ORDER_STATUS`, `GARMENT_3D_COMPLETED`, `WARDROBE_DIGITIZED`).
-- [ ] **Media URLs:** Resolve all image and 3D model paths using the `resolveMediaUrl()` utility function.
+- [ ] **Base URL Setup:** Set Android emulator to `http://10.0.2.2:8083/api` and iOS/Web to `http://localhost:8083/api`.
+- [ ] **Auth Token Storage:** Store JWT in secure storage (`flutter_secure_storage` / `expo-secure-store`).
+- [ ] **Strict PATCH Rule:** Use `PATCH` for any update endpoint (e.g. `PATCH /api/auth/profile`, `PATCH /api/wardrobe/edit-item/:id`, `PATCH /api/orders/:id/payment`). Never use `PUT`.
+- [ ] **Wardrobe Separation:** `GET /api/wardrobe/get-wardrobes` returns only the user's Wardrobes (Almaris).
+- [ ] **Status Guardrail:** Items with `status: 'INACTIVE'` are currently in laundry; disable selection for outfit styling or new orders until delivered.
+- [ ] **FCM Registration:** Provide `fcmToken` in `POST /api/auth/verify-otp` and handle deep links via `data.type`.
+
+---
+
+## 📊 Mobile App Integration Action Report (Monika Rathore / SummaryApi Audit)
+
+This audit report compares the Mobile App's current `SummaryApi` configuration directly with the Backend API contract. Use the tables below to identify exactly what to integrate, what backend fixes were made, and which endpoints are already 100% matched.
+
+---
+
+### 1. 🚨 Naye Endpoints Jo Mobile App Me Add / Integrate Karne Hain
+
+Yeh endpoints Backend me live hain aur Mobile App ke `SummaryApi` me missing hain. Inhe app ke `SummaryApi` me add karein:
+
+| # | Key Name (App Me Add Karein) | Method | Backend URL Path | Purpose / Description | Action Required |
+|:--|:-----------------------------|:------:|:-----------------|:----------------------|:----------------|
+| 1 | `getStoreTypes` | `GET` | `/store-types` | Multi-store list (Wardrobe, Kitchen, etc.) fetch karne ke liye | Add to `SummaryApi` & Store selector screen me bind karein |
+| 2 | `updateOrderPayment` | `PATCH` | `/orders/:id/payment` | Payment success / status update karne ke liye (`PUT` use na karein) | Add to `SummaryApi` & Razorpay/Online payment callback me call karein |
+| 3 | `getOrderTransactions` | `GET` | `/orders/transactions` | All payment transactions history dekhne ke liye | Add to `SummaryApi` & Wallet/Transactions tab me use karein |
+| 4 | `getOrderPdf` | `GET` | `/orders/:id/pdf` | Order invoice / receipt PDF download/view karne ke liye | Add to `SummaryApi` & Order details screen pe "Download Invoice" button bind karein |
+| 5 | `getSingleOrderTransactions` | `GET` | `/orders/:id/transactions` | Ek specific order ki transaction history dekhne ke liye | Add to `SummaryApi` & Order detail page ke payment section me bind karein |
+| 6 | `getCategoryServices` | `GET` | `/categories/:id/services` | Category ke specific available laundry services fetch karne ke liye | (Optional) Category-wise service filtering ke liye add karein |
+
+---
+
+### 2. ⚙️ Backend Endpoints Jo Fix / Optimize Ho Chuke Hain (App ke Sath 100% Compatible)
+
+In endpoints me mobile app ki compatibility aur user request ke anusar backend me update aur validation confirm kar di gayi hai:
+
+| # | Key Name in App | Method | Endpoint URL Path | Backend Fix / Status | Mobile App Impact |
+|:--|:----------------|:------:|:------------------|:---------------------|:------------------|
+| 1 | `deleteWardrobe` | `DELETE` | `/wardrobe/delete-wardrobe/:id` | Backend me dedicated route `/wardrobe/delete-wardrobe/:id` add kar diya gaya hai. Jab wardrobe delete hota hai to clothes safe rehte hain (default Almari me migrate ho jate hain). | Mobile app ko code change karne ki zaroorat nahi hai; direct call karein. |
+| 2 | `getWardrobes` | `GET` | `/wardrobe/get-wardrobes` | Ab yeh API **strictly default `storeType: 'WARDROBE'`** filter karti hai. Kitchen ya other store types isme mix nahi honge, aur real-time accurate `itemCount` calculate hoke aayega. | Wardrobe list me sirf Almari/Closets aayenge, kitchen storage nahi aayega. |
+| 3 | `getEligibleVendors` | `GET` | `/laundry/vendors/eligible` | Pincode / geolocation ke hisab se order deliver karne wale eligible partners fetch karta hai. | User app ke laundry flow me delivery estimate ya vendor info dikhane ke liye use karein. |
+
+---
+
+### 3. ✅ Existing Endpoints Audit Matrix (SummaryApi vs Backend)
+
+Niche di gayi table me Monika Rathore ke `SummaryApi` ke sabhi existing endpoints ka Backend verification status hai:
+
+| Series | App Function / Key | Method | Backend URL Path | Verification Status |
+|:-------|:-------------------|:------:|:-----------------|:-------------------:|
+| **Series 1** | `healthCheck` | `GET` | `/health` | ✅ 100% Match |
+| **Series 2** | `sendOtp` | `POST` | `/auth/send-otp` | ✅ 100% Match |
+| **Series 2** | `verifyOtp` | `POST` | `/auth/verify-otp` | ✅ 100% Match |
+| **Series 2** | `getProfile` | `GET` | `/auth/profile` | ✅ 100% Match |
+| **Series 2** | `updateProfile` | `PATCH` | `/auth/profile` | ✅ 100% Match (Strict PATCH) |
+| **Series 2** | `uploadProfileImage` | `POST` | `/auth/profile-image` | ✅ 100% Match (multipart) |
+| **Series 2** | `logout` | `POST` | `/auth/logout` | ✅ 100% Match |
+| **Series 3** | `registerFace` | `POST` | `/face-recognition/register` | ✅ 100% Match |
+| **Series 3** | `verifyFace` | `POST` | `/face-recognition/verify` | ✅ 100% Match |
+| **Series 3** | `faceStatus` | `GET` | `/face-recognition/status` | ✅ 100% Match |
+| **Series 3** | `deleteFace` | `DELETE` | `/face-recognition/reference` | ✅ 100% Match |
+| **Series 4** | `addAddress` | `POST` | `/addresses` | ✅ 100% Match |
+| **Series 4** | `getAddresses` | `GET` | `/addresses` | ✅ 100% Match |
+| **Series 4** | `updateAddress` | `PATCH` | `/addresses/:id` | ✅ 100% Match |
+| **Series 4** | `deleteAddress` | `DELETE` | `/addresses/:id` | ✅ 100% Match |
+| **Series 4** | `setDefaultAddress` | `PATCH` | `/addresses/:id/default` | ✅ 100% Match |
+| **Series 5** | `createWardrobe` | `POST` | `/wardrobe/add-wardrobe` | ✅ 100% Match |
+| **Series 5** | `getWardrobes` | `GET` | `/wardrobe/get-wardrobes` | ✅ 100% Match (Filtered to WARDROBE) |
+| **Series 5** | `updateWardrobe` | `PATCH` | `/wardrobe/edit-wardrobe/:id` | ✅ 100% Match |
+| **Series 5** | `deleteWardrobe` | `DELETE` | `/wardrobe/delete-wardrobe/:id` | ✅ 100% Match (Backend Route Live) |
+| **Series 6** | `createClothingItem` | `POST` | `/wardrobe/add-item` | ✅ 100% Match (multipart) |
+| **Series 6** | `getClothingItems` | `GET` | `/wardrobe/get-items` | ✅ 100% Match |
+| **Series 6** | `getClothingItemDetails`| `GET` | `/wardrobe/get-item/:id` | ✅ 100% Match |
+| **Series 6** | `updateClothingItem` | `PATCH` | `/wardrobe/edit-item/:id` | ✅ 100% Match |
+| **Series 6** | `deleteClothingItem` | `DELETE` | `/wardrobe/delete-item/:id` | ✅ 100% Match |
+| **Series 6** | `getClothTypes` | `GET` | `/wardrobe/meta/cloth-types` | ✅ 100% Match |
+| **Series 6** | `getCategories` | `GET` | `/categories` | ✅ 100% Match |
+| **Series 7** | `getOccasions` | `GET` | `/wardrobe/meta/occasions` | ✅ 100% Match |
+| **Series 7** | `createOutfit` | `POST` | `/wardrobe/outfits` | ✅ 100% Match |
+| **Series 7** | `getOutfits` | `GET` | `/wardrobe/outfits` | ✅ 100% Match |
+| **Series 7** | `getOutfitDetails` | `GET` | `/wardrobe/outfits/:id` | ✅ 100% Match |
+| **Series 7** | `updateOutfit` | `PATCH` | `/wardrobe/outfits/:id` | ✅ 100% Match |
+| **Series 7** | `deleteOutfit` | `DELETE` | `/wardrobe/outfits/:id` | ✅ 100% Match |
+| **Series 8** | `getServices` | `GET` | `/laundry/services` | ✅ 100% Match |
+| **Series 8** | `getClothingRates` | `GET` | `/laundry/clothing-rates` | ✅ 100% Match |
+| **Series 8** | `getPricingSummary` | `POST` | `/laundry/pricing-summary` | ✅ 100% Match |
+| **Series 9** | `createOrder` | `POST` | `/laundry/orders` | ✅ 100% Match |
+| **Series 9** | `getOrders` | `GET` | `/laundry/orders` | ✅ 100% Match |
+| **Series 9** | `getOrderDetails` | `GET` | `/laundry/orders/:id` | ✅ 100% Match |
+| **Series 9** | `cancelOrder` | `POST` | `/laundry/orders/:id/cancel` | ✅ 100% Match |
+| **Series 9** | `trackOrder` | `GET` | `/laundry/orders/:id/track` | ✅ 100% Match |
+| **Series 10** | `getEligibleVendors` | `GET` | `/laundry/vendors/eligible` | ✅ 100% Match |
+| **Series 11** | `getNotifications` | `GET` | `/notifications` | ✅ 100% Match |
+| **Series 11** | `markNotificationRead`| `PATCH` | `/notifications/:id/read` | ✅ 100% Match |
+| **Series 11** | `markAllNotificationsRead`| `PATCH` | `/notifications/read-all` | ✅ 100% Match |
+| **Series 11** | `getUnreadNotificationCount`| `GET` | `/notifications/unread-count` | ✅ 100% Match |
+| **Series 12** | `submitFeedback` | `POST` | `/feedback` | ✅ 100% Match |
+| **Series 13** | `getPrivacyPolicy` | `GET` | `/legal/privacy-policy` | ✅ 100% Match |
+| **Series 13** | `getTermsConditions`| `GET` | `/legal/terms` | ✅ 100% Match |
+| **Series 13** | `getFaq` | `GET` | `/legal/faq` | ✅ 100% Match |
+
+---
+
+### 4. 💻 Copy-Paste Code Snippet For Mobile App (`SummaryApi`)
+
+Mobile app developer Monika Rathore apne `SummaryApi` object me yeh missing block add kar sakti hain:
+
+```javascript
+// ==========================================
+// NEW MISSING ENDPOINTS TO ADD TO SummaryApi
+// ==========================================
+
+// Store Types (Multi-Store Support)
+getStoreTypes: {
+  url: `${API_ROOT}/stor  e-types`,
+  method: 'GET',
+},
+
+// Order Payments & Transactions
+updateOrderPayment: (id) => ({
+  url: `${API_ROOT}/orders/${id}/payment`,
+  method: 'PATCH',
+}),
+getOrderTransactions: {
+  url: `${API_ROOT}/orders/transactions`,
+  method: 'GET',
+},
+getSingleOrderTransactions: (id) => ({
+  url: `${API_ROOT}/orders/${id}/transactions`,
+  method: 'GET',
+}),
+getOrderPdf: (id) => ({
+  url: `${API_ROOT}/orders/${id}/pdf`,
+  method: 'GET',
+}),
+
+// Category Specific Services (Optional)
+getCategoryServices: (id) => ({
+  url: `${API_ROOT}/categories/${id}/services`,
+  method: 'GET',
+}),
+```
+

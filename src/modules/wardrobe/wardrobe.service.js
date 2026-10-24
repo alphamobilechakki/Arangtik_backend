@@ -1,4 +1,5 @@
 const fs = require('fs');
+const mongoose = require('mongoose');
 const Wardrobe = require('./wardrobe.model');
 const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
@@ -86,7 +87,22 @@ const createWardrobe = async (userId, data, files = null) => {
   }
 
   if (isDefault) {
-    await Wardrobe.updateMany({ userId, storeType: finalStoreType }, { isDefault: false });
+    if (finalStoreType === 'WARDROBE') {
+      await Wardrobe.updateMany(
+        {
+          userId,
+          $or: [
+            { storeType: 'WARDROBE' },
+            { storeType: null },
+            { storeType: { $exists: false } },
+            ...(finalStoreTypeId ? [{ storeTypeId: finalStoreTypeId }] : []),
+          ],
+        },
+        { isDefault: false }
+      );
+    } else {
+      await Wardrobe.updateMany({ userId, storeType: finalStoreType }, { isDefault: false });
+    }
   }
 
   const wardrobe = await Wardrobe.create({
@@ -103,18 +119,142 @@ const createWardrobe = async (userId, data, files = null) => {
     isActive: true,
   });
 
-  return wardrobe;
+  const createdObj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
+  createdObj.itemCount = 0;
+  createdObj.coverImage = createdObj.coverImage ? formatUploadUrl(createdObj.coverImage) : '';
+  createdObj.ownerFaceImage = createdObj.ownerFaceImage ? formatUploadUrl(createdObj.ownerFaceImage) : '';
+  return createdObj;
 };
 
 /**
  * Get all active Wardrobes / Stores for user
+ * Supports multi-store filtering:
+ *  - query.storeType='WARDROBE': returns only WARDROBE containers + legacy containers
+ *  - query.storeType='KITCHEN': returns only KITCHEN containers
+ *  - query.storeTypeId: filters by StoreType ObjectId
+ *  - no storeType or 'ALL': returns all containers across all user stores
+ * Automatically populates computed itemCount per container and formats asset URLs.
  */
 const getWardrobes = async (userId, query = {}) => {
   const filter = { userId, isActive: true };
-  if (query.storeType) {
-    filter.storeType = query.storeType;
+  const rawStore = query.storeTypeId || query.storeType || 'WARDROBE';
+
+  if (rawStore && rawStore !== 'ALL') {
+    if (mongoose.Types.ObjectId.isValid(rawStore)) {
+      filter.$or = [
+        { storeTypeId: new mongoose.Types.ObjectId(rawStore) },
+        { storeType: String(rawStore) },
+      ];
+      try {
+        const StoreType = require('../admin/storeType/storeType.model');
+        const stDoc = await StoreType.findById(rawStore);
+        if (stDoc) {
+          if (stDoc.code === 'WARDROBE') {
+            filter.$or.push(
+              { storeType: 'WARDROBE' },
+              { storeType: new RegExp('^wardrobe$', 'i') },
+              { storeType: { $exists: false } },
+              { storeType: null }
+            );
+          } else {
+            filter.$or.push(
+              { storeType: stDoc.code },
+              { storeType: new RegExp(`^${stDoc.code}$`, 'i') }
+            );
+          }
+        }
+      } catch (_) {}
+    } else {
+      const upper = String(rawStore).trim().toUpperCase();
+      if (upper === 'WARDROBE') {
+        filter.$or = [
+          { storeType: 'WARDROBE' },
+          { storeType: new RegExp('^wardrobe$', 'i') },
+          { storeType: { $exists: false } },
+          { storeType: null },
+        ];
+      } else {
+        filter.$or = [
+          { storeType: upper },
+          { storeType: new RegExp(`^${String(rawStore).trim()}$`, 'i') },
+        ];
+      }
+      try {
+        const StoreType = require('../admin/storeType/storeType.model');
+        const stDoc = await StoreType.findOne({
+          $or: [
+            { code: upper },
+            { name: new RegExp(`^${String(rawStore).trim()}$`, 'i') },
+          ],
+        });
+        if (stDoc) {
+          filter.$or.push({ storeTypeId: stDoc._id });
+        }
+      } catch (_) {}
+    }
   }
-  return await Wardrobe.find(filter).sort({ isDefault: -1, createdAt: -1 });
+
+  const wardrobes = await Wardrobe.find(filter).sort({ isDefault: -1, createdAt: -1 });
+
+  // Calculate itemCount per container dynamically
+  let itemCounts = [];
+  try {
+    itemCounts = await WardrobeItem.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $group: { _id: '$wardrobeId', count: { $sum: 1 } } },
+    ]);
+  } catch (aggErr) {
+    console.warn(`[getWardrobes] item count aggregation fallback: ${aggErr.message}`);
+  }
+
+  const countsMap = {};
+  let unassignedCount = 0;
+  for (const row of itemCounts) {
+    if (row._id) {
+      countsMap[row._id.toString()] = row.count;
+    } else {
+      unassignedCount += row.count;
+    }
+  }
+
+  return wardrobes.map((w) => {
+    const obj = w.toObject ? w.toObject() : { ...w };
+    let count = countsMap[obj._id.toString()] || 0;
+    if (obj.isDefault) {
+      count += unassignedCount;
+    }
+    obj.itemCount = count;
+    obj.coverImage = obj.coverImage ? formatUploadUrl(obj.coverImage) : '';
+    obj.ownerFaceImage = obj.ownerFaceImage ? formatUploadUrl(obj.ownerFaceImage) : '';
+    return obj;
+  });
+};
+
+/**
+ * Delete a user's Wardrobe / Almari container
+ */
+const deleteWardrobe = async (userId, wardrobeId) => {
+  if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
+    throw new ApiError(400, 'Invalid wardrobe container ID');
+  }
+
+  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId, isActive: true });
+  if (!wardrobe) {
+    throw new ApiError(404, 'Wardrobe container not found');
+  }
+  if (wardrobe.isDefault) {
+    throw new ApiError(400, 'Cannot delete your default Almari');
+  }
+
+  wardrobe.isActive = false;
+  await wardrobe.save();
+
+  // Find user's default wardrobe to migrate any orphan items
+  const defaultW = await Wardrobe.findOne({ userId, isDefault: true, isActive: true });
+  const fallbackId = defaultW ? defaultW._id : null;
+  await WardrobeItem.updateMany({ wardrobeId: wardrobe._id }, { wardrobeId: fallbackId });
+
+  return { message: 'Wardrobe container deleted successfully' };
 };
 
 const parseArrayField = (val) => {
@@ -462,9 +602,34 @@ const getAllItems = async (userId, queryParams = {}) => {
   }
 
   if (storeType && storeType !== 'ALL') {
-    const matchingStores = await Wardrobe.find({ userId, storeType }).select('_id');
+    const upperStore = String(storeType).trim().toUpperCase();
+    const storeFilter = { userId, isActive: true };
+    if (upperStore === 'WARDROBE') {
+      storeFilter.$or = [
+        { storeType: 'WARDROBE' },
+        { storeType: new RegExp('^wardrobe$', 'i') },
+        { storeType: { $exists: false } },
+        { storeType: null },
+      ];
+    } else {
+      storeFilter.$or = [
+        { storeType: upperStore },
+        { storeType: new RegExp(`^${String(storeType).trim()}$`, 'i') },
+      ];
+    }
+    const matchingStores = await Wardrobe.find(storeFilter).select('_id');
     const storeIds = matchingStores.map((s) => s._id);
-    andClauses.push({ wardrobeId: { $in: storeIds } });
+    if (upperStore === 'WARDROBE') {
+      andClauses.push({
+        $or: [
+          { wardrobeId: { $in: storeIds } },
+          { wardrobeId: null },
+          { wardrobeId: { $exists: false } },
+        ],
+      });
+    } else {
+      andClauses.push({ wardrobeId: { $in: storeIds } });
+    }
   }
 
   if (wardrobeId) {
@@ -777,6 +942,7 @@ const generateItem3DModel = async (userId, itemId) => {
 module.exports = {
   createWardrobe,
   getWardrobes,
+  deleteWardrobe,
   addItem,
   addItemFromDetection,
   getAllItems,
