@@ -1749,7 +1749,7 @@ Mobile app developer Monika Rathore apne `SummaryApi` object me yeh missing bloc
 
 // Store Types (Multi-Store Support)
 getStoreTypes: {
-  url: `${API_ROOT}/stor  e-types`,
+  url: `${API_ROOT}/store-types`,
   method: 'GET',
 },
 

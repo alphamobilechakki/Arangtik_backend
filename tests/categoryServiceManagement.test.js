@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 require('dotenv').config({ path: 'd:/my codes/Arangtik/backend/.env' });
 
 const VendorCategory = require('../src/modules/admin/vendorCategory/vendorCategory.model');
-const CategoryService = require('../src/modules/admin/vendorCategory/categoryService.model');
 const RegisteredVendor = require('../src/modules/vendor/registeredVendor.model');
 const User = require('../src/modules/auth/user.model');
 const WardrobeItem = require('../src/modules/wardrobe/wardrobeItem.model');
@@ -64,7 +63,6 @@ describe('Category & Service Management Integration Tests', () => {
   after(async () => {
     // Cleanup test artifacts
     if (testCategory) {
-      await CategoryService.deleteMany({ categoryId: testCategory._id });
       await VendorCategory.findByIdAndDelete(testCategory._id);
     }
     if (testUser) {

@@ -22,7 +22,6 @@ const orderItemSchema = new mongoose.Schema(
     // 2. Service & Special Instructions
     serviceId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'CategoryService',
       default: null,
     },
     serviceName: {

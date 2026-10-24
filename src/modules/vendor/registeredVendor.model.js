@@ -41,7 +41,6 @@ const registeredVendorSchema = new mongoose.Schema(
       {
         serviceId: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'CategoryService',
           default: null,
         },
         name: { type: String, required: true, trim: true },
