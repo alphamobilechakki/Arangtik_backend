@@ -1,12 +1,11 @@
 const ApiError = require('../../../utils/apiError');
-const { ALLOWED_STORE_TYPES } = require('./vendorCategory.model');
 
 const validateStoreTypesInput = (raw) => {
   if (raw === undefined || raw === null) return null;
   const list = Array.isArray(raw)
     ? raw
     : typeof raw === 'string'
-    ? raw.split(',').map((s) => s.trim())
+    ? raw.split(',').map((s) => s.trim()).filter(Boolean)
     : null;
 
   if (!list || list.length === 0) {
@@ -14,9 +13,8 @@ const validateStoreTypesInput = (raw) => {
   }
 
   for (const st of list) {
-    const upper = String(st).trim().toUpperCase();
-    if (!ALLOWED_STORE_TYPES.includes(upper)) {
-      return `Invalid storage type "${st}". Allowed types are: ${ALLOWED_STORE_TYPES.join(', ')}`;
+    if (!st || typeof st !== 'string' || !st.trim()) {
+      return 'Each storeType must be a valid non-empty string or StoreType ID';
     }
   }
 

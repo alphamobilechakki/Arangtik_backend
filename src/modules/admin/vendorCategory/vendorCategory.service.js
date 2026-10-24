@@ -6,6 +6,55 @@ const RegisteredVendor = require('../../vendor/registeredVendor.model');
 
 class VendorCategoryService {
   /**
+   * Helper to dynamically resolve StoreType references (IDs or codes)
+   */
+  async resolveStoreTypeReferences(rawStoreInput) {
+    const StoreType = require('../storeType/storeType.model');
+    if (!rawStoreInput && rawStoreInput !== '') {
+      return { storeTypes: [], storeTypeIds: [] };
+    }
+
+    const mongoose = require('mongoose');
+    const items = Array.isArray(rawStoreInput)
+      ? rawStoreInput
+      : typeof rawStoreInput === 'string'
+      ? rawStoreInput.split(',').map((s) => s.trim()).filter(Boolean)
+      : [rawStoreInput];
+
+    const storeTypes = [];
+    const storeTypeIds = [];
+
+    for (const item of items) {
+      if (!item) continue;
+      const str = String(item).trim();
+      let doc = null;
+
+      if (mongoose.Types.ObjectId.isValid(str)) {
+        doc = await StoreType.findById(str);
+      }
+      if (!doc) {
+        doc = await StoreType.findOne({
+          $or: [
+            { code: str.toUpperCase() },
+            { name: { $regex: new RegExp(`^${str}$`, 'i') } },
+          ],
+        });
+      }
+
+      if (doc) {
+        if (!storeTypeIds.some((id) => id.equals(doc._id))) storeTypeIds.push(doc._id);
+        if (!storeTypes.includes(doc.code)) storeTypes.push(doc.code);
+      } else {
+        // Dynamic fallback string
+        const code = str.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        if (!storeTypes.includes(code)) storeTypes.push(code);
+      }
+    }
+
+    return { storeTypes, storeTypeIds };
+  }
+
+  /**
    * Create a new vendor category
    */
   async createCategory(payload = {}, file = null) {
@@ -20,6 +69,7 @@ class VendorCategoryService {
       isActive,
       storeTypes,
       storeType,
+      storeTypeIds,
     } = payload;
 
     if (!name || !String(name).trim()) {
@@ -42,22 +92,10 @@ class VendorCategoryService {
       finalImageUrl = formatUploadUrl(finalImageUrl);
     }
 
-    // Normalize storeTypes (default to ['WARDROBE'])
-    const rawStores = storeTypes !== undefined ? storeTypes : storeType;
-    let finalStoreTypes = ['WARDROBE'];
-    if (rawStores !== undefined && rawStores !== null) {
-      const list = Array.isArray(rawStores)
-        ? rawStores
-        : typeof rawStores === 'string'
-        ? rawStores.split(',').map((s) => s.trim())
-        : [];
-      const valid = list
-        .map((s) => String(s).trim().toUpperCase())
-        .filter((s) => VendorCategory.ALLOWED_STORE_TYPES.includes(s));
-      if (valid.length > 0) {
-        finalStoreTypes = [...new Set(valid)];
-      }
-    }
+    // Dynamic storeTypes & storeTypeIds resolution
+    const rawStores = storeTypes !== undefined ? storeTypes : storeType !== undefined ? storeType : storeTypeIds;
+    const { storeTypes: finalStoreTypes, storeTypeIds: finalStoreTypeIds } =
+      await this.resolveStoreTypeReferences(rawStores);
 
     const category = await VendorCategory.create({
       name: trimmedName,
@@ -69,6 +107,7 @@ class VendorCategoryService {
       sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
       storeTypes: finalStoreTypes,
+      storeTypeIds: finalStoreTypeIds,
     });
 
     return category;
@@ -119,12 +158,21 @@ class VendorCategoryService {
     const query = includeInactive ? {} : { isActive: true };
 
     if (targetStoreType) {
+      const mongoose = require('mongoose');
+      const isObjectId = mongoose.Types.ObjectId.isValid(targetStoreType);
       if (targetStoreType === 'WARDROBE') {
         // For WARDROBE, also match legacy records where storeTypes is empty or undefined
-        query.$or = [
+        const orClauses = [
           { storeTypes: 'WARDROBE' },
           { storeTypes: { $exists: false } },
           { storeTypes: { $size: 0 } },
+        ];
+        if (isObjectId) orClauses.push({ storeTypeIds: targetStoreType });
+        query.$or = orClauses;
+      } else if (isObjectId) {
+        query.$or = [
+          { storeTypeIds: targetStoreType },
+          { storeTypes: targetStoreType },
         ];
       } else {
         query.storeTypes = targetStoreType;
@@ -134,9 +182,6 @@ class VendorCategoryService {
     const categories = await VendorCategory.find(query).sort({ sortOrder: 1, name: 1, createdAt: 1 });
     return categories.map((cat) => {
       const doc = cat.toObject ? cat.toObject() : { ...cat };
-      if (!doc.storeTypes || doc.storeTypes.length === 0) {
-        doc.storeTypes = ['WARDROBE'];
-      }
       if (doc.imageUrl) doc.imageUrl = formatUploadUrl(doc.imageUrl);
       if (doc.image) doc.image = formatUploadUrl(doc.image);
       const finalImg = doc.imageUrl || doc.image;
@@ -152,6 +197,13 @@ class VendorCategoryService {
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       return doc;
     });
+  }
+
+  /**
+   * Helper to retrieve categories filtered by storeType code or ObjectId
+   */
+  async getCategoriesByStoreType(storeType, options = {}) {
+    return this.getAllCategories({ ...options, storeType });
   }
 
   /**
@@ -245,18 +297,21 @@ class VendorCategoryService {
     if (updateData.sortOrder !== undefined) category.sortOrder = Number(updateData.sortOrder);
     if (updateData.isActive !== undefined) category.isActive = Boolean(updateData.isActive);
 
-    if (updateData.storeTypes !== undefined || updateData.storeType !== undefined) {
+    if (
+      updateData.storeTypes !== undefined ||
+      updateData.storeType !== undefined ||
+      updateData.storeTypeIds !== undefined
+    ) {
       const rawStores =
-        updateData.storeTypes !== undefined ? updateData.storeTypes : updateData.storeType;
-      const list = Array.isArray(rawStores)
-        ? rawStores
-        : typeof rawStores === 'string'
-        ? rawStores.split(',').map((s) => s.trim())
-        : [];
-      const valid = list
-        .map((s) => String(s).trim().toUpperCase())
-        .filter((s) => VendorCategory.ALLOWED_STORE_TYPES.includes(s));
-      category.storeTypes = valid.length > 0 ? [...new Set(valid)] : ['WARDROBE'];
+        updateData.storeTypes !== undefined
+          ? updateData.storeTypes
+          : updateData.storeType !== undefined
+          ? updateData.storeType
+          : updateData.storeTypeIds;
+      const { storeTypes: resolvedStoreTypes, storeTypeIds: resolvedStoreTypeIds } =
+        await this.resolveStoreTypeReferences(rawStores);
+      category.storeTypes = resolvedStoreTypes;
+      category.storeTypeIds = resolvedStoreTypeIds;
     }
 
     await category.save();

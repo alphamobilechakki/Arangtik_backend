@@ -60,6 +60,10 @@ router.use('/categories', vendorCategoryRoutes);
 // Category Services Routes (Public / Customer / Vendor discovery)
 router.use('/services', categoryServiceRoutes);
 
+// Store Types Routes (Public customer and mobile app store types list)
+const storeTypeRoutes = require('../modules/admin/storeType/storeType.routes');
+router.use('/store-types', storeTypeRoutes);
+
 // Admin Module Routes
 router.use('/admin', adminRoutes);
 

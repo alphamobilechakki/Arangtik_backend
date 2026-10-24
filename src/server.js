@@ -10,8 +10,6 @@ const startServer = async () => {
     // 1. Establish MongoDB Database Connection
     await connectDB();
 
-
-    // 2. Start HTTP Listener
     app.listen(8083, () => {
       console.log('==================================================');
       console.log(`🚀 Arangtik Backend Server Running in [${NODE_ENV.toUpperCase()}] mode`);

@@ -10,9 +10,40 @@ const { formatUploadUrl } = require('../../utils/url.util');
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
 const createWardrobe = async (userId, data, files = null) => {
-  const { name, storeType = 'WARDROBE', type, ownerName, isDefault } = data;
+  const { name, storeType = 'WARDROBE', storeTypeId, type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
+  }
+
+  // Dynamic StoreType resolution
+  let finalStoreType = 'WARDROBE';
+  let finalStoreTypeId = null;
+  const rawStore = storeTypeId || storeType;
+  if (rawStore) {
+    try {
+      const StoreType = require('../admin/storeType/storeType.model');
+      const mongoose = require('mongoose');
+      let stDoc = null;
+      if (mongoose.Types.ObjectId.isValid(rawStore)) {
+        stDoc = await StoreType.findById(rawStore);
+      }
+      if (!stDoc) {
+        stDoc = await StoreType.findOne({
+          $or: [
+            { code: String(rawStore).toUpperCase() },
+            { name: { $regex: new RegExp(`^${String(rawStore).trim()}$`, 'i') } },
+          ],
+        });
+      }
+      if (stDoc) {
+        finalStoreTypeId = stDoc._id;
+        finalStoreType = stDoc.code;
+      } else {
+        finalStoreType = String(rawStore).toUpperCase();
+      }
+    } catch (_) {
+      finalStoreType = String(rawStore).toUpperCase();
+    }
   }
 
   let coverImage = data.coverImage ? formatUploadUrl(data.coverImage) : '';
@@ -55,13 +86,14 @@ const createWardrobe = async (userId, data, files = null) => {
   }
 
   if (isDefault) {
-    await Wardrobe.updateMany({ userId, storeType }, { isDefault: false });
+    await Wardrobe.updateMany({ userId, storeType: finalStoreType }, { isDefault: false });
   }
 
   const wardrobe = await Wardrobe.create({
     userId,
     name,
-    storeType: storeType || 'WARDROBE',
+    storeType: finalStoreType,
+    storeTypeId: finalStoreTypeId,
     type: type || 'PERSONAL',
     ownerName: ownerName || '',
     coverImage: coverImage || '',

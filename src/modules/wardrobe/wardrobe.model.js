@@ -14,9 +14,14 @@ const WardrobeSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Wardrobe name cannot exceed 100 characters'],
     },
+    storeTypeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'StoreType',
+      default: null,
+      index: true,
+    },
     storeType: {
       type: String,
-      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'VALUABLES', 'OTHER'],
       default: 'WARDROBE',
       index: true,
     },

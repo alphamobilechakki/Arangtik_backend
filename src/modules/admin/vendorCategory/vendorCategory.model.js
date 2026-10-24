@@ -110,10 +110,14 @@ const vendorCategorySchema = new mongoose.Schema(
       type: [serviceSubSchema],
       default: [],
     },
+    storeTypeIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'StoreType' }],
+      default: [],
+      index: true,
+    },
     storeTypes: {
       type: [String],
-      enum: ['WARDROBE', 'KITCHEN', 'ELECTRONICS', 'HOUSEHOLD', 'VALUABLES', 'OTHER'],
-      default: ['WARDROBE'],
+      default: [],
       index: true,
     },
   },
@@ -123,15 +127,6 @@ const vendorCategorySchema = new mongoose.Schema(
     toObject: { virtuals: true },
   }
 );
-
-const ALLOWED_STORE_TYPES = [
-  'WARDROBE',
-  'KITCHEN',
-  'ELECTRONICS',
-  'HOUSEHOLD',
-  'VALUABLES',
-  'OTHER',
-];
 
 // Auto-generate normalized code before validation if not specified & normalize storeTypes
 vendorCategorySchema.pre('validate', function (next) {
@@ -143,17 +138,17 @@ vendorCategorySchema.pre('validate', function (next) {
       .replace(/^_+|_+$/g, '');
   }
 
-  // Normalize storeTypes to valid uppercase enum array
+  // Normalize storeTypes array (dynamic store types allowed)
   if (Array.isArray(this.storeTypes)) {
     const cleaned = this.storeTypes
       .map((s) => String(s).trim().toUpperCase())
-      .filter((s) => ALLOWED_STORE_TYPES.includes(s));
+      .filter(Boolean);
     this.storeTypes = cleaned.length > 0 ? [...new Set(cleaned)] : ['WARDROBE'];
   } else if (typeof this.storeTypes === 'string') {
     const list = this.storeTypes
       .split(',')
       .map((s) => s.trim().toUpperCase())
-      .filter((s) => ALLOWED_STORE_TYPES.includes(s));
+      .filter(Boolean);
     this.storeTypes = list.length > 0 ? [...new Set(list)] : ['WARDROBE'];
   } else {
     this.storeTypes = ['WARDROBE'];
@@ -181,7 +176,5 @@ vendorCategorySchema.pre('save', function (next) {
 const VendorCategory =
   mongoose.models.VendorCategory ||
   mongoose.model('VendorCategory', vendorCategorySchema);
-
-VendorCategory.ALLOWED_STORE_TYPES = ALLOWED_STORE_TYPES;
 
 module.exports = VendorCategory;
