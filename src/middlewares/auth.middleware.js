@@ -51,7 +51,7 @@ const protectVendor = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const Vendor = require('../modules/vendor/registeredVendor.model');
+    const Vendor = require('../modules/vendor/washerman/registeredVendor.model');
     const vendor = await Vendor.findById(decoded.id);
 
     if (!vendor) {
