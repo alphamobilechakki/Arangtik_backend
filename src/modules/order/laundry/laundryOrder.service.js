@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Order = require('../order.model');
-const vendorService = require('../../vendor/vendor.service');
+const vendorService = require('../../vendor/washerman/vendor.service');
 const laundryPdfService = require('./laundryPdf.service');
 const laundryWhatsappService = require('./laundryWhatsapp.service');
 const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
@@ -173,7 +173,7 @@ class LaundryOrderService {
 
     // If assigned vendor is registered, verify they provide ALL requested services
     if (vendorRecord.isRegistered && vendorRecord.vendor) {
-      const RegisteredVendor = require('../../vendor/registeredVendor.model');
+      const RegisteredVendor = require('../../vendor/washerman/registeredVendor.model');
       const vendorDoc = await RegisteredVendor.findById(vendorRecord.vendor._id).lean();
       if (vendorDoc && Array.isArray(vendorDoc.offeredServices) && vendorDoc.offeredServices.length > 0) {
         const vendorOfferedLower = vendorDoc.offeredServices.map((s) => String(s).trim().toLowerCase());
@@ -320,7 +320,7 @@ class LaundryOrderService {
         .catch((err) => console.warn('[FCM Customer Order Notification Warning]:', err.message));
 
       // B. If vendor has an active user account in Arangtik, notify the vendor
-      const VendorModel = require('../../vendor/registeredVendor.model');
+      const VendorModel = require('../../vendor/washerman/registeredVendor.model');
       let vendorUserTargetId = null;
       if (order.vendorId) {
         const vDoc = await VendorModel.findById(order.vendorId).select('userId');
@@ -677,7 +677,7 @@ class LaundryOrderService {
 
       // If user cancelled, notify vendor if vendor has an active account
       if (status === 'CANCELLED') {
-        const VendorModel = require('../../vendor/registeredVendor.model');
+        const VendorModel = require('../../vendor/washerman/registeredVendor.model');
         let vendorUserTargetId = null;
         if (order.vendorId) {
           const vDoc = await VendorModel.findById(order.vendorId).select('userId');

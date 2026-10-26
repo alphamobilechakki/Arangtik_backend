@@ -1,6 +1,6 @@
 const asyncHandler = require('../../../utils/asyncHandler');
 const ApiResponse = require('../../../utils/apiResponse');
-const vendorService = require('../../vendor/vendor.service');
+const vendorService = require('../../vendor/washerman/vendor.service');
 const laundryOrderService = require('./laundryOrder.service');
 
 class LaundryController {

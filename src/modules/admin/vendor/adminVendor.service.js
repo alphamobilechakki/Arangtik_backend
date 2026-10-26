@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
-const RegisteredVendor = require('../../vendor/registeredVendor.model');
-const UnregisteredVendor = require('../../vendor/unregisteredVendor.model');
+const RegisteredVendor = require('../../vendor/washerman/registeredVendor.model');
+const UnregisteredVendor = require('../../vendor/washerman/unregisteredVendor.model');
 const Order = require('../../order/order.model');
 const LaundryOrder = Order;
 require('../../auth/user.model');

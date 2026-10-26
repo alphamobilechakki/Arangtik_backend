@@ -2,7 +2,7 @@ const VendorCategory = require('./vendorCategory.model');
 const ApiError = require('../../../utils/apiError');
 const { formatUploadUrl } = require('../../../utils/url.util');
 const Order = require('../../order/order.model');
-const RegisteredVendor = require('../../vendor/registeredVendor.model');
+const RegisteredVendor = require('../../vendor/washerman/registeredVendor.model');
 
 class VendorCategoryService {
   /**
