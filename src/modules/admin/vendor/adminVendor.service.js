@@ -343,6 +343,7 @@ class AdminVendorService {
         state: address.state || '',
         pincode: address.pincode || '',
       },
+      location: address.location || undefined,
       rating: typeof rating === 'number' ? rating : 5.0,
       isVerified: isVerified !== undefined ? isVerified : true,
       password: password || undefined,
@@ -403,6 +404,7 @@ class AdminVendorService {
       'status',
       'rating',
       'isVerified',
+      'location',
     ];
 
     allowedFields.forEach((field) => {

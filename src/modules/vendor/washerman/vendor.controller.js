@@ -79,9 +79,16 @@ class VendorController {
     }
     const requiredServices =
       req.body?.requiredServices || req.body?.services || req.query?.services;
+    const latitude = req.body?.latitude ?? req.query?.latitude ?? req.body?.lat ?? req.query?.lat;
+    const longitude = req.body?.longitude ?? req.query?.longitude ?? req.body?.lng ?? req.query?.lng;
+    const radius = req.body?.radius ?? req.body?.maxDistance ?? req.query?.radius ?? req.query?.maxDistance;
+
     const vendors = await vendorService.getEligibleVendors({
       category,
       requiredServices,
+      latitude,
+      longitude,
+      radius,
     });
     return ApiResponse.success(res, vendors, 'Eligible vendors retrieved successfully');
   });

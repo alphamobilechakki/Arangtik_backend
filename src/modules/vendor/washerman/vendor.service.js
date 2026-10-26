@@ -54,6 +54,8 @@ class VendorService {
           isVerified: existingVendor.isVerified,
           services: existingVendor.services || [],
           offeredServices: existingVendor.offeredServices || [],
+          address: existingVendor.address || {},
+          location: existingVendor.location || null,
         },
       };
     }
@@ -675,7 +677,7 @@ class VendorService {
    * Find vendors in a category that offer ALL required services
    * @param {Object} query { category, requiredServices: string[] }
    */
-  async getEligibleVendors({ category, requiredServices = [] } = {}) {
+  async getEligibleVendors({ category, requiredServices = [], latitude, longitude, radius } = {}) {
     if (!category) {
       throw new ApiError(400, 'Category is required to find eligible vendors');
     }
@@ -693,7 +695,7 @@ class VendorService {
 
     const reqList = Array.isArray(requiredServices)
       ? requiredServices.map((s) => String(s).trim()).filter(Boolean)
-      : String(requiredServices)
+      : String(requiredServices || '')
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
@@ -705,8 +707,30 @@ class VendorService {
       };
     }
 
+    if (
+      latitude !== undefined &&
+      longitude !== undefined &&
+      latitude !== null &&
+      longitude !== null &&
+      !isNaN(Number(latitude)) &&
+      !isNaN(Number(longitude))
+    ) {
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      const maxDistanceInMeters = (Number(radius) || 20) * 1000;
+      filter.location = {
+        $nearSphere: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [lng, lat],
+          },
+          $maxDistance: maxDistanceInMeters,
+        },
+      };
+    }
+
     const vendors = await Vendor.find(filter)
-      .select('name phone vendorId businessName category primaryCategory categories services offeredServices rating isVerified address')
+      .select('name phone vendorId businessName category primaryCategory categories services offeredServices rating isVerified address location')
       .lean();
 
     return vendors;

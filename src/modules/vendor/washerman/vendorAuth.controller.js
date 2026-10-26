@@ -30,7 +30,21 @@ class VendorAuthController {
    * @access  Public
    */
   verifyOtp = asyncHandler(async (req, res) => {
-    const { phone, otp, name, category, categoryId, categories, primaryCategory, businessName, address } = req.body;
+    const {
+      phone,
+      otp,
+      name,
+      category,
+      categoryId,
+      categories,
+      primaryCategory,
+      businessName,
+      address,
+      location,
+      latitude,
+      longitude,
+    } = req.body;
+
     const result = await vendorAuthService.verifyOtp(phone, otp, {
       name,
       category,
@@ -39,6 +53,7 @@ class VendorAuthController {
       primaryCategory,
       businessName,
       address,
+      location: location || (latitude !== undefined || longitude !== undefined ? { latitude, longitude } : undefined),
     });
     return ApiResponse.success(
       res,

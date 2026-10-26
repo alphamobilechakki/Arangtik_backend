@@ -99,6 +99,17 @@ const registeredVendorSchema = new mongoose.Schema(
       state: { type: String, trim: true, default: '' },
       pincode: { type: String, trim: true, default: '' },
     },
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: undefined,
+      },
+    },
     rating: {
       type: Number,
       default: 5.0,
@@ -128,6 +139,7 @@ registeredVendorSchema.index({ categories: 1, status: 1 });
 registeredVendorSchema.index({ isRegistered: 1, status: 1 });
 registeredVendorSchema.index({ offeredServices: 1, status: 1 });
 registeredVendorSchema.index({ category: 1, offeredServices: 1, status: 1 });
+registeredVendorSchema.index({ location: '2dsphere' }, { sparse: true });
 
 // Ensure categories array, primaryCategory, legacy category, and offeredServices remain strictly in sync dynamically
 registeredVendorSchema.pre('save', function (next) {

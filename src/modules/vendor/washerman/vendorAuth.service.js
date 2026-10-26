@@ -87,6 +87,7 @@ class VendorAuthService {
       isRegistered: vendor.isRegistered === true,
       businessName: vendor.businessName || '',
       address: vendor.address || {},
+      location: vendor.location || null,
       rating: vendor.rating || 5.0,
       totalOrdersHandled: vendor.totalOrdersHandled || 0,
       isVerified: vendor.isVerified !== undefined ? vendor.isVerified : true,
@@ -95,6 +96,23 @@ class VendorAuthService {
       offeredServices: vendor.offeredServices || [],
       createdAt: vendor.createdAt,
     };
+  }
+
+  /**
+   * Helper to resolve GeoJSON Point location from payload
+   * Accepts: location: { coordinates: [lng, lat] } OR location: { latitude, longitude } OR { latitude, longitude }
+   */
+  resolveLocation(location, fallback = {}) {
+    if (Array.isArray(location?.coordinates) && location.coordinates.length === 2) {
+      const [lng, lat] = location.coordinates.map(Number);
+      if (!isNaN(lng) && !isNaN(lat)) return { type: 'Point', coordinates: [lng, lat] };
+    }
+    const lat = location?.latitude ?? location?.lat ?? fallback.latitude ?? fallback.lat;
+    const lng = location?.longitude ?? location?.lng ?? fallback.longitude ?? fallback.lng;
+    if (lat !== undefined && lng !== undefined && lat !== null && lng !== null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+      return { type: 'Point', coordinates: [Number(lng), Number(lat)] };
+    }
+    return undefined;
   }
 
   /**
@@ -222,7 +240,8 @@ class VendorAuthService {
     }
 
     // Case B: New vendor or unregistered vendor completing registration
-    const { name, category, categoryId, categories, primaryCategory, businessName, address } = registrationData;
+    const { name, category, categoryId, categories, primaryCategory, businessName, address, location } = registrationData;
+    const vendorLocation = this.resolveLocation(location, registrationData);
 
     let vendorName = name ? String(name).trim() : '';
     if (!vendorName && vendor && vendor.name) {
@@ -265,6 +284,7 @@ class VendorAuthService {
         isRegistered: true,
         businessName: businessName ? String(businessName).trim() : '',
         address: address || {},
+        location: vendorLocation,
         status: 'ACTIVE',
       });
     } else {
@@ -275,6 +295,7 @@ class VendorAuthService {
       vendor.isRegistered = true;
       if (businessName) vendor.businessName = String(businessName).trim();
       if (address) vendor.address = address;
+      if (vendorLocation) vendor.location = vendorLocation;
       vendor.status = 'ACTIVE';
     }
 
@@ -373,7 +394,7 @@ class VendorAuthService {
       throw new ApiError(404, 'Vendor not found');
     }
 
-    const { name, businessName, address, categories, primaryCategory } = updateData;
+    const { name, businessName, address, categories, primaryCategory, location } = updateData;
 
     if (name && String(name).trim()) {
       vendor.name = String(name).trim();
@@ -390,6 +411,11 @@ class VendorAuthService {
         state: address.state !== undefined ? String(address.state).trim() : vendor.address?.state || '',
         pincode: address.pincode !== undefined ? String(address.pincode).trim() : vendor.address?.pincode || '',
       };
+    }
+
+    const resolvedLocation = this.resolveLocation(location, updateData);
+    if (resolvedLocation) {
+      vendor.location = resolvedLocation;
     }
 
     if (categories && Array.isArray(categories) && categories.length > 0) {
