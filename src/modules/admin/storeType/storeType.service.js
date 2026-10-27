@@ -3,29 +3,38 @@ const StoreType = require('./storeType.model');
 const ApiError = require('../../../utils/apiError');
 const { formatUploadUrl } = require('../../../utils/url.util');
 
+// Helper to escape regex special characters
+const escapeRegex = (string = '') => string.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+
 class StoreTypeService {
   /**
-   * Helper to resolve a StoreType by ID or code
+   * Helper to resolve a StoreType by ID or code (defaults to active non-deleted)
    */
-  async resolveStoreType(identifier) {
+  async resolveStoreType(identifier, options = {}) {
     if (!identifier) {
       throw new ApiError(400, 'Store type identifier is required');
     }
 
     const trimmed = String(identifier).trim();
+    const { includeDeleted = false } = options;
+
     let storeType = null;
 
     if (mongoose.Types.ObjectId.isValid(trimmed)) {
-      storeType = await StoreType.findById(trimmed);
+      const q = StoreType.findById(trimmed);
+      if (includeDeleted) q.withDeleted();
+      storeType = await q;
     }
 
     if (!storeType) {
-      storeType = await StoreType.findOne({
+      const q = StoreType.findOne({
         $or: [
           { code: trimmed.toUpperCase() },
-          { name: { $regex: new RegExp(`^${trimmed}$`, 'i') } },
+          { name: { $regex: new RegExp(`^${escapeRegex(trimmed)}$`, 'i') } },
         ],
       });
+      if (includeDeleted) q.withDeleted();
+      storeType = await q;
     }
 
     if (!storeType) {
@@ -36,42 +45,72 @@ class StoreTypeService {
   }
 
   /**
-   * 1. Create a new StoreType (name, image)
+   * 1. Create a new StoreType (name, code, image, isActive)
+   * If a soft-deleted record exists with the same name/code, it restores and updates it.
    */
   async createStoreType(payload = {}, file = null) {
-    const { name, image, imageUrl } = payload;
+    const { name, code, image, isActive } = payload;
 
     if (!name || !String(name).trim()) {
       throw new ApiError(400, 'Store type name is required');
     }
 
     const trimmedName = String(name).trim();
-    const resolvedCode = trimmedName
-      .toUpperCase()
-      .trim()
-      .replace(/[^A-Z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
+    const resolvedCode = (code && String(code).trim())
+      ? String(code).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+      : trimmedName
+          .toUpperCase()
+          .trim()
+          .replace(/[^A-Z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
 
-    // Check for existing by code or name
+    // Check for active, non-deleted existing record by code or name
     const existing = await StoreType.findOne({
-      $or: [{ code: resolvedCode }, { name: { $regex: new RegExp(`^${trimmedName}$`, 'i') } }],
+      $or: [
+        { code: resolvedCode },
+        { name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') } },
+      ],
     });
 
     if (existing) {
+      if (existing.code === resolvedCode) {
+        throw new ApiError(409, `Store type with code "${resolvedCode}" already exists`);
+      }
       throw new ApiError(409, `Store type with name "${trimmedName}" already exists`);
     }
 
-    let finalImageUrl = (file && file.url) || imageUrl || image || '';
-    if (finalImageUrl) {
-      finalImageUrl = formatUploadUrl(finalImageUrl);
+    let finalImage = (file && (file.url || file.dbUrl)) || image || '';
+    if (finalImage) {
+      finalImage = formatUploadUrl(finalImage);
+    }
+
+    // Check if a soft-deleted record exists that can be safely revived
+    const softDeleted = await StoreType.findOne({
+      isDeleted: true,
+      $or: [
+        { code: resolvedCode },
+        { name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') } },
+      ],
+    });
+
+    if (softDeleted) {
+      softDeleted.name = trimmedName;
+      softDeleted.code = resolvedCode;
+      if (finalImage) softDeleted.image = finalImage;
+      softDeleted.isActive = isActive !== undefined ? Boolean(isActive) : true;
+      softDeleted.isDeleted = false;
+      softDeleted.deletedAt = null;
+      await softDeleted.save();
+      return softDeleted;
     }
 
     const storeType = await StoreType.create({
       name: trimmedName,
       code: resolvedCode,
-      image: finalImageUrl,
-      imageUrl: finalImageUrl,
-      isActive: true,
+      image: finalImage,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      isDeleted: false,
+      deletedAt: null,
     });
 
     return storeType;
@@ -81,58 +120,80 @@ class StoreTypeService {
    * 2. Get all store types with optional filters
    */
   async getAllStoreTypes(options = {}) {
-    const { includeInactive = false, search } = options;
+    const { includeInactive = false, includeDeleted = false, search } = options;
 
-    const query = includeInactive ? {} : { isActive: true };
+    const filter = {};
+    if (!includeInactive) {
+      filter.isActive = true;
+    }
 
     if (search && String(search).trim()) {
-      const q = String(search).trim();
-      query.$or = [
+      const q = escapeRegex(String(search).trim());
+      filter.$or = [
         { name: { $regex: q, $options: 'i' } },
         { code: { $regex: q, $options: 'i' } },
       ];
     }
 
-    return StoreType.find(query).sort({ name: 1, createdAt: 1 });
+    let query = StoreType.find(filter).sort({ name: 1, createdAt: 1 });
+    if (includeDeleted) {
+      query = query.withDeleted();
+    }
+
+    return query;
   }
 
   /**
    * 3. Get single StoreType by ID or code
    */
-  async getStoreTypeById(id) {
-    return this.resolveStoreType(id);
+  async getStoreTypeById(id, options = {}) {
+    return this.resolveStoreType(id, options);
   }
 
   /**
-   * 4. Update StoreType (Strictly PATCH per Arangtik Rule 4: name, image)
+   * 4. Update StoreType (Strictly PATCH: name, code, image, isActive)
    */
   async updateStoreType(id, payload = {}, file = null) {
     const storeType = await this.resolveStoreType(id);
-    const { name, image, imageUrl, isActive } = payload;
+    const { name, code, image, isActive } = payload;
 
     if (name !== undefined) {
       const trimmedName = String(name).trim();
       if (!trimmedName) throw new ApiError(400, 'Store type name cannot be empty');
 
-      // Check unique name
+      // Check unique name across other active records
       const duplicate = await StoreType.findOne({
         _id: { $ne: storeType._id },
-        name: { $regex: new RegExp(`^${trimmedName}$`, 'i') },
+        name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') },
       });
       if (duplicate) throw new ApiError(409, `Another store type with name "${trimmedName}" already exists`);
       storeType.name = trimmedName;
 
-      storeType.code = trimmedName
-        .toUpperCase()
-        .trim()
-        .replace(/[^A-Z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+      // If code was not explicitly provided, update code derived from new name
+      if (!code) {
+        storeType.code = trimmedName
+          .toUpperCase()
+          .trim()
+          .replace(/[^A-Z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+      }
     }
 
-    let finalImageUrl = (file && file.url) || imageUrl || image;
-    if (finalImageUrl !== undefined) {
-      storeType.imageUrl = finalImageUrl ? formatUploadUrl(finalImageUrl) : '';
-      storeType.image = storeType.imageUrl;
+    if (code !== undefined) {
+      const trimmedCode = String(code).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      if (trimmedCode) {
+        const duplicateCode = await StoreType.findOne({
+          _id: { $ne: storeType._id },
+          code: trimmedCode,
+        });
+        if (duplicateCode) throw new ApiError(409, `Another store type with code "${trimmedCode}" already exists`);
+        storeType.code = trimmedCode;
+      }
+    }
+
+    let finalImage = (file && (file.url || file.dbUrl)) || image;
+    if (finalImage !== undefined) {
+      storeType.image = finalImage ? formatUploadUrl(finalImage) : '';
     }
 
     if (isActive !== undefined) {
@@ -156,21 +217,42 @@ class StoreTypeService {
   }
 
   /**
-   * 6. Delete StoreType (Prevent deleting in-use store types)
+   * 6. Delete StoreType (Soft delete by default, permanent hard delete optional)
    */
   async deleteStoreType(id, options = {}) {
     const storeType = await this.resolveStoreType(id);
 
+    // Prevent deletion if linked to any VendorCategory
     const VendorCategory = require('../vendorCategory/vendorCategory.model');
-    const inUseCategory = await VendorCategory.findOne({
-      $or: [{ storeTypeIds: storeType._id }, { storeTypes: storeType.code }],
-    });
+    if (VendorCategory) {
+      const inUseCategory = await VendorCategory.findOne({
+        $or: [{ storeTypeIds: storeType._id }, { storeTypes: storeType.code }],
+      });
 
-    if (inUseCategory) {
-      throw new ApiError(
-        400,
-        `Cannot delete StoreType "${storeType.name}" because it is currently linked to category "${inUseCategory.name}"`
-      );
+      if (inUseCategory) {
+        throw new ApiError(
+          400,
+          `Cannot delete StoreType "${storeType.name}" because it is currently linked to category "${inUseCategory.name}"`
+        );
+      }
+    }
+
+    // Prevent deletion if linked to any Wardrobe / Container
+    try {
+      const Wardrobe = require('../../wardrobe/wardrobe.model');
+      if (Wardrobe) {
+        const inUseWardrobe = await Wardrobe.findOne({
+          $or: [{ storeTypeId: storeType._id }, { storeType: storeType.code }],
+        });
+        if (inUseWardrobe) {
+          throw new ApiError(
+            400,
+            `Cannot delete StoreType "${storeType.name}" because it is currently linked to existing container "${inUseWardrobe.name}"`
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
     }
 
     const { hard = false } = options;
@@ -179,9 +261,39 @@ class StoreTypeService {
       return { message: `StoreType "${storeType.name}" permanently deleted` };
     }
 
-    storeType.isActive = false;
-    await storeType.save();
-    return { message: `StoreType "${storeType.name}" deactivated successfully` };
+    // Soft deletion
+    await storeType.softDelete();
+    return { message: `StoreType "${storeType.name}" soft deleted successfully` };
+  }
+
+  /**
+   * 7. Restore a soft-deleted StoreType
+   */
+  async restoreStoreType(id) {
+    const storeType = await this.resolveStoreType(id, { includeDeleted: true });
+
+    if (!storeType.isDeleted) {
+      return storeType;
+    }
+
+    // Check if another active record took its code or name while it was deleted
+    const conflict = await StoreType.findOne({
+      _id: { $ne: storeType._id },
+      $or: [
+        { code: storeType.code },
+        { name: { $regex: new RegExp(`^${escapeRegex(storeType.name)}$`, 'i') } },
+      ],
+    });
+
+    if (conflict) {
+      throw new ApiError(
+        409,
+        `Cannot restore StoreType "${storeType.name}" because an active store type with the same name or code already exists`
+      );
+    }
+
+    await storeType.restore();
+    return storeType;
   }
 }
 

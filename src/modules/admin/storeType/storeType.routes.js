@@ -39,6 +39,12 @@ router.patch(
   storeTypeController.toggleStoreTypeStatus
 );
 
+router.patch(
+  '/:id/restore',
+  protectAdmin,
+  storeTypeController.restoreStoreType
+);
+
 router.delete(
   '/:id',
   protectAdmin,

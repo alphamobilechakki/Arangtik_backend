@@ -20,9 +20,11 @@ class StoreTypeController {
    */
   getAllStoreTypes = asyncHandler(async (req, res) => {
     const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
+    const includeDeleted = req.query.includeDeleted === 'true' || req.query.includeDeleted === true;
     const { search } = req.query;
     const storeTypes = await storeTypeService.getAllStoreTypes({
       includeInactive,
+      includeDeleted,
       search,
     });
     return ApiResponse.success(res, storeTypes, 'Store types retrieved successfully');
@@ -34,7 +36,8 @@ class StoreTypeController {
    * @access  Private (Admin)
    */
   getStoreTypeById = asyncHandler(async (req, res) => {
-    const storeType = await storeTypeService.getStoreTypeById(req.params.id);
+    const includeDeleted = req.query.includeDeleted === 'true' || req.query.includeDeleted === true;
+    const storeType = await storeTypeService.getStoreTypeById(req.params.id, { includeDeleted });
     return ApiResponse.success(res, storeType, 'Store type retrieved successfully');
   });
 
@@ -64,7 +67,7 @@ class StoreTypeController {
   });
 
   /**
-   * @desc    Delete store type
+   * @desc    Delete store type (Soft delete by default, permanent hard delete via ?hard=true)
    * @route   DELETE /api/admin/store-types/:id
    * @access  Private (Admin)
    */
@@ -72,6 +75,16 @@ class StoreTypeController {
     const hard = req.query.hard === 'true' || req.query.hard === true;
     const result = await storeTypeService.deleteStoreType(req.params.id, { hard });
     return ApiResponse.success(res, result, result.message);
+  });
+
+  /**
+   * @desc    Restore a soft-deleted store type
+   * @route   PATCH /api/admin/store-types/:id/restore
+   * @access  Private (Admin)
+   */
+  restoreStoreType = asyncHandler(async (req, res) => {
+    const storeType = await storeTypeService.restoreStoreType(req.params.id);
+    return ApiResponse.success(res, storeType, 'Store type restored successfully');
   });
 }
 
