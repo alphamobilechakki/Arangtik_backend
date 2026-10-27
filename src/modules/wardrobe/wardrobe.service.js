@@ -11,40 +11,40 @@ const { formatUploadUrl } = require('../../utils/url.util');
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
  */
 const createWardrobe = async (userId, data, files = null) => {
-  const { name, storeType = 'WARDROBE', storeTypeId, type, ownerName, isDefault } = data;
+  const { name, storeTypeId, storeType, type, ownerName, isDefault } = data;
   if (!name) {
     throw new ApiError(400, 'Wardrobe name is required');
   }
 
-  // Dynamic StoreType resolution
-  let finalStoreType = 'WARDROBE';
+  // Dynamic StoreType resolution -> resolve to storeTypeId
   let finalStoreTypeId = null;
   const rawStore = storeTypeId || storeType;
-  if (rawStore) {
-    try {
-      const StoreType = require('../admin/storeType/storeType.model');
-      const mongoose = require('mongoose');
-      let stDoc = null;
-      if (mongoose.Types.ObjectId.isValid(rawStore)) {
-        stDoc = await StoreType.findById(rawStore);
-      }
-      if (!stDoc) {
-        stDoc = await StoreType.findOne({
-          $or: [
-            { code: String(rawStore).toUpperCase() },
-            { name: { $regex: new RegExp(`^${String(rawStore).trim()}$`, 'i') } },
-          ],
-        });
-      }
-      if (stDoc) {
-        finalStoreTypeId = stDoc._id;
-        finalStoreType = stDoc.code;
-      } else {
-        finalStoreType = String(rawStore).toUpperCase();
-      }
-    } catch (_) {
-      finalStoreType = String(rawStore).toUpperCase();
+  try {
+    const StoreType = require('../admin/storeType/storeType.model');
+    let stDoc = null;
+    if (rawStore && mongoose.Types.ObjectId.isValid(rawStore)) {
+      stDoc = await StoreType.findById(rawStore);
     }
+    if (!stDoc && rawStore) {
+      stDoc = await StoreType.findOne({
+        $or: [
+          { code: String(rawStore).toUpperCase() },
+          { name: { $regex: new RegExp(`^${String(rawStore).trim()}$`, 'i') } },
+        ],
+      });
+    }
+    if (!stDoc) {
+      stDoc =
+        (await StoreType.findOne({ code: 'WARDROBE' })) ||
+        (await StoreType.findOne({ isActive: true }));
+    }
+    if (stDoc) {
+      finalStoreTypeId = stDoc._id;
+    }
+  } catch (_) {}
+
+  if (!finalStoreTypeId) {
+    throw new ApiError(400, 'Valid storeTypeId is required');
   }
 
   let coverImage = data.coverImage ? formatUploadUrl(data.coverImage) : '';
@@ -87,28 +87,18 @@ const createWardrobe = async (userId, data, files = null) => {
   }
 
   if (isDefault) {
-    if (finalStoreType === 'WARDROBE') {
-      await Wardrobe.updateMany(
-        {
-          userId,
-          $or: [
-            { storeType: 'WARDROBE' },
-            { storeType: null },
-            { storeType: { $exists: false } },
-            ...(finalStoreTypeId ? [{ storeTypeId: finalStoreTypeId }] : []),
-          ],
-        },
-        { isDefault: false }
-      );
-    } else {
-      await Wardrobe.updateMany({ userId, storeType: finalStoreType }, { isDefault: false });
-    }
+    await Wardrobe.updateMany(
+      {
+        userId,
+        storeTypeId: finalStoreTypeId,
+      },
+      { isDefault: false }
+    );
   }
 
   const wardrobe = await Wardrobe.create({
     userId,
     name,
-    storeType: finalStoreType,
     storeTypeId: finalStoreTypeId,
     type: type || 'PERSONAL',
     ownerName: ownerName || '',
@@ -117,7 +107,11 @@ const createWardrobe = async (userId, data, files = null) => {
     referenceFace,
     isDefault: !!isDefault,
     isActive: true,
+    isDeleted: false,
+    deletedAt: null,
   });
+
+  await wardrobe.populate('storeTypeId', 'name code image');
 
   const createdObj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
   createdObj.itemCount = 0;
@@ -129,58 +123,23 @@ const createWardrobe = async (userId, data, files = null) => {
 /**
  * Get all active Wardrobes / Stores for user
  * Supports multi-store filtering:
- *  - query.storeType='WARDROBE': returns only WARDROBE containers + legacy containers
- *  - query.storeType='KITCHEN': returns only KITCHEN containers
  *  - query.storeTypeId: filters by StoreType ObjectId
- *  - no storeType or 'ALL': returns all containers across all user stores
- * Automatically populates computed itemCount per container and formats asset URLs.
+ *  - query.storeType: filters by code or name
+ *  - query.includeDeleted: optional flag to include soft-deleted records
+ * Automatically populates storeTypeId reference, computed itemCount, and formats asset URLs.
  */
 const getWardrobes = async (userId, query = {}) => {
   const filter = { userId, isActive: true };
   const rawStore = query.storeTypeId || query.storeType || 'WARDROBE';
 
   if (rawStore && rawStore !== 'ALL') {
+    let resolvedStoreTypeId = null;
     if (mongoose.Types.ObjectId.isValid(rawStore)) {
-      filter.$or = [
-        { storeTypeId: new mongoose.Types.ObjectId(rawStore) },
-        { storeType: String(rawStore) },
-      ];
-      try {
-        const StoreType = require('../admin/storeType/storeType.model');
-        const stDoc = await StoreType.findById(rawStore);
-        if (stDoc) {
-          if (stDoc.code === 'WARDROBE') {
-            filter.$or.push(
-              { storeType: 'WARDROBE' },
-              { storeType: new RegExp('^wardrobe$', 'i') },
-              { storeType: { $exists: false } },
-              { storeType: null }
-            );
-          } else {
-            filter.$or.push(
-              { storeType: stDoc.code },
-              { storeType: new RegExp(`^${stDoc.code}$`, 'i') }
-            );
-          }
-        }
-      } catch (_) {}
+      resolvedStoreTypeId = new mongoose.Types.ObjectId(rawStore);
     } else {
-      const upper = String(rawStore).trim().toUpperCase();
-      if (upper === 'WARDROBE') {
-        filter.$or = [
-          { storeType: 'WARDROBE' },
-          { storeType: new RegExp('^wardrobe$', 'i') },
-          { storeType: { $exists: false } },
-          { storeType: null },
-        ];
-      } else {
-        filter.$or = [
-          { storeType: upper },
-          { storeType: new RegExp(`^${String(rawStore).trim()}$`, 'i') },
-        ];
-      }
       try {
         const StoreType = require('../admin/storeType/storeType.model');
+        const upper = String(rawStore).trim().toUpperCase();
         const stDoc = await StoreType.findOne({
           $or: [
             { code: upper },
@@ -188,13 +147,25 @@ const getWardrobes = async (userId, query = {}) => {
           ],
         });
         if (stDoc) {
-          filter.$or.push({ storeTypeId: stDoc._id });
+          resolvedStoreTypeId = stDoc._id;
         }
       } catch (_) {}
     }
+
+    if (resolvedStoreTypeId) {
+      filter.storeTypeId = resolvedStoreTypeId;
+    }
   }
 
-  const wardrobes = await Wardrobe.find(filter).sort({ isDefault: -1, createdAt: -1 });
+  let queryBuilder = Wardrobe.find(filter)
+    .populate('storeTypeId', 'name code image')
+    .sort({ isDefault: -1, createdAt: -1 });
+
+  if (query.includeDeleted === 'true' || query.includeDeleted === true) {
+    queryBuilder = queryBuilder.withDeleted();
+  }
+
+  const wardrobes = await queryBuilder;
 
   // Calculate itemCount per container dynamically
   let itemCounts = [];
@@ -231,14 +202,130 @@ const getWardrobes = async (userId, query = {}) => {
 };
 
 /**
- * Delete a user's Wardrobe / Almari container
+ * Get single Wardrobe by ID
  */
-const deleteWardrobe = async (userId, wardrobeId) => {
+const getWardrobeById = async (userId, wardrobeId, options = {}) => {
   if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
     throw new ApiError(400, 'Invalid wardrobe container ID');
   }
 
-  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId, isActive: true });
+  let q = Wardrobe.findOne({ _id: wardrobeId, userId }).populate('storeTypeId', 'name code image');
+  if (options.includeDeleted) {
+    q = q.withDeleted();
+  }
+
+  const wardrobe = await q;
+  if (!wardrobe) {
+    throw new ApiError(404, 'Wardrobe container not found');
+  }
+
+  const obj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
+  obj.itemCount = await WardrobeItem.countDocuments({ wardrobeId: wardrobe._id, userId });
+  obj.coverImage = obj.coverImage ? formatUploadUrl(obj.coverImage) : '';
+  obj.ownerFaceImage = obj.ownerFaceImage ? formatUploadUrl(obj.ownerFaceImage) : '';
+  return obj;
+};
+
+/**
+ * Update Wardrobe container attributes
+ */
+const updateWardrobe = async (userId, wardrobeId, updateData = {}, files = null) => {
+  if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
+    throw new ApiError(400, 'Invalid wardrobe container ID');
+  }
+
+  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
+  if (!wardrobe) {
+    throw new ApiError(404, 'Wardrobe container not found');
+  }
+
+  const { name, storeTypeId, storeType, type, ownerName, isDefault, isActive } = updateData;
+
+  if (name !== undefined) {
+    const trimmed = String(name).trim();
+    if (!trimmed) throw new ApiError(400, 'Wardrobe name cannot be empty');
+    wardrobe.name = trimmed;
+  }
+
+  if (storeTypeId !== undefined || storeType !== undefined) {
+    const rawStore = storeTypeId || storeType;
+    try {
+      const StoreType = require('../admin/storeType/storeType.model');
+      let stDoc = null;
+      if (rawStore && mongoose.Types.ObjectId.isValid(rawStore)) {
+        stDoc = await StoreType.findById(rawStore);
+      }
+      if (!stDoc && rawStore) {
+        stDoc = await StoreType.findOne({
+          $or: [
+            { code: String(rawStore).toUpperCase() },
+            { name: { $regex: new RegExp(`^${String(rawStore).trim()}$`, 'i') } },
+          ],
+        });
+      }
+      if (stDoc) {
+        wardrobe.storeTypeId = stDoc._id;
+      }
+    } catch (_) {}
+  }
+
+  if (type !== undefined) wardrobe.type = type;
+  if (ownerName !== undefined) wardrobe.ownerName = String(ownerName).trim();
+  if (isActive !== undefined) wardrobe.isActive = Boolean(isActive);
+
+  if (files && typeof files === 'object') {
+    if (files.ownerFaceImage) {
+      wardrobe.ownerFaceImage = formatUploadUrl(`/uploads/${files.ownerFaceImage.filename}`);
+    }
+    if (files.coverImage) {
+      wardrobe.coverImage = formatUploadUrl(`/uploads/${files.coverImage.filename}`);
+    }
+    if (files.filename) {
+      wardrobe.coverImage = formatUploadUrl(`/uploads/${files.filename}`);
+    }
+  } else {
+    if (updateData.coverImage) wardrobe.coverImage = formatUploadUrl(updateData.coverImage);
+    if (updateData.ownerFaceImage) wardrobe.ownerFaceImage = formatUploadUrl(updateData.ownerFaceImage);
+  }
+
+  if (isDefault) {
+    await Wardrobe.updateMany(
+      {
+        _id: { $ne: wardrobe._id },
+        userId,
+        storeTypeId: wardrobe.storeTypeId,
+      },
+      { isDefault: false }
+    );
+    wardrobe.isDefault = true;
+  } else if (isDefault === false && wardrobe.isDefault) {
+    wardrobe.isDefault = false;
+  }
+
+  await wardrobe.save();
+  await wardrobe.populate('storeTypeId', 'name code image');
+
+  const updatedObj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
+  updatedObj.itemCount = await WardrobeItem.countDocuments({ wardrobeId: wardrobe._id, userId });
+  updatedObj.coverImage = updatedObj.coverImage ? formatUploadUrl(updatedObj.coverImage) : '';
+  updatedObj.ownerFaceImage = updatedObj.ownerFaceImage ? formatUploadUrl(updatedObj.ownerFaceImage) : '';
+  return updatedObj;
+};
+
+/**
+ * Delete a user's Wardrobe / Almari container (Soft deletion by default)
+ */
+const deleteWardrobe = async (userId, wardrobeId, options = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
+    throw new ApiError(400, 'Invalid wardrobe container ID');
+  }
+
+  const hard = options.hard === true || options.hard === 'true';
+  let q = Wardrobe.findOne({ _id: wardrobeId, userId });
+  if (hard) {
+    q = q.withDeleted();
+  }
+  const wardrobe = await q;
   if (!wardrobe) {
     throw new ApiError(404, 'Wardrobe container not found');
   }
@@ -246,15 +333,46 @@ const deleteWardrobe = async (userId, wardrobeId) => {
     throw new ApiError(400, 'Cannot delete your default Almari');
   }
 
-  wardrobe.isActive = false;
-  await wardrobe.save();
+  if (hard) {
+    await Wardrobe.findByIdAndDelete(wardrobe._id);
+  } else {
+    await wardrobe.softDelete();
+  }
 
   // Find user's default wardrobe to migrate any orphan items
   const defaultW = await Wardrobe.findOne({ userId, isDefault: true, isActive: true });
   const fallbackId = defaultW ? defaultW._id : null;
   await WardrobeItem.updateMany({ wardrobeId: wardrobe._id }, { wardrobeId: fallbackId });
 
-  return { message: 'Wardrobe container deleted successfully' };
+  return {
+    message: `Wardrobe container "${wardrobe.name}" ${hard ? 'permanently' : 'soft'} deleted successfully`,
+  };
+};
+
+/**
+ * Restore a soft-deleted Wardrobe container
+ */
+const restoreWardrobe = async (userId, wardrobeId) => {
+  if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
+    throw new ApiError(400, 'Invalid wardrobe container ID');
+  }
+
+  const wardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId }).withDeleted();
+  if (!wardrobe) {
+    throw new ApiError(404, 'Wardrobe container not found');
+  }
+
+  if (wardrobe.isDeleted) {
+    await wardrobe.restore();
+  }
+
+  await wardrobe.populate('storeTypeId', 'name code image');
+
+  const restoredObj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
+  restoredObj.itemCount = await WardrobeItem.countDocuments({ wardrobeId: wardrobe._id, userId });
+  restoredObj.coverImage = restoredObj.coverImage ? formatUploadUrl(restoredObj.coverImage) : '';
+  restoredObj.ownerFaceImage = restoredObj.ownerFaceImage ? formatUploadUrl(restoredObj.ownerFaceImage) : '';
+  return restoredObj;
 };
 
 const parseArrayField = (val) => {
@@ -601,34 +719,44 @@ const getAllItems = async (userId, queryParams = {}) => {
     }
   }
 
-  if (storeType && storeType !== 'ALL') {
-    const upperStore = String(storeType).trim().toUpperCase();
-    const storeFilter = { userId, isActive: true };
-    if (upperStore === 'WARDROBE') {
-      storeFilter.$or = [
-        { storeType: 'WARDROBE' },
-        { storeType: new RegExp('^wardrobe$', 'i') },
-        { storeType: { $exists: false } },
-        { storeType: null },
-      ];
+  const targetStore = queryParams.storeTypeId || storeType;
+  if (targetStore && targetStore !== 'ALL') {
+    let resolvedStoreTypeId = null;
+    if (mongoose.Types.ObjectId.isValid(targetStore)) {
+      resolvedStoreTypeId = new mongoose.Types.ObjectId(targetStore);
     } else {
-      storeFilter.$or = [
-        { storeType: upperStore },
-        { storeType: new RegExp(`^${String(storeType).trim()}$`, 'i') },
-      ];
+      try {
+        const StoreType = require('../admin/storeType/storeType.model');
+        const upper = String(targetStore).trim().toUpperCase();
+        const stDoc = await StoreType.findOne({
+          $or: [
+            { code: upper },
+            { name: new RegExp(`^${String(targetStore).trim()}$`, 'i') },
+          ],
+        });
+        if (stDoc) resolvedStoreTypeId = stDoc._id;
+      } catch (_) {}
     }
-    const matchingStores = await Wardrobe.find(storeFilter).select('_id');
-    const storeIds = matchingStores.map((s) => s._id);
-    if (upperStore === 'WARDROBE') {
-      andClauses.push({
-        $or: [
-          { wardrobeId: { $in: storeIds } },
-          { wardrobeId: null },
-          { wardrobeId: { $exists: false } },
-        ],
-      });
-    } else {
-      andClauses.push({ wardrobeId: { $in: storeIds } });
+
+    if (resolvedStoreTypeId) {
+      const matchingStores = await Wardrobe.find({
+        userId,
+        storeTypeId: resolvedStoreTypeId,
+        isActive: true,
+      }).select('_id isDefault');
+      const storeIds = matchingStores.map((s) => s._id);
+      const hasDefault = matchingStores.some((s) => s.isDefault);
+      if (hasDefault) {
+        andClauses.push({
+          $or: [
+            { wardrobeId: { $in: storeIds } },
+            { wardrobeId: null },
+            { wardrobeId: { $exists: false } },
+          ],
+        });
+      } else {
+        andClauses.push({ wardrobeId: { $in: storeIds } });
+      }
     }
   }
 
@@ -942,7 +1070,10 @@ const generateItem3DModel = async (userId, itemId) => {
 module.exports = {
   createWardrobe,
   getWardrobes,
+  getWardrobeById,
+  updateWardrobe,
   deleteWardrobe,
+  restoreWardrobe,
   addItem,
   addItemFromDetection,
   getAllItems,

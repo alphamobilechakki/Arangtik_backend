@@ -73,6 +73,10 @@ storeTypeSchema.pre('save', function (next) {
 
 // Automatic query middleware to exclude soft-deleted documents by default
 function excludeSoftDeleted(next) {
+  if (this._withDeleted) {
+    if (typeof next === 'function') next();
+    return;
+  }
   // If the query doesn't explicitly filter by isDeleted, only return non-deleted records
   if (this.getQuery().isDeleted === undefined) {
     this.where({ isDeleted: { $ne: true } });
@@ -87,6 +91,7 @@ storeTypeSchema.pre('countDocuments', excludeSoftDeleted);
 
 // Query helper to explicitly include deleted documents
 storeTypeSchema.query.withDeleted = function () {
+  this._withDeleted = true;
   delete this.getQuery().isDeleted;
   return this;
 };

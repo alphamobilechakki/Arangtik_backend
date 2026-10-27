@@ -333,7 +333,7 @@ const scanGalleryPhoto = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Create a new Wardrobe (Closet container)
- * @route   POST /api/wardrobe/create-wardrobe OR /api/wardrobe/closets
+ * @route   POST /api/wardrobe/create-wardrobe
  * @access  Private
  */
 const createWardrobe = asyncHandler(async (req, res) => {
@@ -357,7 +357,7 @@ const createWardrobe = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Get all active Wardrobes for user
- * @route   GET /api/wardrobe/get-wardrobes OR /api/wardrobe/closets
+ * @route   GET /api/wardrobe/get-wardrobes
  * @access  Private
  */
 const getWardrobes = asyncHandler(async (req, res) => {
@@ -368,21 +368,73 @@ const getWardrobes = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Delete a wardrobe container
- * @route   DELETE /api/wardrobe/delete-wardrobe/:id OR /api/wardrobe/closets/:id
+ * @desc    Get single Wardrobe by ID
+ * @route   GET /api/wardrobe/get-wardrobe/:id
+ * @access  Private
+ */
+const getWardrobeById = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const includeDeleted = req.query.includeDeleted === 'true' || req.query.includeDeleted === true;
+  const result = await wardrobeService.getWardrobeById(userId, req.params.id, { includeDeleted });
+
+  return ApiResponse.success(res, result, 'Wardrobe container retrieved successfully');
+});
+
+/**
+ * @desc    Update a wardrobe container
+ * @route   PATCH /api/wardrobe/update-wardrobe/:id
+ * @access  Private
+ */
+const updateWardrobe = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const wardrobeId = req.params.id;
+  const ownerFaceFile = req.files?.ownerFaceImage?.[0] || null;
+  const coverFile =
+    req.files?.coverImage?.[0] ||
+    req.files?.photo?.[0] ||
+    req.files?.image?.[0] ||
+    req.file ||
+    null;
+
+  const filesObj = {
+    ownerFaceImage: ownerFaceFile,
+    coverImage: coverFile,
+  };
+  const result = await wardrobeService.updateWardrobe(userId, wardrobeId, req.body, filesObj);
+
+  return ApiResponse.success(res, result, 'Wardrobe container updated successfully');
+});
+
+/**
+ * @desc    Delete a wardrobe container (Soft deletion by default, hard via ?hard=true)
+ * @route   DELETE /api/wardrobe/delete-wardrobe/:id
  * @access  Private
  */
 const deleteWardrobe = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const wardrobeId = req.params.id;
-  const result = await wardrobeService.deleteWardrobe(userId, wardrobeId);
+  const hard = req.query.hard === 'true' || req.query.hard === true;
+  const result = await wardrobeService.deleteWardrobe(userId, wardrobeId, { hard });
 
-  return ApiResponse.success(res, result, 'Wardrobe container deleted successfully');
+  return ApiResponse.success(res, result, result.message);
+});
+
+/**
+ * @desc    Restore a soft-deleted wardrobe container
+ * @route   PATCH /api/wardrobe/restore-wardrobe/:id
+ * @access  Private
+ */
+const restoreWardrobe = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const wardrobeId = req.params.id;
+  const result = await wardrobeService.restoreWardrobe(userId, wardrobeId);
+
+  return ApiResponse.success(res, result, 'Wardrobe container restored successfully');
 });
 
 /**
  * @desc    Generate 3D model (.glb) for a wardrobe garment using Hugging Face TripoSR
- * @route   POST /api/wardrobe/items/:id/generate-3d OR POST /api/wardrobe/generate-3d/:id
+ * @route   POST /api/wardrobe/generate-3d/:id
  * @access  Private
  */
 const generateItem3D = asyncHandler(async (req, res) => {
@@ -397,7 +449,10 @@ const generateItem3D = asyncHandler(async (req, res) => {
 module.exports = {
   createWardrobe,
   getWardrobes,
+  getWardrobeById,
+  updateWardrobe,
   deleteWardrobe,
+  restoreWardrobe,
   addItem,
   getAllItems,
   getItemDetails,

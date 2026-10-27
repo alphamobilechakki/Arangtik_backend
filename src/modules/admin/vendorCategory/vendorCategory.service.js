@@ -125,9 +125,9 @@ class VendorCategoryService {
     if (!targetStoreType && wardrobeId) {
       try {
         const Wardrobe = require('../../wardrobe/wardrobe.model');
-        const wardrobe = await Wardrobe.findById(wardrobeId).select('storeType');
-        if (wardrobe && wardrobe.storeType) {
-          targetStoreType = String(wardrobe.storeType).trim().toUpperCase();
+        const wardrobe = await Wardrobe.findById(wardrobeId).populate('storeTypeId', 'code');
+        if (wardrobe?.storeTypeId?.code) {
+          targetStoreType = String(wardrobe.storeTypeId.code).trim().toUpperCase();
         }
       } catch (err) {
         // Fallback silently if invalid ObjectId or not found
@@ -144,9 +144,9 @@ class VendorCategoryService {
         if (targetId) {
           const item = await WardrobeItem.findById(targetId).select('wardrobeId');
           if (item && item.wardrobeId) {
-            const wardrobe = await Wardrobe.findById(item.wardrobeId).select('storeType');
-            if (wardrobe && wardrobe.storeType) {
-              targetStoreType = String(wardrobe.storeType).trim().toUpperCase();
+            const wardrobe = await Wardrobe.findById(item.wardrobeId).populate('storeTypeId', 'code');
+            if (wardrobe?.storeTypeId?.code) {
+              targetStoreType = String(wardrobe.storeTypeId.code).trim().toUpperCase();
             }
           }
         }
