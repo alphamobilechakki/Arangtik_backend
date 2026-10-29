@@ -10,10 +10,10 @@ const integrationRoutes = require('../modules/integration/integration.routes');
 const outfitRoutes = require('../modules/outfit/outfit.routes');
 const orderRoutes = require('../modules/order/order.routes');
 const laundryRoutes = require('../modules/order/laundry/laundry.routes');
-const vendorRoutes = require('../modules/vendor/washerman/vendor.routes');
+const vendorRoutes = require('../modules/vendor/vendor.routes');
 const notificationRoutes = require('../modules/notification/notification.routes');
-const vendorCategoryRoutes = require('../modules/admin/vendorCategory/vendorCategory.routes');
-const categoryServiceRoutes = require('../modules/admin/vendorCategory/categoryService.routes');
+const categoryRoutes = require('../modules/category/category.routes');
+const categoryServiceRoutes = require('../modules/categoryService/categoryService.routes');
 const adminRoutes = require('../modules/admin/admin.routes');
 
 // Health Check
@@ -54,11 +54,15 @@ router.use('/vendor', vendorRoutes);
 // Notification & FCM Routes
 router.use('/notifications', notificationRoutes);
 
-// Vendor Categories Routes (Public customer and mobile app category list)
-router.use('/categories', vendorCategoryRoutes);
+// Categories Routes (Level 1 Categories: Washerman, etc.)
+router.use('/categories', categoryRoutes);
 
 // Category Services Routes (Public / Customer / Vendor discovery)
 router.use('/services', categoryServiceRoutes);
+
+// Vendor Services Routes (Vendor-specific offered services & pricing)
+const vendorServiceRoutes = require('../modules/vendorService/vendorService.routes');
+router.use('/vendor-services', vendorServiceRoutes);
 
 // Store Types Routes (Public customer and mobile app store types list)
 const storeTypeRoutes = require('../modules/admin/storeType/storeType.routes');

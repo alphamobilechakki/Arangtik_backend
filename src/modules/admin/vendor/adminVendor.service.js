@@ -1,12 +1,13 @@
 const mongoose = require('mongoose');
-const RegisteredVendor = require('../../vendor/washerman/registeredVendor.model');
-const UnregisteredVendor = require('../../vendor/washerman/unregisteredVendor.model');
+const RegisteredVendor = require('../../vendor/vendor.model');
+const UnregisteredVendor = require('../../vendor/unregistered/unregisteredVendor.model');
 const Order = require('../../order/order.model');
 const LaundryOrder = Order;
 require('../../auth/user.model');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 const ApiError = require('../../../utils/apiError');
-const VendorCategory = require('../vendorCategory/vendorCategory.model');
+const Category = require('../../category/category.model');
+const VendorService = require('../../vendorService/vendorService.model');
 
 class AdminVendorService {
   /**
@@ -132,7 +133,7 @@ class AdminVendorService {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const sortOptions = { [sortBy || 'createdAt']: sortDirection };
 
-    const [vendors, totalRecords] = await Promise.all([
+    const [rawVendors, totalRecords] = await Promise.all([
       RegisteredVendor.find(filter)
         .sort(sortOptions)
         .skip(skip)
@@ -142,6 +143,57 @@ class AdminVendorService {
         .lean(),
       RegisteredVendor.countDocuments(filter),
     ]);
+
+    // Attach services from VendorService collection
+    const vendorIds = rawVendors.map((v) => v._id);
+    const allServices = await VendorService.find({
+      vendorId: { $in: vendorIds },
+      status: 'ACTIVE',
+    })
+      .populate({
+        path: 'serviceId',
+        select: 'name basePrice unit categoryId',
+        populate: { path: 'categoryId', select: 'name' },
+      })
+      .lean();
+
+    const servicesByVendor = {};
+    const categoriesByVendor = {};
+
+    allServices.forEach((vs) => {
+      const vid = vs.vendorId.toString();
+      if (!servicesByVendor[vid]) servicesByVendor[vid] = [];
+      if (!categoriesByVendor[vid]) categoriesByVendor[vid] = new Set();
+
+      const catName = vs.serviceId?.categoryId?.name;
+      if (catName) categoriesByVendor[vid].add(catName);
+
+      servicesByVendor[vid].push({
+        serviceId: vs.serviceId?._id || vs.serviceId,
+        name: vs.serviceId?.name || '',
+        price: vs.price,
+        durationMinutes: vs.durationMinutes,
+        isAvailable: vs.isAvailable,
+        isOffered: vs.isAvailable !== false,
+      });
+    });
+
+    const vendors = rawVendors.map((v) => {
+      const vid = v._id.toString();
+      const sList = servicesByVendor[vid] || [];
+      const derivedCats = Array.from(categoriesByVendor[vid] || []);
+      const primaryCat = v.primaryCategory || v.category || derivedCats[0] || 'Washerman';
+      const allCats = Array.isArray(v.categories) && v.categories.length > 0 ? v.categories : derivedCats;
+
+      return {
+        ...v,
+        category: primaryCat,
+        primaryCategory: primaryCat,
+        categories: allCats.length > 0 ? allCats : [primaryCat],
+        services: sList,
+        offeredServices: sList.map((s) => s.name),
+      };
+    });
 
     const totalPages = Math.ceil(totalRecords / limitNum) || 1;
 
@@ -219,7 +271,7 @@ class AdminVendorService {
   }
 
   /**
-   * 4. Get Registered Vendor Details by ID with Recent Orders
+   * 4. Get Registered Vendor Details by ID with Recent Orders & Configured Services
    */
   async getRegisteredVendorById(id) {
     let query = {};
@@ -247,8 +299,40 @@ class AdminVendorService {
       .select('orderNumber status pickupDate expectedDeliveryDate totalItems userPhone userName createdAt')
       .lean();
 
+    // Fetch vendor services from VendorService collection
+    const vendorServices = await VendorService.find({ vendorId: vendor._id })
+      .populate({
+        path: 'serviceId',
+        select: 'name basePrice unit categoryId',
+        populate: { path: 'categoryId', select: 'name' },
+      })
+      .lean();
+
+    const derivedCats = Array.from(
+      new Set(vendorServices.map((vs) => vs.serviceId?.categoryId?.name).filter(Boolean))
+    );
+    const primaryCat = vendor.primaryCategory || vendor.category || derivedCats[0] || 'Washerman';
+    const allCats = Array.isArray(vendor.categories) && vendor.categories.length > 0 ? vendor.categories : derivedCats;
+
+    const formattedServices = vendorServices.map((vs) => ({
+      serviceId: vs.serviceId?._id || vs.serviceId,
+      name: vs.serviceId?.name || '',
+      price: vs.price,
+      basePrice: vs.serviceId?.basePrice ?? vs.price,
+      unit: vs.serviceId?.unit || 'PIECE',
+      durationMinutes: vs.durationMinutes,
+      isAvailable: vs.isAvailable,
+      isOffered: vs.isAvailable !== false && vs.status === 'ACTIVE',
+      status: vs.status,
+    }));
+
     return {
       ...vendor,
+      category: primaryCat,
+      primaryCategory: primaryCat,
+      categories: allCats.length > 0 ? allCats : [primaryCat],
+      services: formattedServices,
+      offeredServices: formattedServices.filter((s) => s.isOffered).map((s) => s.name),
       recentOrders: recentOrders || [],
     };
   }
@@ -296,6 +380,7 @@ class AdminVendorService {
       categories,
       primaryCategory,
       businessName = '',
+      profileImage = '',
       status = 'ACTIVE',
       address = {},
       rating = 5.0,
@@ -304,8 +389,8 @@ class AdminVendorService {
     } = data;
 
     if (!category || category === 'Dhobi') {
-      const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
-      category = firstCat?.name || 'General';
+      const firstCat = await Category.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+      category = firstCat?.name || 'Washerman';
     }
 
     const formattedPhone = formatPhoneNumber(phone);
@@ -336,6 +421,7 @@ class AdminVendorService {
       primaryCategory: initialPrimaryCat,
       categories: initialCategories,
       businessName: String(businessName || '').trim(),
+      profileImage: profileImage || undefined,
       status,
       address: {
         street: address.street || '',
@@ -398,6 +484,7 @@ class AdminVendorService {
     const allowedFields = [
       'name',
       'businessName',
+      'profileImage',
       'category',
       'primaryCategory',
       'categories',
@@ -423,7 +510,27 @@ class AdminVendorService {
     }
 
     await vendor.save();
-    return vendor;
+
+    // If services array is provided, upsert/update vendor services
+    if (Array.isArray(updateData.services)) {
+      for (const s of updateData.services) {
+        if (!s.serviceId) continue;
+        await VendorService.findOneAndUpdate(
+          { vendorId: vendor._id, serviceId: s.serviceId },
+          {
+            $set: {
+              price: Number(s.price) || 0,
+              isAvailable: s.isOffered !== false && s.isAvailable !== false,
+              durationMinutes: s.durationMinutes || null,
+              status: (s.isOffered === false || s.status === 'INACTIVE') ? 'INACTIVE' : 'ACTIVE',
+            },
+          },
+          { upsert: true, new: true }
+        );
+      }
+    }
+
+    return this.getRegisteredVendorById(vendor._id);
   }
 
   /**

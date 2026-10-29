@@ -1,6 +1,6 @@
 const asyncHandler = require('../../../utils/asyncHandler');
 const ApiResponse = require('../../../utils/apiResponse');
-const vendorService = require('../../vendor/washerman/vendor.service');
+const vendorService = require('../../vendor/vendor.service');
 const laundryOrderService = require('./laundryOrder.service');
 
 class LaundryController {
@@ -30,8 +30,8 @@ class LaundryController {
   getEligibleVendors = asyncHandler(async (req, res) => {
     let category = req.body?.category || req.query?.category;
     if (!category) {
-      const VendorCategory = require('../../admin/vendorCategory/vendorCategory.model');
-      const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+      const Category = require('../../category/category.model');
+      const firstCat = await Category.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
       category = firstCat?.name || '';
     }
     const requiredServices =

@@ -59,6 +59,8 @@ const unregisteredVendorSchema = new mongoose.Schema(
   }
 );
 
-module.exports =
+const UnregisteredVendor =
   mongoose.models.UnregisteredVendor ||
   mongoose.model('UnregisteredVendor', unregisteredVendorSchema, 'unregisteredvendors');
+
+module.exports = UnregisteredVendor;

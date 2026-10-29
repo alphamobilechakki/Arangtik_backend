@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { MONGODB_URI } = require('../src/config/env.config');
-const RegisteredVendor = require('../src/modules/vendor/washerman/registeredVendor.model');
+const RegisteredVendor = require('../src/modules/vendor/vendor.model');
 const Order = require('../src/modules/order/order.model');
 const LaundryOrder = Order;
 

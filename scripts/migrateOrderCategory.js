@@ -3,12 +3,12 @@ require('dotenv').config();
 const connectDB = require('../src/config/db.config');
 const Order = require('../src/modules/order/order.model');
 const LaundryOrder = Order;
-const RegisteredVendor = require('../src/modules/vendor/washerman/registeredVendor.model');
-const VendorCategory = require('../src/modules/admin/vendorCategory/vendorCategory.model');
+const RegisteredVendor = require('../src/modules/vendor/vendor.model');
+const Category = require('../src/modules/category/category.model');
 
 async function migrate() {
   await connectDB();
-  const categories = await VendorCategory.find().lean();
+  const categories = await Category.find().lean();
   console.log('Active categories:', categories.map(c => c.name));
 
   const orders = await LaundryOrder.find();

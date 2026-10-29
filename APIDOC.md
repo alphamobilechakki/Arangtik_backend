@@ -987,3 +987,1533 @@ Authorization: Bearer <JWT_ACCESS_TOKEN>
 | `DELETE` | `/api/wardrobe/delete-wardrobe/:id` | Protected | Soft-delete closet (or permanent via `?hard=true`) |
 | `PATCH` | `/api/wardrobe/restore-wardrobe/:id` | Protected | Restore soft-deleted closet container back to active |
 
+
+
+---
+
+## 5. Vendor Management, Authentication & Profile Module (`/api/vendor`)
+
+The Vendor Module manages passwordless OTP-based authentication, registration, onboarding with geographic location coordinates, profile management, direct Vendor CRUD operations, marketplace discovery, and assigned work orders for registered business partners.
+
+**Base URL:**
+- **Local:** `http://localhost:8083/api/vendor`
+- **Production:** `https://api.arangtik.com/api/vendor`
+
+**Authentication Header (for protected vendor endpoints):**
+```http
+Authorization: Bearer <VENDOR_JWT_TOKEN>
+```
+
+**Test Account (Bypass OTP):**
+- Phone: `918949056321` (or mobile numbers ending with `8949056321`)
+- Test OTP: `1234`
+
+---
+
+### Vendor Document Schema Reference
+Every vendor document in the `vendor` collection adheres to the following data model:
+
+```json
+{
+  "_id": "6ae1daea122c8779111670bf",
+  "vendorId": "VND-264302",
+  "name": "Ramdhani Dhobi & Dry Cleaners",
+  "phone": "919810112233",
+  "businessName": "Shri Ramdhani Express Laundry",
+  "address": {
+    "street": "Shop 4, Main Market, Sector 14",
+    "city": "Gurugram",
+    "state": "Haryana",
+    "pincode": "122001"
+  },
+  "location": {
+    "type": "Point",
+    "coordinates": [77.0423, 28.4732]
+  },
+  "status": "ACTIVE",
+  "isVerified": true,
+  "verifiedAt": "2026-10-25T11:00:00.000Z",
+  "rating": 4.8,
+  "totalOrdersHandled": 142,
+  "createdAt": "2026-10-25T10:30:00.000Z",
+  "updatedAt": "2026-10-29T12:00:00.000Z"
+}
+```
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `_id` | `ObjectId` | Auto-generated MongoDB primary key. |
+| `vendorId` | `string` | Unique, immutable identifier code (e.g., `VND-264302`). Indexed uniquely. |
+| `name` | `string` | Vendor contact / owner full name (1 to 100 characters). Required. |
+| `phone` | `string` | Primary mobile number (10 to 15 digits). Indexed uniquely. Required. |
+| `businessName` | `string` | Registered shop or trade brand name (maximum 150 characters). |
+| `address` | `object` | Embedded address object containing `street`, `city`, `state`, and `pincode`. |
+| `location` | `object` | GeoJSON Point `[longitude, latitude]` indexed with MongoDB `2dsphere`. |
+| `status` | `string` | Lifecycle status enum: `'ACTIVE'`, `'INACTIVE'`, or `'SUSPENDED'`. Default: `'ACTIVE'`. |
+| `isVerified` | `boolean` | Verification badge indicator. Default: `false`. |
+| `verifiedAt` | `date` | Timestamp when the vendor was verified (or `null`). |
+| `rating` | `number` | Aggregated customer review rating (between $0.0$ and $5.0$). Default: `0`. |
+| `totalOrdersHandled` | `number` | Count of successfully processed service work orders. Default: `0`. |
+| `createdAt` | `date` | ISO 8601 creation timestamp. |
+| `updatedAt` | `date` | ISO 8601 last update timestamp. |
+
+---
+
+### 5.1. Send Vendor OTP
+*Sends a 4-digit verification code to the vendor's WhatsApp mobile number to initiate registration or sign in.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/vendor/send-otp`
+- **Access**: `Public` (No Authorization required)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `phone` | `string` | **Yes** | 10-digit mobile number or standard international digits (e.g., `919810112233`). |
+
+##### Request Example
+```json
+{
+  "phone": "919810112233"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "OTP sent successfully to vendor mobile number",
+  "data": {
+    "phone": "919810112233",
+    "isExistingVendor": true,
+    "expiresInMinutes": 5
+  }
+}
+```
+
+##### HTTP 400 Bad Request
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Please provide a valid 10-digit mobile number"
+}
+```
+
+---
+
+### 5.2. Verify Vendor OTP & Login / Register
+*Validates the 4-digit OTP. Returns a vendor JWT token and vendor profile document. Automatically converts existing unregistered customer records and provisions a unique `vendorId` on first signup.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/vendor/verify-otp`
+- **Access**: `Public` (No Authorization required)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `phone` | `string` | **Yes** | Vendor mobile number. |
+| `otp` | `string` | **Yes** | 4-digit verification code received. |
+| `name` | `string` | No (Yes on signup) | Contact person / owner full name (max 100 characters). |
+| `businessName` | `string` | No | Trade shop or business name (max 150 characters). |
+| `address` | `object` | No | Object containing `street`, `city`, `state`, `pincode`. |
+| `location` | `object` | No | GeoJSON Point or `{ latitude, longitude }` coordinates. |
+| `services` | `array` | No | Optional initial list of services to configure during signup. |
+
+##### Request Example
+```json
+{
+  "phone": "919810112233",
+  "otp": "1234",
+  "name": "Ramdhani Dhobi & Dry Cleaners",
+  "businessName": "Shri Ramdhani Express Laundry",
+  "address": {
+    "street": "Shop 4, Main Market, Sector 14",
+    "city": "Gurugram",
+    "state": "Haryana",
+    "pincode": "122001"
+  },
+  "location": {
+    "type": "Point",
+    "coordinates": [77.0423, 28.4732]
+  }
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor registered successfully",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isNewVendor": true,
+    "vendor": {
+      "_id": "6ae1daea122c8779111670bf",
+      "vendorId": "VND-264302",
+      "name": "Ramdhani Dhobi & Dry Cleaners",
+      "phone": "919810112233",
+      "businessName": "Shri Ramdhani Express Laundry",
+      "address": {
+        "street": "Shop 4, Main Market, Sector 14",
+        "city": "Gurugram",
+        "state": "Haryana",
+        "pincode": "122001"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [77.0423, 28.4732]
+      },
+      "status": "ACTIVE",
+      "isVerified": false,
+      "verifiedAt": null,
+      "rating": 0,
+      "totalOrdersHandled": 0,
+      "createdAt": "2026-10-29T12:00:00.000Z",
+      "updatedAt": "2026-10-29T12:00:00.000Z"
+    }
+  }
+}
+```
+
+---
+
+### 5.3. Get Authenticated Vendor Profile
+*Retrieves the profile document and configured active services for the currently logged-in vendor.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/profile`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor profile fetched successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "businessName": "Shri Ramdhani Express Laundry",
+    "address": {
+      "street": "Shop 4, Main Market, Sector 14",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122001"
+    },
+    "location": {
+      "type": "Point",
+      "coordinates": [77.0423, 28.4732]
+    },
+    "status": "ACTIVE",
+    "isVerified": true,
+    "verifiedAt": "2026-10-25T11:00:00.000Z",
+    "rating": 4.8,
+    "totalOrdersHandled": 142,
+    "createdAt": "2026-10-25T10:30:00.000Z",
+    "updatedAt": "2026-10-29T12:00:00.000Z",
+    "services": [
+      {
+        "_id": "6ae1daeb122c8779111670c5",
+        "vendorId": "6ae1daea122c8779111670bf",
+        "serviceId": {
+          "_id": "6ae1d67116f1760c3281ff84",
+          "name": "Wash & Steam Iron",
+          "basePrice": 60,
+          "unit": "PIECE"
+        },
+        "price": 55,
+        "durationMinutes": 60,
+        "isAvailable": true,
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.4. Update Authenticated Vendor Profile
+*Allows an authenticated vendor to update their contact name, business trade name, address, and GPS coordinates.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/profile`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | No | Vendor contact name (1 to 100 characters). |
+| `businessName` | `string` | No | Business trade name (maximum 150 characters). |
+| `address` | `object` | No | Address object with `street`, `city`, `state`, `pincode`. |
+| `location` | `object` | No | GeoJSON Point or `{ latitude, longitude }` coordinates. |
+
+##### Request Example
+```json
+{
+  "businessName": "Shri Ramdhani Express Laundry (Verified Partner)",
+  "address": {
+    "street": "Shop 4-A, Ground Floor, Sector 14",
+    "city": "Gurugram",
+    "state": "Haryana",
+    "pincode": "122001"
+  }
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor profile updated successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "businessName": "Shri Ramdhani Express Laundry (Verified Partner)",
+    "address": {
+      "street": "Shop 4-A, Ground Floor, Sector 14",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122001"
+    },
+    "location": {
+      "type": "Point",
+      "coordinates": [77.0423, 28.4732]
+    },
+    "status": "ACTIVE",
+    "isVerified": true,
+    "verifiedAt": "2026-10-25T11:00:00.000Z",
+    "rating": 4.8,
+    "totalOrdersHandled": 142,
+    "createdAt": "2026-10-25T10:30:00.000Z",
+    "updatedAt": "2026-10-29T12:10:00.000Z"
+  }
+}
+```
+
+---
+
+### 5.5. Get Vendor Services Summary
+*Returns all custom services and selling prices configured by the authenticated vendor.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/services`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor services fetched successfully",
+  "data": {
+    "vendorId": "6ae1daea122c8779111670bf",
+    "services": [
+      {
+        "_id": "6ae1daeb122c8779111670c5",
+        "vendorId": "6ae1daea122c8779111670bf",
+        "serviceId": {
+          "_id": "6ae1d67116f1760c3281ff84",
+          "name": "Wash & Steam Iron",
+          "basePrice": 60,
+          "unit": "PIECE"
+        },
+        "price": 55,
+        "durationMinutes": 60,
+        "isAvailable": true,
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.6. Update Vendor Offered Services
+*Replaces or updates the list of services offered by the authenticated vendor.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/services`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `services` | `array` | **Yes** | Array of service assignment objects with `serviceId`, `price`, `durationMinutes`. |
+
+##### Request Example
+```json
+{
+  "services": [
+    {
+      "serviceId": "6ae1d67116f1760c3281ff84",
+      "price": 55,
+      "durationMinutes": 60
+    }
+  ]
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor services updated successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "businessName": "Shri Ramdhani Express Laundry",
+    "status": "ACTIVE",
+    "services": [
+      {
+        "_id": "6ae1daeb122c8779111670c5",
+        "serviceId": "6ae1d67116f1760c3281ff84",
+        "price": 55,
+        "durationMinutes": 60,
+        "isAvailable": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.7. Discover Nearby Vendors via 2dsphere Index
+*Performs fast geospatial proximity queries to discover active vendors within a radial distance (in km) using the MongoDB `2dsphere` index on `location`.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/nearby`
+- **Access**: `Public` (No Authorization required)
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `latitude` | `number` | **Yes** | Geographic latitude coordinate (between `-90` and `90`). Alias: `lat`. |
+| `longitude` | `number` | **Yes** | Geographic longitude coordinate (between `-180` and `180`). Alias: `lng`. |
+| `radius` | `number` | No | Search radius in kilometers (default: `20` km). Alias: `maxDistance`. |
+| `status` | `string` | No | Filter by account status: `ACTIVE`, `INACTIVE`, `SUSPENDED`, or `ALL` (default: `ACTIVE`). |
+| `isVerified` | `boolean` | No | Filter by verified partner badge status: `true`, `false`, or `ALL`. |
+| `limit` | `number` | No | Maximum number of results to return (default: `50`, max: `100`). |
+
+##### Request Example
+```http
+GET /api/vendor/nearby?latitude=28.4732&longitude=77.0423&radius=25&status=ACTIVE&limit=10
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Nearby vendors retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae1daea122c8779111670bf",
+      "vendorId": "VND-264302",
+      "name": "Ramdhani Dhobi & Dry Cleaners",
+      "phone": "919810112233",
+      "businessName": "Shri Ramdhani Express Laundry",
+      "address": {
+        "street": "Shop 4, Main Market, Sector 14",
+        "city": "Gurugram",
+        "state": "Haryana",
+        "pincode": "122001"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [77.0423, 28.4732]
+      },
+      "status": "ACTIVE",
+      "isVerified": true,
+      "verifiedAt": "2026-10-25T11:00:00.000Z",
+      "rating": 4.8,
+      "totalOrdersHandled": 142,
+      "createdAt": "2026-10-25T10:30:00.000Z",
+      "updatedAt": "2026-10-29T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+##### HTTP 400 Bad Request
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Both latitude and longitude are required for nearby vendor search"
+}
+```
+
+---
+
+### 5.8. Discover Eligible Vendors
+*Finds active vendors by service category and required services, with optional geospatial proximity filtering.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/eligible`
+- **Access**: `Public` (No Authorization required)
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `category` | `string` | No | Category name (e.g., `Washerman`, `Tailor & Alterations`). |
+| `services` | `string` | No | Comma-separated list or service IDs. |
+| `latitude` | `number` | No | Latitude coordinate (e.g., `28.4732`). |
+| `longitude` | `number` | No | Longitude coordinate (e.g., `77.0423`). |
+| `radius` | `number` | No | Search radius in km (default: `20`). |
+
+##### Request Example
+```http
+GET /api/vendor/eligible?category=Washerman&latitude=28.4732&longitude=77.0423&radius=30
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Eligible vendors retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae1daea122c8779111670bf",
+      "vendorId": "VND-264302",
+      "name": "Ramdhani Dhobi & Dry Cleaners",
+      "businessName": "Shri Ramdhani Express Laundry",
+      "phone": "919810112233",
+      "rating": 4.8,
+      "totalOrdersHandled": 142,
+      "isVerified": true,
+      "address": {
+        "street": "Shop 4, Main Market, Sector 14",
+        "city": "Gurugram",
+        "state": "Haryana",
+        "pincode": "122001"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [77.0423, 28.4732]
+      },
+      "services": [
+        {
+          "_id": "6ae1daeb122c8779111670c5",
+          "serviceId": {
+            "_id": "6ae1d67116f1760c3281ff84",
+            "name": "Wash & Steam Iron",
+            "basePrice": 60,
+            "unit": "PIECE"
+          },
+          "price": 55,
+          "durationMinutes": 60,
+          "isAvailable": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### 5.9. Get Public Vendor Services Catalog
+*Allows customers and frontend apps to inspect the public catalog and prices offered by a specific vendor.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/:id/services`
+- **Access**: `Public` (No Authorization required)
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` (e.g., `VND-264302`). |
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor offered services retrieved successfully",
+  "data": {
+    "vendorId": "6ae1daea122c8779111670bf",
+    "vendorCode": "VND-264302",
+    "vendorName": "Ramdhani Dhobi & Dry Cleaners",
+    "businessName": "Shri Ramdhani Express Laundry",
+    "rating": 4.8,
+    "isVerified": true,
+    "services": [
+      {
+        "_id": "6ae1daeb122c8779111670c5",
+        "vendorId": "6ae1daea122c8779111670bf",
+        "serviceId": {
+          "_id": "6ae1d67116f1760c3281ff84",
+          "name": "Wash & Steam Iron",
+          "basePrice": 60,
+          "unit": "PIECE"
+        },
+        "price": 55,
+        "durationMinutes": 60,
+        "isAvailable": true,
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.10. Get Active Service Categories
+*Lists all active marketplace parent service categories.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/categories`
+- **Access**: `Public` (No Authorization required)
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Categories fetched successfully",
+  "data": [
+    {
+      "id": "6ae1d67116f1760c3281ff77",
+      "name": "Washerman",
+      "code": "WASHERMAN",
+      "icon": "washerman.png",
+      "imageUrl": "https://example.com/washerman.jpg",
+      "description": "Professional wash, iron and dry clean"
+    }
+  ]
+}
+```
+
+---
+
+### 5.11. Get Category Services
+*Lists all catalog services belonging to a specified category.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/categories/:category/services`
+- **Access**: `Public` (No Authorization required)
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `category` | `string` | **Yes** | Category name (e.g., `Washerman`) or Category MongoDB `_id`. |
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Category services fetched successfully",
+  "data": [
+    {
+      "_id": "6ae1d67116f1760c3281ff84",
+      "categoryId": "6ae1d67116f1760c3281ff77",
+      "name": "Wash & Steam Iron",
+      "code": "WASH_STEAM_IRON",
+      "basePrice": 60,
+      "unit": "PIECE",
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+### 5.12. Get Paginated List of Vendors (CRUD Index)
+*Retrieves a filtered, paginated catalog of vendor documents matching text search, status, verification flag, rating range, and address filters.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor`
+- **Access**: `Public / Management`
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `page` | `number` | No | Page number for pagination (default: `1`). |
+| `limit` | `number` | No | Number of records per page (default: `10`, max: `100`). |
+| `status` | `string` | No | Filter by account status: `ACTIVE`, `INACTIVE`, `SUSPENDED`, or `ALL`. |
+| `isVerified` | `boolean` | No | Filter by verified partner status (`true`, `false`, or `ALL`). |
+| `search` | `string` | No | Case-insensitive search matching `name`, `phone`, `businessName`, `vendorId`, or `city`. |
+| `city` | `string` | No | Case-insensitive filter matching `address.city`. |
+| `state` | `string` | No | Case-insensitive filter matching `address.state`. |
+| `pincode` | `string` | No | Filter matching `address.pincode`. |
+| `minRating` | `number` | No | Minimum rating filter ($0.0$ to $5.0$). |
+| `maxRating` | `number` | No | Maximum rating filter ($0.0$ to $5.0$). |
+| `sortBy` | `string` | No | Sort field: `createdAt`, `rating`, `totalOrdersHandled`, `name`, `status` (default: `createdAt`). |
+| `sortOrder` | `string` | No | Sort direction: `desc` or `asc` (default: `desc`). |
+
+##### Request Example
+```http
+GET /api/vendor?page=1&limit=10&status=ACTIVE&search=Ramdhani&sortBy=rating&sortOrder=desc
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendors retrieved successfully",
+  "data": {
+    "vendors": [
+      {
+        "_id": "6ae1daea122c8779111670bf",
+        "vendorId": "VND-264302",
+        "name": "Ramdhani Dhobi & Dry Cleaners",
+        "phone": "919810112233",
+        "businessName": "Shri Ramdhani Express Laundry",
+        "address": {
+          "street": "Shop 4, Main Market, Sector 14",
+          "city": "Gurugram",
+          "state": "Haryana",
+          "pincode": "122001"
+        },
+        "location": {
+          "type": "Point",
+          "coordinates": [77.0423, 28.4732]
+        },
+        "status": "ACTIVE",
+        "isVerified": true,
+        "verifiedAt": "2026-10-25T11:00:00.000Z",
+        "rating": 4.8,
+        "totalOrdersHandled": 142,
+        "createdAt": "2026-10-25T10:30:00.000Z",
+        "updatedAt": "2026-10-29T12:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 5.13. Create New Vendor Directly
+*Creates a new vendor partner record adhering to the Vendor schema, automatically generating a unique immutable `vendorId` and verifying phone uniqueness.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/vendor`
+- **Access**: `Public / Management`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | **Yes** | Vendor contact name (1-100 characters). |
+| `phone` | `string` | **Yes** | 10-digit mobile number or standard digits. Must be unique. |
+| `businessName` | `string` | No | Registered trade / business name (max 150 characters). |
+| `address` | `object` | No | Object containing `street`, `city`, `state`, and `pincode`. |
+| `location` | `object` | No | GeoJSON `{ type: "Point", coordinates: [lng, lat] }` or `{ latitude, longitude }`. |
+| `status` | `string` | No | Account status: `'ACTIVE'`, `'INACTIVE'`, or `'SUSPENDED'` (default: `'ACTIVE'`). |
+| `isVerified` | `boolean` | No | Initial verification flag (default: `false`). Sets `verifiedAt` when `true`. |
+| `rating` | `number` | No | Initial rating ($0.0$ to $5.0$, default: `0`). |
+| `totalOrdersHandled` | `number` | No | Count of handled orders (default: `0`). |
+
+##### Request Example
+```json
+{
+  "name": "Ramdhani Dhobi & Dry Cleaners",
+  "phone": "919810112233",
+  "businessName": "Shri Ramdhani Express Laundry",
+  "address": {
+    "street": "Shop 4, Main Market, Sector 14",
+    "city": "Gurugram",
+    "state": "Haryana",
+    "pincode": "122001"
+  },
+  "location": {
+    "type": "Point",
+    "coordinates": [77.0423, 28.4732]
+  },
+  "status": "ACTIVE",
+  "isVerified": true,
+  "rating": 4.8,
+  "totalOrdersHandled": 0
+}
+```
+
+#### Response Cycle
+
+##### HTTP 201 Created
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Vendor created successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "businessName": "Shri Ramdhani Express Laundry",
+    "address": {
+      "street": "Shop 4, Main Market, Sector 14",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122001"
+    },
+    "location": {
+      "type": "Point",
+      "coordinates": [77.0423, 28.4732]
+    },
+    "status": "ACTIVE",
+    "isVerified": true,
+    "verifiedAt": "2026-10-29T12:00:00.000Z",
+    "rating": 4.8,
+    "totalOrdersHandled": 0,
+    "createdAt": "2026-10-29T12:00:00.000Z",
+    "updatedAt": "2026-10-29T12:00:00.000Z"
+  }
+}
+```
+
+##### HTTP 409 Conflict
+```json
+{
+  "statusCode": 409,
+  "success": false,
+  "message": "A vendor with phone number 919810112233 already exists"
+}
+```
+
+---
+
+### 5.14. Get Vendor Details by ID or Code
+*Retrieves the complete vendor document and configured active services using either the vendor's MongoDB `_id` or unique business code (e.g., `VND-264302`).*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/:id`
+- **Access**: `Public` (No Authorization required)
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` code (e.g., `VND-264302`). |
+
+##### Request Example
+```http
+GET /api/vendor/6ae1daea122c8779111670bf
+GET /api/vendor/VND-264302
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor retrieved successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "businessName": "Shri Ramdhani Express Laundry",
+    "address": {
+      "street": "Shop 4, Main Market, Sector 14",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122001"
+    },
+    "location": {
+      "type": "Point",
+      "coordinates": [77.0423, 28.4732]
+    },
+    "status": "ACTIVE",
+    "isVerified": true,
+    "verifiedAt": "2026-10-25T11:00:00.000Z",
+    "rating": 4.8,
+    "totalOrdersHandled": 142,
+    "createdAt": "2026-10-25T10:30:00.000Z",
+    "updatedAt": "2026-10-29T12:00:00.000Z",
+    "services": [
+      {
+        "_id": "6ae1daeb122c8779111670c5",
+        "vendorId": "6ae1daea122c8779111670bf",
+        "serviceId": {
+          "_id": "6ae1d67116f1760c3281ff84",
+          "name": "Wash & Steam Iron",
+          "basePrice": 60,
+          "unit": "PIECE"
+        },
+        "price": 55,
+        "durationMinutes": 60,
+        "isAvailable": true,
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
+```
+
+##### HTTP 404 Not Found
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "Vendor not found"
+}
+```
+
+---
+
+### 5.15. Update Vendor Details by ID
+*Updates personal name, phone number, trade business name, contact address, GPS location coordinates, status, or business metrics for a specific vendor.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/:id`
+- **Access**: `Public / Management`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` code. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | No | Vendor contact name (1-100 characters). |
+| `phone` | `string` | No | Updated mobile number. Verified for uniqueness. |
+| `businessName` | `string` | No | Updated business trade name (max 150 characters). |
+| `address` | `object` | No | Updated address object (`street`, `city`, `state`, `pincode`). |
+| `location` | `object` | No | Updated GeoJSON Point coordinates `[longitude, latitude]`. |
+| `status` | `string` | No | Updated status (`ACTIVE`, `INACTIVE`, `SUSPENDED`). |
+| `isVerified` | `boolean` | No | Toggle verification badge. Synchronizes `verifiedAt`. |
+| `rating` | `number` | No | Rating score ($0.0$ to $5.0$). |
+| `totalOrdersHandled` | `number` | No | Updated count of completed orders. |
+
+##### Request Example
+```json
+{
+  "businessName": "Shri Ramdhani Express Laundromat & Steam Press",
+  "address": {
+    "street": "Shop 4-B, Main Market, Sector 14",
+    "city": "Gurugram",
+    "state": "Haryana",
+    "pincode": "122001"
+  },
+  "rating": 4.9
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor updated successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "businessName": "Shri Ramdhani Express Laundromat & Steam Press",
+    "address": {
+      "street": "Shop 4-B, Main Market, Sector 14",
+      "city": "Gurugram",
+      "state": "Haryana",
+      "pincode": "122001"
+    },
+    "location": {
+      "type": "Point",
+      "coordinates": [77.0423, 28.4732]
+    },
+    "status": "ACTIVE",
+    "isVerified": true,
+    "verifiedAt": "2026-10-25T11:00:00.000Z",
+    "rating": 4.9,
+    "totalOrdersHandled": 142,
+    "createdAt": "2026-10-25T10:30:00.000Z",
+    "updatedAt": "2026-10-29T12:15:00.000Z"
+  }
+}
+```
+
+---
+
+### 5.16. Update Vendor Lifecycle Status
+*Transitions the operational status of a vendor partner between `ACTIVE`, `INACTIVE`, and `SUSPENDED`.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/:id/status`
+- **Access**: `Public / Management`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` code. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `status` | `string` | **Yes** | Target lifecycle status: must be one of `ACTIVE`, `INACTIVE`, or `SUSPENDED`. |
+
+##### Request Example
+```json
+{
+  "status": "SUSPENDED"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor status updated to SUSPENDED",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "status": "SUSPENDED",
+    "isVerified": true,
+    "updatedAt": "2026-10-29T12:20:00.000Z"
+  }
+}
+```
+
+---
+
+### 5.17. Verify Vendor Partner
+*Grants or revokes the verified partner badge for a vendor partner. Automatically sets `verifiedAt` timestamp on verification or clears it on revocation.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/:id/verify`
+- **Access**: `Public / Management`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` code. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `isVerified` | `boolean` | No | `true` to approve verification badge; `false` to revoke (default: `true`). |
+
+##### Request Example
+```json
+{
+  "isVerified": true
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor verified successfully",
+  "data": {
+    "_id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "name": "Ramdhani Dhobi & Dry Cleaners",
+    "phone": "919810112233",
+    "isVerified": true,
+    "verifiedAt": "2026-10-29T12:25:00.000Z",
+    "updatedAt": "2026-10-29T12:25:00.000Z"
+  }
+}
+```
+
+---
+
+### 5.18. Delete / Deactivate Vendor
+*Performs a soft delete (marking status as `INACTIVE`) by default, or permanently deletes the vendor record and associated service pricing when `?hard=true` is passed.*
+
+- **Method**: `DELETE`
+- **Full Endpoint**: `/api/vendor/:id`
+- **Access**: `Public / Management`
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Vendor MongoDB `_id` or custom `vendorId` code. |
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `hard` | `boolean` | No | Pass `true` for permanent document purging; omit for soft delete. |
+
+##### Request Example
+```http
+DELETE /api/vendor/6ae1daea122c8779111670bf
+DELETE /api/vendor/VND-264302?hard=true
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Soft Delete)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor marked as INACTIVE (soft deleted)",
+  "data": {
+    "id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "status": "INACTIVE",
+    "message": "Vendor marked as INACTIVE (soft deleted)"
+  }
+}
+```
+
+##### HTTP 200 OK (Hard Delete)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor and associated services permanently deleted",
+  "data": {
+    "id": "6ae1daea122c8779111670bf",
+    "vendorId": "VND-264302",
+    "message": "Vendor and associated services permanently deleted"
+  }
+}
+```
+
+---
+
+### 5.19. Lookup Vendor by Customer Phone
+*Allows customer app to check if a phone contact is a registered vendor or saved as an unregistered offline vendor.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/lookup`
+- **Access**: `Protected` (Requires Customer JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <CUSTOMER_JWT_TOKEN>
+  ```
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `phone` | `string` | **Yes** | 10-digit mobile number to search. |
+
+##### Request Example
+```http
+GET /api/vendor/lookup?phone=919810112233
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor lookup successful",
+  "data": {
+    "isRegistered": true,
+    "vendor": {
+      "_id": "6ae1daea122c8779111670bf",
+      "vendorId": "VND-264302",
+      "name": "Ramdhani Dhobi & Dry Cleaners",
+      "phone": "919810112233",
+      "businessName": "Shri Ramdhani Express Laundry",
+      "rating": 4.8
+    }
+  }
+}
+```
+
+---
+
+### 5.20. List Unregistered Customer Vendors
+*Retrieves offline/unregistered vendor contacts saved by users.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/unregistered`
+- **Access**: `Protected` (Requires Customer or Admin Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Unregistered vendors retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae1daea122c8779111670a1",
+      "name": "Kallu Dhobi",
+      "phone": "919899001122",
+      "totalOrders": 14,
+      "isConvertedToRegistered": false
+    }
+  ]
+}
+```
+
+---
+
+### 5.21. Get Vendor Assigned Work Orders
+*Retrieves work orders assigned to the authenticated vendor with status, pagination, and search filters.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/orders`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `status` | `string` | No | Filter by order status: `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `DELIVERED`, `CANCELLED`, or `ALL`. |
+| `page` | `number` | No | Page number (default: `1`). |
+| `limit` | `number` | No | Orders per page (default: `20`). |
+| `search` | `string` | No | Filter by order number, customer name, or phone. |
+| `category` | `string` | No | Service category filter. |
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor work orders retrieved successfully",
+  "data": {
+    "orders": [
+      {
+        "_id": "6ae1db3fa3a311b358f5528a",
+        "orderNumber": "ORD-20261029-001",
+        "orderCategory": "Washerman",
+        "status": "PENDING_PICKUP",
+        "totalAmount": 175,
+        "paymentStatus": "PENDING",
+        "createdAt": "2026-10-29T12:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 5.22. Get Vendor Work Order Details
+*Retrieves full details of a specific assigned work order including wardrobe items, customer contact, and delivery timeline.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/orders/:id`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | Work order MongoDB `_id`. |
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor work order details retrieved",
+  "data": {
+    "_id": "6ae1db3fa3a311b358f5528a",
+    "orderNumber": "ORD-20261029-001",
+    "status": "PENDING_PICKUP",
+    "totalAmount": 175,
+    "paymentStatus": "PENDING",
+    "items": [
+      {
+        "wardrobeItemId": "6ae1d89a22bb456011cce33a",
+        "serviceName": "Wash & Steam Iron",
+        "price": 55,
+        "quantity": 1
+      }
+    ],
+    "timeline": [
+      {
+        "status": "PENDING_PICKUP",
+        "timestamp": "2026-10-29T12:00:00.000Z",
+        "actor": "CUSTOMER"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.23. Update Work Order Lifecycle Status
+*Transitions the status of a work order through fulfillment phases.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/orders/:id/status`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | Work order MongoDB `_id`. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `status` | `string` | **Yes** | One of: `PENDING_PICKUP`, `PICKED_UP`, `IN_PROCESS`, `READY_FOR_DELIVERY`, `DELIVERED`, `REJECTED`, `CANCELLED`. |
+| `note` | `string` | No | Optional audit note recorded in timeline. |
+| `cancelReason` | `string` | No | Reason required if status is `REJECTED` or `CANCELLED`. |
+
+##### Request Example
+```json
+{
+  "status": "PICKED_UP",
+  "note": "Garments picked up from customer residence"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Work order status updated successfully by vendor",
+  "data": {
+    "_id": "6ae1db3fa3a311b358f5528a",
+    "status": "PICKED_UP",
+    "timeline": [
+      {
+        "status": "PICKED_UP",
+        "timestamp": "2026-10-29T12:15:00.000Z",
+        "note": "Garments picked up from customer residence",
+        "actor": "VENDOR"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.24. Update Work Order Payment
+*Marks a work order as `PAID` or `UNPAID` and automatically generates a financial transaction record.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/vendor/orders/:id/payment`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | Work order MongoDB `_id`. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `paymentStatus` | `string` | **Yes** | `PAID` or `UNPAID`. |
+| `paymentMethod` | `string` | No | Payment method (e.g. `CASH`, `UPI`, `CARD`). |
+
+##### Request Example
+```json
+{
+  "paymentStatus": "PAID",
+  "paymentMethod": "CASH"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Order payment status updated successfully",
+  "data": {
+    "_id": "6ae1db3fa3a311b358f5528a",
+    "paymentStatus": "PAID"
+  }
+}
+```
+
+---
+
+### 5.25. Get Vendor Financial Transactions
+*Retrieves settlement and transaction records associated with completed and paid work orders.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/vendor/transactions`
+- **Access**: `Protected` (Requires Vendor JWT Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <VENDOR_JWT_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Vendor transactions retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae1dc8811b358f55291",
+      "orderId": "6ae1db3fa3a311b358f5528a",
+      "vendorId": "6ae1daea122c8779111670bf",
+      "amount": 175,
+      "status": "COMPLETED",
+      "paymentMethod": "CASH",
+      "createdAt": "2026-10-29T12:20:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+## 6. Comprehensive Vendor Quick Reference Table
+
+| Method | Endpoint | Access | Short Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/vendor/send-otp` | Public | Send 4-digit verification OTP to vendor WhatsApp |
+| `POST` | `/api/vendor/verify-otp` | Public | Verify OTP, authenticate vendor, return JWT token and profile |
+| `GET` | `/api/vendor/profile` | Protected (Vendor) | Retrieve authenticated vendor profile & business details |
+| `PATCH` | `/api/vendor/profile` | Protected (Vendor) | Update trade business name, address, and GPS coordinates |
+| `GET` | `/api/vendor/services` | Protected (Vendor) | Get custom services and prices configured by vendor |
+| `PATCH` | `/api/vendor/services` | Protected (Vendor) | Replace or update full vendor services list |
+| `GET` | `/api/vendor/nearby` | Public | Fast geospatial radius discovery via 2dsphere location index |
+| `GET` | `/api/vendor/eligible` | Public | Geospatial discovery of nearby eligible vendors |
+| `GET` | `/api/vendor/:id/services` | Public | Public catalog view of services offered by specific vendor |
+| `GET` | `/api/vendor/categories` | Public | List all active marketplace service categories |
+| `GET` | `/api/vendor/categories/:category/services` | Public | List catalog services belonging to a category |
+| `GET` | `/api/vendor` | Public / Admin | Filter, search, and paginate through vendor database |
+| `POST` | `/api/vendor` | Public / Admin | Create new vendor record based on Vendor model schema |
+| `GET` | `/api/vendor/:id` | Public | Retrieve detailed vendor document by Mongo ObjectId or VND code |
+| `PATCH` | `/api/vendor/:id` | Public / Admin | Update vendor profile, address, coordinates, and metrics |
+| `PATCH` | `/api/vendor/:id/status` | Public / Admin | Transition vendor lifecycle status (`ACTIVE`, `INACTIVE`, `SUSPENDED`) |
+| `PATCH` | `/api/vendor/:id/verify` | Public / Admin | Set or toggle vendor verified status and timestamp |
+| `DELETE` | `/api/vendor/:id` | Public / Admin | Soft delete (`status: INACTIVE`) or hard delete (`?hard=true`) vendor |
+| `GET` | `/api/vendor/lookup` | Protected (User) | Search customer phone contacts for registered or offline vendors |
+| `GET` | `/api/vendor/unregistered` | Protected (User/Admin)| List offline/unregistered vendors receiving customer orders |
+| `GET` | `/api/vendor/orders` | Protected (Vendor) | Get all work orders assigned to authenticated vendor |
+| `GET` | `/api/vendor/orders/:id` | Protected (Vendor) | Get detailed work order information, garments, and timeline |
+| `PATCH` | `/api/vendor/orders/:id/status` | Protected (Vendor) | Transition order status (`PICKED_UP`, `IN_PROCESS`, `DELIVERED`)|
+| `PATCH` | `/api/vendor/orders/:id/payment` | Protected (Vendor) | Update payment status (`PAID`/`UNPAID`) and record transaction |
+| `GET` | `/api/vendor/transactions` | Protected (Vendor) | Retrieve financial payment records and settlements |

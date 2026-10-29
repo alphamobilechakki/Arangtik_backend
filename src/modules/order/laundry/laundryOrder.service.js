@@ -1,13 +1,13 @@
 const mongoose = require('mongoose');
 const Order = require('../order.model');
-const vendorService = require('../../vendor/washerman/vendor.service');
+const vendorService = require('../../vendor/vendor.service');
 const laundryPdfService = require('./laundryPdf.service');
 const laundryWhatsappService = require('./laundryWhatsapp.service');
 const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
 const User = require('../../auth/user.model');
 const ApiError = require('../../../utils/apiError');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
-const VendorCategory = require('../../admin/vendorCategory/vendorCategory.model');
+const Category = require('../../category/category.model');
 
 class LaundryOrderService {
   /**
@@ -173,7 +173,7 @@ class LaundryOrderService {
 
     // If assigned vendor is registered, verify they provide ALL requested services
     if (vendorRecord.isRegistered && vendorRecord.vendor) {
-      const RegisteredVendor = require('../../vendor/washerman/registeredVendor.model');
+      const RegisteredVendor = require('../../vendor/vendor.model');
       const vendorDoc = await RegisteredVendor.findById(vendorRecord.vendor._id).lean();
       if (vendorDoc && Array.isArray(vendorDoc.offeredServices) && vendorDoc.offeredServices.length > 0) {
         const vendorOfferedLower = vendorDoc.offeredServices.map((s) => String(s).trim().toLowerCase());
@@ -189,6 +189,26 @@ class LaundryOrderService {
             )}. Please select a vendor eligible for all required services.`
           );
         }
+
+        // Snapshot vendor-specific price for each garment if not explicitly overridden
+        if (Array.isArray(vendorDoc.services)) {
+          for (const item of processedItems) {
+            const matchedSrv = vendorDoc.services.find(
+              (s) =>
+                (item.serviceId && s.serviceId && s.serviceId.toString() === item.serviceId.toString()) ||
+                s.name.toLowerCase() === item.serviceName.toLowerCase() ||
+                (s.code && s.code.toLowerCase() === item.serviceName.toLowerCase())
+            );
+            if (matchedSrv) {
+              if (!item.serviceId && matchedSrv.serviceId) {
+                item.serviceId = matchedSrv.serviceId;
+              }
+              if ((!item.price || item.price === 0) && typeof matchedSrv.price === 'number') {
+                item.price = matchedSrv.price;
+              }
+            }
+          }
+        }
       }
     }
 
@@ -201,8 +221,9 @@ class LaundryOrderService {
       if (vendorRecord.isRegistered && vendorRecord.vendor?.category) {
         orderCategory = vendorRecord.vendor.category;
       } else {
-        const firstCat = await VendorCategory.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
-        orderCategory = firstCat?.name || 'General';
+        const Category = require('../../category/category.model');
+        const firstCat = await Category.findOne({ isActive: true }).sort({ sortOrder: 1, createdAt: 1 });
+        orderCategory = firstCat?.name || 'Washerman';
       }
     }
 
@@ -320,7 +341,7 @@ class LaundryOrderService {
         .catch((err) => console.warn('[FCM Customer Order Notification Warning]:', err.message));
 
       // B. If vendor has an active user account in Arangtik, notify the vendor
-      const VendorModel = require('../../vendor/washerman/registeredVendor.model');
+      const VendorModel = require('../../vendor/vendor.model');
       let vendorUserTargetId = null;
       if (order.vendorId) {
         const vDoc = await VendorModel.findById(order.vendorId).select('userId');
@@ -677,7 +698,7 @@ class LaundryOrderService {
 
       // If user cancelled, notify vendor if vendor has an active account
       if (status === 'CANCELLED') {
-        const VendorModel = require('../../vendor/washerman/registeredVendor.model');
+        const VendorModel = require('../../vendor/vendor.model');
         let vendorUserTargetId = null;
         if (order.vendorId) {
           const vDoc = await VendorModel.findById(order.vendorId).select('userId');

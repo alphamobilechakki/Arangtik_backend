@@ -138,7 +138,7 @@ class AuthService {
 
     // Check and sync if user's phone was previously logged as an unregistered vendor
     try {
-      const vendorService = require('../vendor/washerman/vendor.service');
+      const vendorService = require('../vendor/vendor.service');
       await vendorService.syncUnregisteredToRegistered(user);
     } catch (syncErr) {
       console.error('[Vendor Sync on Login Error]:', syncErr.message);

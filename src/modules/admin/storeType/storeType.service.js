@@ -222,10 +222,10 @@ class StoreTypeService {
   async deleteStoreType(id, options = {}) {
     const storeType = await this.resolveStoreType(id);
 
-    // Prevent deletion if linked to any VendorCategory
-    const VendorCategory = require('../vendorCategory/vendorCategory.model');
-    if (VendorCategory) {
-      const inUseCategory = await VendorCategory.findOne({
+    // Prevent deletion if linked to any Category
+    const Category = require('../../category/category.model');
+    if (Category) {
+      const inUseCategory = await Category.findOne({
         $or: [{ storeTypeIds: storeType._id }, { storeTypes: storeType.code }],
       });
 
