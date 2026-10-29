@@ -2517,3 +2517,696 @@ GET /api/vendor/lookup?phone=919810112233
 | `PATCH` | `/api/vendor/orders/:id/status` | Protected (Vendor) | Transition order status (`PICKED_UP`, `IN_PROCESS`, `DELIVERED`)|
 | `PATCH` | `/api/vendor/orders/:id/payment` | Protected (Vendor) | Update payment status (`PAID`/`UNPAID`) and record transaction |
 | `GET` | `/api/vendor/transactions` | Protected (Vendor) | Retrieve financial payment records and settlements |
+
+
+---
+
+## Hardware Module — Hub & KitchenBox APIs
+
+> **Base path:** `http://localhost:8083/api`
+> All endpoints require `Authorization: Bearer <token>` header.
+> Tested live on: 2026-10-29 against MongoDB Atlas (arangtik cluster).
+
+---
+
+### Hub APIs — `/api/hardware/hubs`
+
+The **Hub** is the physical Wi-Fi gateway device. It bridges KitchenBox sensor devices to the cloud backend.
+
+---
+
+#### 1. Register Hub
+**`POST /api/hardware/hubs`** — _Protected_
+
+Registers a new hub device in the system.
+
+**Request Body:**
+```json
+{
+  "name": "Main Godown Hub",
+  "mac_id": "AA:BB:CC:DD:EE:FF",
+  "userId": "6ae31cca0c00fa1dfe7e3c99"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Hub registered successfully",
+  "data": {
+    "_id": "6ae32896cad5521f756a33ac",
+    "name": "Main Godown Hub",
+    "mac_id": "AA:BB:CC:DD:EE:FF",
+    "userId": "6ae31cca0c00fa1dfe7e3c99",
+    "wifi": { "ssid": null },
+    "status": "not configured",
+    "createdAt": "2026-10-29T11:05:58.975Z",
+    "updatedAt": "2026-10-29T11:05:58.975Z"
+  }
+}
+```
+
+> **Note:** `wifi.password` is never returned in any response — stored with `select: false`.
+
+**Validation errors `400`:** `name`, `mac_id` required. `mac_id` must be valid MAC format (`AA:BB:CC:DD:EE:FF`).
+**Conflict `409`:** MAC ID already registered.
+
+---
+
+#### 2. List Hubs
+**`GET /api/hardware/hubs`** — _Protected_
+
+Returns all hubs for the authenticated user. Supports pagination and status filter.
+
+**Query Params:**
+| Param | Type | Description |
+|---|---|---|
+| `status` | string | Filter by status: `not configured`, `configured`, `active`, `deactivated` |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Results per page (default: 20, max: 100) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hubs retrieved successfully",
+  "data": {
+    "hubs": [
+      {
+        "_id": "6ae32896cad5521f756a33ac",
+        "name": "Main Godown Hub",
+        "mac_id": "AA:BB:CC:DD:EE:FF",
+        "userId": "6ae31cca0c00fa1dfe7e3c99",
+        "wifi": { "ssid": "JioFiber_Godown_5G" },
+        "status": "active",
+        "createdAt": "2026-10-29T11:05:58.975Z",
+        "updatedAt": "2026-10-29T11:06:29.975Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 3. Get Hub by ID
+**`GET /api/hardware/hubs/:id`** — _Protected_
+
+**Response `200 OK`:** Single hub object (same shape as list item above).
+**Error `404`:** Hub not found.
+
+---
+
+#### 4. Get Hub by MAC ID
+**`GET /api/hardware/hubs/mac/:mac_id`** — _Protected_
+
+Lookup hub using its hardware MAC address.
+
+**Example:** `GET /api/hardware/hubs/mac/AA:BB:CC:DD:EE:FF`
+
+**Response `200 OK`:** Single hub object.
+**Error `404`:** Hub not found.
+
+---
+
+#### 5. Configure Wi-Fi
+**`PATCH /api/hardware/hubs/:id/wifi`** — _Protected_
+
+Sets Wi-Fi credentials on the hub. Automatically advances status from `not configured` → `configured`.
+
+**Request Body:**
+```json
+{
+  "ssid": "JioFiber_Godown_5G",
+  "password": "SecurePass2026!"
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wi-Fi configured successfully",
+  "data": {
+    "_id": "6ae32896cad5521f756a33ac",
+    "name": "Main Godown Hub",
+    "mac_id": "AA:BB:CC:DD:EE:FF",
+    "wifi": { "ssid": "JioFiber_Godown_5G" },
+    "status": "configured",
+    "updatedAt": "2026-10-29T11:06:29.975Z"
+  }
+}
+```
+
+> **Security:** `password` is stored encrypted and **never returned** in any response.
+
+**Validation `400`:** Both `ssid` and `password` are required.
+
+---
+
+#### 6. Update Hub Status
+**`PATCH /api/hardware/hubs/:id/status`** — _Protected_
+
+**Request Body:**
+```json
+{ "status": "active" }
+```
+
+Allowed values: `not configured`, `configured`, `active`, `deactivated`
+
+**Response `200 OK`:** Updated hub object.
+**Error `400`:** Invalid status value.
+
+---
+
+#### 7. Update Hub Info
+**`PATCH /api/hardware/hubs/:id`** — _Protected_
+
+Update hub `name` or `userId`.
+
+**Request Body (all optional):**
+```json
+{
+  "name": "Main Godown Hub Updated",
+  "userId": "6ae31cca0c00fa1dfe7e3c99"
+}
+```
+
+**Response `200 OK`:** Updated hub object.
+
+---
+
+#### 8. Delete Hub
+**`DELETE /api/hardware/hubs/:id`** — _Protected_
+
+Permanently deletes a hub record.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub deleted successfully",
+  "data": { "message": "Hub deleted successfully" }
+}
+```
+
+**Error `404`:** Hub not found.
+
+---
+
+### KitchenBox APIs — `/api/hardware/boxes`
+
+The **KitchenBox** (Chakki Box) is a smart sensor container paired to a hub. A Time-of-Flight (ToF) sensor inside measures grain levels.
+
+---
+
+#### 9. Register KitchenBox
+**`POST /api/hardware/boxes`** — _Protected_
+
+Registers a new KitchenBox device. Validates that the parent hub (`hub_mac_id`) exists.
+
+**Request Body:**
+```json
+{
+  "name": "Chakki Container 1",
+  "mac_id": "24:0A:C4:11:00:55",
+  "hub_mac_id": "AA:BB:CC:DD:EE:FF",
+  "userId": "6ae31cca0c00fa1dfe7e3c99",
+  "item_name": "Premium Wheat",
+  "dimensions": "1200x800x1000"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "KitchenBox registered successfully",
+  "data": {
+    "_id": "6ae328c3cad5521f756a33c6",
+    "name": "Chakki Container 1",
+    "mac_id": "24:0A:C4:11:00:55",
+    "hub_mac_id": "AA:BB:CC:DD:EE:FF",
+    "userId": "6ae31cca0c00fa1dfe7e3c99",
+    "item_name": "Premium Wheat",
+    "dimensions": "1200x800x1000",
+    "tof": null,
+    "image": null,
+    "status": "provisioned",
+    "createdAt": "2026-10-29T11:06:43.447Z",
+    "updatedAt": "2026-10-29T11:06:43.447Z"
+  }
+}
+```
+
+**Validation `400`:** `name`, `mac_id`, `hub_mac_id`, `userId` are required. `mac_id` must be valid MAC format.
+**Error `404`:** Parent hub with given `hub_mac_id` not found.
+**Conflict `409`:** MAC ID already registered.
+
+---
+
+#### 10. List KitchenBoxes
+**`GET /api/hardware/boxes`** — _Protected_
+
+Returns all KitchenBoxes. Supports filtering by hub, status, and pagination.
+
+**Query Params:**
+| Param | Type | Description |
+|---|---|---|
+| `hub_mac_id` | string | Filter by parent hub MAC |
+| `status` | string | Filter by status |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Results per page (default: 20, max: 100) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBoxes retrieved successfully",
+  "data": {
+    "boxes": [ { ...kitchenBoxObject } ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+---
+
+#### 11. Get KitchenBox by ID
+**`GET /api/hardware/boxes/:id`** — _Protected_
+
+**Response `200 OK`:** Single KitchenBox object.
+**Error `404`:** KitchenBox not found.
+
+---
+
+#### 12. Get KitchenBox by MAC ID
+**`GET /api/hardware/boxes/mac/:mac_id`** — _Protected_
+
+Lookup box by its hardware MAC address.
+
+**Example:** `GET /api/hardware/boxes/mac/24:0A:C4:11:00:55`
+
+**Response `200 OK`:** Single KitchenBox object.
+**Error `404`:** KitchenBox not found.
+
+---
+
+#### 13. Update KitchenBox Info
+**`PATCH /api/hardware/boxes/:id`** — _Protected_
+
+Update general info fields.
+
+**Request Body (all optional):**
+```json
+{
+  "name": "Chakki Container 1",
+  "item_name": "Premium Basmati Rice",
+  "dimensions": "1500x900x1200",
+  "image": "https://cdn.arangtik.com/boxes/img.jpg"
+}
+```
+
+**Response `200 OK`:** Updated KitchenBox object.
+
+---
+
+#### 14. Push ToF Reading
+**`PATCH /api/hardware/boxes/:id/tof`** — _Protected_
+
+Called by the hub device to push live Time-of-Flight sensor reading.
+
+**Request Body:**
+```json
+{ "tof": 350 }
+```
+
+> `tof` is the raw distance in **millimetres** from the sensor to the grain surface.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "ToF reading updated successfully",
+  "data": {
+    "_id": "6ae328c3cad5521f756a33c6",
+    "tof": 350,
+    "updatedAt": "2026-10-29T11:07:02.341Z"
+  }
+}
+```
+
+**Validation `400`:** `tof` must be a valid number.
+
+---
+
+#### 15. Update KitchenBox Status
+**`PATCH /api/hardware/boxes/:id/status`** — _Protected_
+
+**Request Body:**
+```json
+{ "status": "activated" }
+```
+
+Allowed values: `provisioned`, `activated`, `maintenance`, `deactivated`
+
+**Response `200 OK`:** Updated KitchenBox object.
+**Error `400`:** Invalid status value.
+
+---
+
+#### 16. Delete KitchenBox
+**`DELETE /api/hardware/boxes/:id`** — _Protected_
+
+Permanently deletes a KitchenBox record.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox deleted successfully",
+  "data": { "message": "KitchenBox deleted successfully" }
+}
+```
+
+**Error `404`:** KitchenBox not found.
+
+---
+
+### Hardware API — Quick Reference
+
+| # | Method | Endpoint | Description |
+|---|---|---|---|
+| 1 | `POST` | `/api/hardware/hubs` | Register new hub |
+| 2 | `GET` | `/api/hardware/hubs` | List hubs (paginated) |
+| 3 | `GET` | `/api/hardware/hubs/:id` | Get hub by ID |
+| 4 | `GET` | `/api/hardware/hubs/mac/:mac_id` | Get hub by MAC address |
+| 5 | `PATCH` | `/api/hardware/hubs/:id/wifi` | Set Wi-Fi SSID + password |
+| 6 | `PATCH` | `/api/hardware/hubs/:id/status` | Update hub status |
+| 7 | `PATCH` | `/api/hardware/hubs/:id` | Update hub name / userId |
+| 8 | `DELETE` | `/api/hardware/hubs/:id` | Delete hub |
+| 9 | `POST` | `/api/hardware/boxes` | Register new KitchenBox |
+| 10 | `GET` | `/api/hardware/boxes` | List KitchenBoxes (paginated) |
+| 11 | `GET` | `/api/hardware/boxes/:id` | Get KitchenBox by ID |
+| 12 | `GET` | `/api/hardware/boxes/mac/:mac_id` | Get KitchenBox by MAC address |
+| 13 | `PATCH` | `/api/hardware/boxes/:id` | Update name / item / dimensions / image |
+| 14 | `PATCH` | `/api/hardware/boxes/:id/tof` | Push live ToF sensor reading (mm) |
+| 15 | `PATCH` | `/api/hardware/boxes/:id/status` | Update KitchenBox status |
+| 16 | `DELETE` | `/api/hardware/boxes/:id` | Delete KitchenBox |
+
+**Hub status values:** `not configured` → `configured` → `active` → `deactivated`
+**Box status values:** `provisioned` → `activated` → `maintenance` → `deactivated`
+
+
+---
+
+## Admin Hardware Module APIs — `/api/admin/hardware`
+
+> **Base path:** `http://localhost:8083/api/admin/hardware`
+> **Authentication:** Requires Admin Authorization:
+> - Either `Authorization: Bearer <admin_jwt_token>`
+> - Or `x-api-key: <YOUR_ADMIN_API_KEY>`
+
+These APIs power the Admin Panel dashboard to monitor, search, inspect, update, and manage both **Hubs** and **KitchenBoxes** across all users.
+
+---
+
+### 1. Hardware Overview & KPI Statistics
+**`GET /api/admin/hardware/stats`** — _Admin_
+
+Returns aggregated statistics for all hubs and kitchen boxes in the system.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hardware statistics retrieved successfully",
+  "data": {
+    "hubs": {
+      "total": 3,
+      "active": 1,
+      "configured": 1,
+      "notConfigured": 1,
+      "deactivated": 0
+    },
+    "boxes": {
+      "total": 3,
+      "activated": 2,
+      "provisioned": 1,
+      "maintenance": 0,
+      "deactivated": 0,
+      "withLiveTof": 2
+    }
+  }
+}
+```
+
+---
+
+### 2. Admin: List All Hubs
+**`GET /api/admin/hardware/hubs`** — _Admin_
+
+List all registered hubs across all customers with populated owner info and paired box counts. Supports pagination, keyword search (name, MAC, SSID, user phone/name), and status filtering.
+
+**Query Parameters:**
+| Param | Type | Description |
+|---|---|---|
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 10, max: 100) |
+| `search` | string | Keyword search matching hub name, MAC address, Wi-Fi SSID, user name, or phone |
+| `status` | string | Filter by status: `not configured`, `configured`, `active`, `deactivated` (or `ALL`) |
+| `sortBy` | string | Sort field (default: `createdAt`) |
+| `sortOrder` | string | `asc` or `desc` (default: `desc`) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hubs retrieved successfully",
+  "data": {
+    "hubs": [
+      {
+        "_id": "6ae32a10cad5521f756a33e2",
+        "name": "Sharma Chakki - Main Hub",
+        "mac_id": "3C:71:BF:4A:92:11",
+        "userId": {
+          "_id": "6ae31cca0c00fa1dfe7e3c99",
+          "name": "Arangtik User",
+          "phone": "918949056321",
+          "role": "user",
+          "accountType": "INDIVIDUAL"
+        },
+        "wifi": {
+          "ssid": "JioFiber_Chakki_5G"
+        },
+        "status": "active",
+        "pairedBoxesCount": 2,
+        "createdAt": "2026-10-29T11:12:16.892Z",
+        "updatedAt": "2026-10-29T11:12:16.980Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 3,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 3. Admin: Get Hub Details by ID
+**`GET /api/admin/hardware/hubs/:id`** — _Admin_
+
+Returns single hub details, populated user profile, and an array of all paired `pairedBoxes`.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub details retrieved successfully",
+  "data": {
+    "_id": "6ae32a10cad5521f756a33e2",
+    "name": "Sharma Chakki - Main Hub",
+    "mac_id": "3C:71:BF:4A:92:11",
+    "userId": {
+      "_id": "6ae31cca0c00fa1dfe7e3c99",
+      "name": "Arangtik User",
+      "phone": "918949056321"
+    },
+    "wifi": {
+      "ssid": "JioFiber_Chakki_5G"
+    },
+    "status": "active",
+    "pairedBoxes": [
+      {
+        "_id": "6ae32a22cad5521f756a33f5",
+        "name": "Gehun Container 1",
+        "mac_id": "24:0A:C4:11:00:55",
+        "item_name": "Premium Wheat (Gehun)",
+        "tof": 280,
+        "status": "activated"
+      }
+    ],
+    "pairedBoxesCount": 1
+  }
+}
+```
+
+---
+
+### 4. Admin: Update Hub Details
+**`PATCH /api/admin/hardware/hubs/:id`** — _Admin_
+
+**Request Body (optional fields):**
+```json
+{
+  "name": "Sharma Chakki - Main Hub Updated",
+  "status": "active",
+  "wifi": {
+    "ssid": "NewSSID_5G"
+  }
+}
+```
+
+---
+
+### 5. Admin: Update Hub Status
+**`PATCH /api/admin/hardware/hubs/:id/status`** — _Admin_
+
+**Request Body:**
+```json
+{
+  "status": "maintenance"
+}
+```
+Allowed values: `not configured`, `configured`, `active`, `deactivated`
+
+---
+
+### 6. Admin: Delete Hub
+**`DELETE /api/admin/hardware/hubs/:id`** — _Admin_
+
+Permanently removes the hub document from the database.
+
+---
+
+### 7. Admin: List All KitchenBoxes
+**`GET /api/admin/hardware/boxes`** — _Admin_
+
+List all KitchenBoxes across all customers with populated owner info and resolved parent Hub information. Supports search by box name, MAC address, item name, hub MAC, or user phone.
+
+**Query Parameters:**
+| Param | Type | Description |
+|---|---|---|
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 10, max: 100) |
+| `search` | string | Keyword search matching box name, MAC, hub MAC, item name, or user phone |
+| `status` | string | Filter by status: `provisioned`, `activated`, `maintenance`, `deactivated` (or `ALL`) |
+| `hub_mac_id` | string | Filter by parent Hub MAC address |
+| `sortBy` | string | Sort field (default: `createdAt`) |
+| `sortOrder` | string | `asc` or `desc` (default: `desc`) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBoxes retrieved successfully",
+  "data": {
+    "boxes": [
+      {
+        "_id": "6ae32a22cad5521f756a33f5",
+        "name": "Gehun Container 1",
+        "mac_id": "24:0A:C4:11:00:55",
+        "hub_mac_id": "3C:71:BF:4A:92:11",
+        "item_name": "Premium Wheat (Gehun)",
+        "dimensions": "1200x800x1000",
+        "tof": 280,
+        "status": "activated",
+        "userId": {
+          "_id": "6ae31cca0c00fa1dfe7e3c99",
+          "name": "Arangtik User",
+          "phone": "918949056321"
+        },
+        "hub": {
+          "name": "Sharma Chakki - Main Hub",
+          "mac_id": "3C:71:BF:4A:92:11",
+          "status": "active"
+        },
+        "createdAt": "2026-10-29T11:12:34.200Z",
+        "updatedAt": "2026-10-29T11:12:34.400Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 3,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 8. Admin: Get KitchenBox Details by ID
+**`GET /api/admin/hardware/boxes/:id`** — _Admin_
+
+Returns single box details, populated user profile, and parent hub connection info.
+
+---
+
+### 9. Admin: Update KitchenBox Details
+**`PATCH /api/admin/hardware/boxes/:id`** — _Admin_
+
+**Request Body (optional fields):**
+```json
+{
+  "name": "Gehun Container 1",
+  "item_name": "Premium Wheat (Sharbati)",
+  "dimensions": "1200x800x1000",
+  "tof": 250,
+  "status": "activated"
+}
+```
+
+---
+
+### 10. Admin: Update KitchenBox Status
+**`PATCH /api/admin/hardware/boxes/:id/status`** — _Admin_
+
+**Request Body:**
+```json
+{
+  "status": "maintenance"
+}
+```
+Allowed values: `provisioned`, `activated`, `maintenance`, `deactivated`
+
+---
+
+### 11. Admin: Delete KitchenBox
+**`DELETE /api/admin/hardware/boxes/:id`** — _Admin_
+
+Permanently deletes the KitchenBox record from the database.

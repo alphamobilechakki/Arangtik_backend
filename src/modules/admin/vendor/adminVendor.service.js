@@ -138,8 +138,8 @@ class AdminVendorService {
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
-        .populate('userId', 'name phone email profileImage')
-        .populate('addedByUsers.userId', 'name phone')
+        .populate({ path: 'userId', select: 'name phone email profileImage', strictPopulate: false })
+        .populate({ path: 'addedByUsers.userId', select: 'name phone', strictPopulate: false })
         .lean(),
       RegisteredVendor.countDocuments(filter),
     ]);
@@ -249,8 +249,8 @@ class AdminVendorService {
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
-        .populate('addedByUsers.userId', 'name phone profileImage')
-        .populate('convertedVendorId', 'vendorId name phone category businessName status')
+        .populate({ path: 'addedByUsers.userId', select: 'name phone profileImage', strictPopulate: false })
+        .populate({ path: 'convertedVendorId', select: 'vendorId name phone category businessName status', strictPopulate: false })
         .lean(),
       UnregisteredVendor.countDocuments(filter),
     ]);
@@ -282,8 +282,8 @@ class AdminVendorService {
     }
 
     const vendor = await RegisteredVendor.findOne(query)
-      .populate('userId', 'name phone email profileImage')
-      .populate('addedByUsers.userId', 'name phone')
+      .populate({ path: 'userId', select: 'name phone email profileImage', strictPopulate: false })
+      .populate({ path: 'addedByUsers.userId', select: 'name phone', strictPopulate: false })
       .lean();
 
     if (!vendor) {
@@ -346,8 +346,8 @@ class AdminVendorService {
     }
 
     const vendor = await UnregisteredVendor.findById(id)
-      .populate('addedByUsers.userId', 'name phone profileImage')
-      .populate('convertedVendorId', 'vendorId name phone category businessName status')
+      .populate({ path: 'addedByUsers.userId', select: 'name phone profileImage', strictPopulate: false })
+      .populate({ path: 'convertedVendorId', select: 'vendorId name phone category businessName status', strictPopulate: false })
       .lean();
 
     if (!vendor) {

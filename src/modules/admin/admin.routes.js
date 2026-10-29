@@ -26,5 +26,8 @@ router.use('/services', categoryServiceRoutes);
 const storeTypeRoutes = require('./storeType/storeType.routes');
 router.use('/store-types', storeTypeRoutes);
 
-module.exports = router;
+// Admin Submodule: Hardware Hubs & Boxes Management (/api/admin/hardware)
+const adminHardwareRoutes = require('./hardware/adminHardware.routes');
+router.use('/hardware', adminHardwareRoutes);
 
+module.exports = router;

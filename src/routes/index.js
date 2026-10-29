@@ -68,6 +68,12 @@ router.use('/vendor-services', vendorServiceRoutes);
 const storeTypeRoutes = require('../modules/admin/storeType/storeType.routes');
 router.use('/store-types', storeTypeRoutes);
 
+
+// Hardware Module Routes (Hub + KitchenBox)
+const hubRoutes = require('../modules/hardware/hub/hub.routes');
+const kitchenBoxRoutes = require('../modules/hardware/kitchenBox/kitchenBox.routes');
+router.use('/hardware/hubs', hubRoutes);
+router.use('/hardware/boxes', kitchenBoxRoutes);
 // Admin Module Routes
 router.use('/admin', adminRoutes);
 
