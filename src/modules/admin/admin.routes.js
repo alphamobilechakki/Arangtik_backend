@@ -26,8 +26,13 @@ router.use('/services', categoryServiceRoutes);
 const storeTypeRoutes = require('./storeType/storeType.routes');
 router.use('/store-types', storeTypeRoutes);
 
-// Admin Submodule: Hardware Hubs & Boxes Management (/api/admin/hardware)
-const adminHardwareRoutes = require('./hardware/adminHardware.routes');
-router.use('/hardware', adminHardwareRoutes);
+// Admin Submodule: Hardware Hubs, Boxes & Captures Management
+const hubRoutes = require('./hardware/hub/hub.routes');
+const kitchenBoxRoutes = require('./hardware/kitechenBox/kitchenBox.routes');
+const kitchenBoxCaptureRoutes = require('./hardware/kitchenBoxCaptures/kitchenBoxCapture.routes');
+
+router.use('/hardware/hubs', hubRoutes);
+router.use('/hardware/boxes', kitchenBoxRoutes);
+router.use('/hardware/captures', kitchenBoxCaptureRoutes);
 
 module.exports = router;

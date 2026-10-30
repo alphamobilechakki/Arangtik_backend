@@ -409,3 +409,166 @@ Permanently deletes a KitchenBox record.
 
 **Hub status values:** `not configured` → `configured` → `active` → `deactivated`
 **Box status values:** `provisioned` → `activated` → `maintenance` → `deactivated`
+
+
+---
+
+### KitchenBox Captures APIs — `/api/hardware/captures`
+
+The **KitchenBox Capture** represents a physical IoT measurement snapshot (depth reading via ToF distance sensor, high-resolution container image, and dimensions) taken by or associated with a KitchenBox container and its parent Gateway Hub.
+
+> **Base path:** `/api/hardware/captures`  
+> **Auth:** `Authorization: Bearer <token>`
+
+---
+
+#### 17. Record KitchenBox Capture Snapshot
+**`POST /api/hardware/captures`** — _Protected_
+
+Records a new sensor capture snapshot into the database. When recorded, it automatically synchronizes and updates the parent `KitchenBox` record with the latest `tof` reading, `image`, and `dimensions`.
+
+**Request Body:**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kitchenBoxId` | string (ObjectId or MAC) | **Yes** | Container ID or MAC address (e.g. `6ae46078ba40a72fb41abf88` or `10:20:30:40:50:99`) |
+| `hubId` | string (ObjectId or MAC) | No | Gateway Hub ID or MAC address. If omitted, automatically resolves from the box's parent Hub. |
+| `image` | string | No | URL of the captured container/grain image |
+| `tof` | number | No | Time-of-Flight distance measurement in millimeters (e.g. `385`) |
+| `dimensions` | string | No | Container dimensions (e.g. `300x200x400`). Defaults to box's dimensions if omitted. |
+
+**Example Request:**
+```json
+{
+  "kitchenBoxId": "6ae46078ba40a72fb41abf88",
+  "hubId": "6ae46078ba40a72fb41abf80",
+  "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+  "tof": 385,
+  "dimensions": "300x200x400"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "KitchenBox capture saved successfully",
+  "data": {
+    "_id": "6ae47aa385d305a394464885",
+    "kitchenBoxId": {
+      "_id": "6ae46078ba40a72fb41abf88",
+      "name": "Chana Dal Container 2",
+      "mac_id": "10:20:30:40:50:99",
+      "item_name": "Chana Dal",
+      "dimensions": "300x200x400",
+      "status": "activated"
+    },
+    "hubId": {
+      "_id": "6ae46078ba40a72fb41abf80",
+      "name": "Jaipur North Godown Hub",
+      "mac_id": "3C:71:BF:4A:92:11",
+      "status": "active"
+    },
+    "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+    "tof": 385,
+    "dimensions": "300x200x400",
+    "createdAt": "2026-10-30T11:07:47.000Z",
+    "updatedAt": "2026-10-30T11:07:47.000Z"
+  }
+}
+```
+
+---
+
+#### 18. List All KitchenBox Captures
+**`GET /api/hardware/captures`** — _Protected_
+
+Retrieves a paginated list of all capture snapshots with optional filtering by container, gateway hub, or date range.
+
+**Query Parameters:**
+| Param | Type | Description |
+|---|---|---|
+| `kitchenBoxId` | string | Filter by specific KitchenBox ObjectId or MAC address |
+| `hubId` | string | Filter by specific Gateway Hub ObjectId or MAC address |
+| `startDate` | ISO Date string | Filter captures created on or after this timestamp |
+| `endDate` | ISO Date string | Filter captures created on or before this timestamp |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 20, max: 100) |
+| `sortBy` | string | Field to sort by (default: `createdAt`) |
+| `sortOrder` | string | `asc` or `desc` (default: `desc` — newest first) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox captures retrieved successfully",
+  "data": {
+    "captures": [
+      {
+        "_id": "6ae47aa385d305a394464885",
+        "kitchenBoxId": {
+          "_id": "6ae46078ba40a72fb41abf88",
+          "name": "Chana Dal Container 2",
+          "mac_id": "10:20:30:40:50:99",
+          "item_name": "Chana Dal",
+          "dimensions": "300x200x400",
+          "status": "activated"
+        },
+        "hubId": {
+          "_id": "6ae46078ba40a72fb41abf80",
+          "name": "Jaipur North Godown Hub",
+          "mac_id": "3C:71:BF:4A:92:11",
+          "status": "active"
+        },
+        "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+        "tof": 385,
+        "dimensions": "300x200x400",
+        "createdAt": "2026-10-30T11:07:47.000Z",
+        "updatedAt": "2026-10-30T11:07:47.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 19. Get Capture Details by ID
+**`GET /api/hardware/captures/:id`** — _Protected_
+
+Returns full details for a single capture record with populated box and hub references.
+
+---
+
+#### 20. Get Captures for a Specific KitchenBox (Time Series)
+**`GET /api/hardware/captures/box/:kitchenBoxId`** — _Protected_
+
+Returns the historical sensor timeline for a specific Kitchen container. Accepts either MongoDB ObjectId or Box MAC address.
+
+---
+
+#### 21. Get Latest Capture for a Specific KitchenBox
+**`GET /api/hardware/captures/box/:kitchenBoxId/latest`** — _Protected_
+
+Convenience endpoint to retrieve only the most recent capture reading for a box. Accepts either MongoDB ObjectId or Box MAC address.
+
+---
+
+#### 22. Get Captures for a Specific Gateway Hub
+**`GET /api/hardware/captures/hub/:hubId`** — _Protected_
+
+Retrieves all captures recorded under all boxes connected to a specific gateway Hub. Accepts either Hub ObjectId or Hub MAC address.
+
+---
+
+#### 23. Delete KitchenBox Capture
+**`DELETE /api/hardware/captures/:id`** — _Protected_
+
+Permanently deletes a capture record from the database.

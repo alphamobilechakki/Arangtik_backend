@@ -2979,7 +2979,57 @@ Returns aggregated statistics for all hubs and kitchen boxes in the system.
 
 ---
 
-### 2. Admin: List All Hubs
+### 2. Admin: Create Hub
+**`POST /api/admin/hardware/hubs`** — _Admin_
+
+Creates a new physical Hub Gateway in the system with full specifications.
+
+**Request Body:**
+```json
+{
+  "name": "Jaipur North Godown Hub",
+  "mac_id": "50:02:91:A1:B2:C3",
+  "userId": "918949056321",
+  "status": "configured",
+  "wifi": {
+    "ssid": "Jaipur_Godown_5G",
+    "password": "SuperSecretPassword123"
+  }
+}
+```
+* `userId` can be provided as a MongoDB ObjectId OR customer phone number.
+* `mac_id` is automatically validated for valid MAC format and uniqueness.
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Hub created successfully",
+  "data": {
+    "_id": "6ae46078ba40a72fb41abf80",
+    "name": "Jaipur North Godown Hub",
+    "mac_id": "50:02:91:A1:B2:C3",
+    "userId": {
+      "_id": "6ae31cca0c00fa1dfe7e3c99",
+      "name": "Monika",
+      "phone": "918949056321",
+      "role": "user",
+      "accountType": "INDIVIDUAL"
+    },
+    "wifi": {
+      "ssid": "Jaipur_Godown_5G"
+    },
+    "status": "configured",
+    "createdAt": "2026-10-30T09:16:40.500Z",
+    "updatedAt": "2026-10-30T09:16:40.500Z"
+  }
+}
+```
+
+---
+
+### 3. Admin: List All Hubs
 **`GET /api/admin/hardware/hubs`** — _Admin_
 
 List all registered hubs across all customers with populated owner info and paired box counts. Supports pagination, keyword search (name, MAC, SSID, user phone/name), and status filtering.
@@ -3075,23 +3125,29 @@ Returns single hub details, populated user profile, and an array of all paired `
 
 ---
 
-### 4. Admin: Update Hub Details
+### 5. Admin: Update Hub Details
 **`PATCH /api/admin/hardware/hubs/:id`** — _Admin_
+
+Updates Hub details including **`mac_id`** (with automatic cascading update to all paired KitchenBoxes), `name`, `userId`, `status`, and `wifi` configuration.
 
 **Request Body (optional fields):**
 ```json
 {
   "name": "Sharma Chakki - Main Hub Updated",
+  "mac_id": "3C:71:BF:4A:92:99",
+  "userId": "918949056321",
   "status": "active",
   "wifi": {
-    "ssid": "NewSSID_5G"
+    "ssid": "NewSSID_5G",
+    "password": "NewSecurePassword2026"
   }
 }
 ```
+> **Automatic Cascade:** When the Hub's `mac_id` is updated, the server automatically updates the `hub_mac_id` of all paired KitchenBoxes to ensure pairing continuity.
 
 ---
 
-### 5. Admin: Update Hub Status
+### 6. Admin: Update Hub Status
 **`PATCH /api/admin/hardware/hubs/:id/status`** — _Admin_
 
 **Request Body:**
@@ -3104,14 +3160,66 @@ Allowed values: `not configured`, `configured`, `active`, `deactivated`
 
 ---
 
-### 6. Admin: Delete Hub
+### 7. Admin: Delete Hub
 **`DELETE /api/admin/hardware/hubs/:id`** — _Admin_
 
 Permanently removes the hub document from the database.
 
 ---
 
-### 7. Admin: List All KitchenBoxes
+### 8. Admin: Create KitchenBox
+**`POST /api/admin/hardware/boxes`** — _Admin_
+
+Registers a new smart container with complete specifications and pairs it to an existing parent Hub.
+
+**Request Body:**
+```json
+{
+  "name": "Chana Dal Container 2",
+  "mac_id": "10:20:30:40:50:60",
+  "hub_mac_id": "3C:71:BF:4A:92:99",
+  "userId": "918949056321",
+  "item_name": "Split Chickpeas (Chana Dal)",
+  "dimensions": "1100x850x950",
+  "tof": 420,
+  "status": "activated"
+}
+```
+* `userId` is optional if the parent Hub already has an assigned owner.
+* `hub_mac_id` is verified against existing Hubs in the database.
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "KitchenBox created successfully",
+  "data": {
+    "_id": "6ae46078ba40a72fb41abf88",
+    "name": "Chana Dal Container 2",
+    "mac_id": "10:20:30:40:50:60",
+    "hub_mac_id": "3C:71:BF:4A:92:99",
+    "item_name": "Split Chickpeas (Chana Dal)",
+    "dimensions": "1100x850x950",
+    "tof": 420,
+    "status": "activated",
+    "userId": {
+      "_id": "6ae31cca0c00fa1dfe7e3c99",
+      "name": "Monika",
+      "phone": "918949056321"
+    },
+    "hub": {
+      "name": "Sharma Chakki - Main Hub Updated",
+      "mac_id": "3C:71:BF:4A:92:99",
+      "status": "active"
+    }
+  }
+}
+```
+
+---
+
+### 9. Admin: List All KitchenBoxes
 **`GET /api/admin/hardware/boxes`** — _Admin_
 
 List all KitchenBoxes across all customers with populated owner info and resolved parent Hub information. Supports search by box name, MAC address, item name, hub MAC, or user phone.
@@ -3170,20 +3278,24 @@ List all KitchenBoxes across all customers with populated owner info and resolve
 
 ---
 
-### 8. Admin: Get KitchenBox Details by ID
+### 10. Admin: Get KitchenBox Details by ID
 **`GET /api/admin/hardware/boxes/:id`** — _Admin_
 
 Returns single box details, populated user profile, and parent hub connection info.
 
 ---
 
-### 9. Admin: Update KitchenBox Details
+### 11. Admin: Update KitchenBox Details
 **`PATCH /api/admin/hardware/boxes/:id`** — _Admin_
+
+Updates KitchenBox details including **`mac_id`** (with uniqueness check), **`hub_mac_id`** (to re-pair the box to another Hub), `userId`, `name`, `item_name`, `dimensions`, `tof`, and `status`.
 
 **Request Body (optional fields):**
 ```json
 {
   "name": "Gehun Container 1",
+  "mac_id": "24:0A:C4:11:00:99",
+  "hub_mac_id": "3C:71:BF:4A:92:99",
   "item_name": "Premium Wheat (Sharbati)",
   "dimensions": "1200x800x1000",
   "tof": 250,
@@ -3193,7 +3305,7 @@ Returns single box details, populated user profile, and parent hub connection in
 
 ---
 
-### 10. Admin: Update KitchenBox Status
+### 12. Admin: Update KitchenBox Status
 **`PATCH /api/admin/hardware/boxes/:id/status`** — _Admin_
 
 **Request Body:**
@@ -3206,7 +3318,316 @@ Allowed values: `provisioned`, `activated`, `maintenance`, `deactivated`
 
 ---
 
-### 11. Admin: Delete KitchenBox
+### 13. Admin: Delete KitchenBox
 **`DELETE /api/admin/hardware/boxes/:id`** — _Admin_
 
 Permanently deletes the KitchenBox record from the database.
+
+
+---
+
+# KitchenBox Captures APIs (`/api/hardware/captures`)
+
+The **KitchenBox Capture** represents a physical IoT measurement snapshot (depth reading via ToF distance sensor, high-resolution container image, and dimensions) taken by or associated with a KitchenBox container and its parent Gateway Hub.
+
+> **Base path:** `/api/hardware/captures`  
+> **Auth:** `Authorization: Bearer <token>`
+
+---
+
+### 1. Record KitchenBox Capture Snapshot
+**`POST /api/hardware/captures`** — _Protected_
+
+Records a new sensor capture snapshot into the database. When recorded, it automatically synchronizes and updates the parent `KitchenBox` record with the latest `tof` reading, `image`, and `dimensions`.
+
+**Request Body:**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kitchenBoxId` | string (ObjectId or MAC) | **Yes** | Container ID or MAC address (e.g. `6ae46078ba40a72fb41abf88` or `10:20:30:40:50:99`) |
+| `hubId` | string (ObjectId or MAC) | No | Gateway Hub ID or MAC address. If omitted, automatically resolves from the box's parent Hub. |
+| `image` | string | No | URL of the captured container/grain image |
+| `tof` | number | No | Time-of-Flight distance measurement in millimeters (e.g. `385`) |
+| `dimensions` | string | No | Container dimensions (e.g. `300x200x400`). Defaults to box's dimensions if omitted. |
+
+**Example Request:**
+```json
+{
+  "kitchenBoxId": "6ae46078ba40a72fb41abf88",
+  "hubId": "6ae46078ba40a72fb41abf80",
+  "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+  "tof": 385,
+  "dimensions": "300x200x400"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "KitchenBox capture saved successfully",
+  "data": {
+    "_id": "6ae47aa385d305a394464885",
+    "kitchenBoxId": {
+      "_id": "6ae46078ba40a72fb41abf88",
+      "name": "Chana Dal Container 2",
+      "mac_id": "10:20:30:40:50:99",
+      "item_name": "Chana Dal",
+      "dimensions": "300x200x400",
+      "status": "activated"
+    },
+    "hubId": {
+      "_id": "6ae46078ba40a72fb41abf80",
+      "name": "Jaipur North Godown Hub",
+      "mac_id": "3C:71:BF:4A:92:11",
+      "status": "active"
+    },
+    "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+    "tof": 385,
+    "dimensions": "300x200x400",
+    "createdAt": "2026-10-30T11:07:47.000Z",
+    "updatedAt": "2026-10-30T11:07:47.000Z"
+  }
+}
+```
+
+---
+
+### 2. List All KitchenBox Captures
+**`GET /api/hardware/captures`** — _Protected_
+
+Retrieves a paginated list of all capture snapshots with optional filtering by container, gateway hub, or date range.
+
+**Query Parameters:**
+| Param | Type | Description |
+|---|---|---|
+| `kitchenBoxId` | string | Filter by specific KitchenBox ObjectId or MAC address |
+| `hubId` | string | Filter by specific Gateway Hub ObjectId or MAC address |
+| `startDate` | ISO Date string | Filter captures created on or after this timestamp |
+| `endDate` | ISO Date string | Filter captures created on or before this timestamp |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 20, max: 100) |
+| `sortBy` | string | Field to sort by (default: `createdAt`) |
+| `sortOrder` | string | `asc` or `desc` (default: `desc` — newest first) |
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox captures retrieved successfully",
+  "data": {
+    "captures": [
+      {
+        "_id": "6ae47aa385d305a394464885",
+        "kitchenBoxId": {
+          "_id": "6ae46078ba40a72fb41abf88",
+          "name": "Chana Dal Container 2",
+          "mac_id": "10:20:30:40:50:99",
+          "item_name": "Chana Dal",
+          "dimensions": "300x200x400",
+          "status": "activated"
+        },
+        "hubId": {
+          "_id": "6ae46078ba40a72fb41abf80",
+          "name": "Jaipur North Godown Hub",
+          "mac_id": "3C:71:BF:4A:92:11",
+          "status": "active"
+        },
+        "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+        "tof": 385,
+        "dimensions": "300x200x400",
+        "createdAt": "2026-10-30T11:07:47.000Z",
+        "updatedAt": "2026-10-30T11:07:47.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 3. Get Capture Details by ID
+**`GET /api/hardware/captures/:id`** — _Protected_
+
+Returns full details for a single capture record with populated box and hub references.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox capture retrieved successfully",
+  "data": {
+    "_id": "6ae47aa385d305a394464885",
+    "kitchenBoxId": {
+      "_id": "6ae46078ba40a72fb41abf88",
+      "name": "Chana Dal Container 2",
+      "mac_id": "10:20:30:40:50:99",
+      "item_name": "Chana Dal",
+      "dimensions": "300x200x400",
+      "status": "activated"
+    },
+    "hubId": {
+      "_id": "6ae46078ba40a72fb41abf80",
+      "name": "Jaipur North Godown Hub",
+      "mac_id": "3C:71:BF:4A:92:11",
+      "status": "active"
+    },
+    "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+    "tof": 385,
+    "dimensions": "300x200x400",
+    "createdAt": "2026-10-30T11:07:47.000Z",
+    "updatedAt": "2026-10-30T11:07:47.000Z"
+  }
+}
+```
+
+---
+
+### 4. Get Captures for a Specific KitchenBox (Time Series)
+**`GET /api/hardware/captures/box/:kitchenBoxId`** — _Protected_
+
+Returns the historical sensor timeline for a specific Kitchen container. Accepts either MongoDB ObjectId or Box MAC address.
+
+**Path Parameter:**
+- `kitchenBoxId`: Box ObjectId or MAC address (e.g. `6ae46078ba40a72fb41abf88` or `10:20:30:40:50:99`)
+
+**Query Parameters:**
+`startDate`, `endDate`, `page`, `limit`
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox captures retrieved successfully",
+  "data": {
+    "captures": [
+      {
+        "_id": "6ae47aa385d305a394464885",
+        "kitchenBoxId": {
+          "_id": "6ae46078ba40a72fb41abf88",
+          "name": "Chana Dal Container 2",
+          "mac_id": "10:20:30:40:50:99",
+          "item_name": "Chana Dal"
+        },
+        "hubId": {
+          "_id": "6ae46078ba40a72fb41abf80",
+          "name": "Jaipur North Godown Hub",
+          "mac_id": "3C:71:BF:4A:92:11"
+        },
+        "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+        "tof": 385,
+        "dimensions": "300x200x400",
+        "createdAt": "2026-10-30T11:07:47.000Z",
+        "updatedAt": "2026-10-30T11:07:47.000Z"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+---
+
+### 5. Get Latest Capture for a Specific KitchenBox
+**`GET /api/hardware/captures/box/:kitchenBoxId/latest`** — _Protected_
+
+Convenience endpoint to retrieve only the most recent capture reading for a box. Accepts either MongoDB ObjectId or Box MAC address.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Latest KitchenBox capture retrieved successfully",
+  "data": {
+    "_id": "6ae47aa385d305a394464885",
+    "kitchenBoxId": {
+      "_id": "6ae46078ba40a72fb41abf88",
+      "name": "Chana Dal Container 2",
+      "mac_id": "10:20:30:40:50:99",
+      "item_name": "Chana Dal"
+    },
+    "hubId": {
+      "_id": "6ae46078ba40a72fb41abf80",
+      "name": "Jaipur North Godown Hub",
+      "mac_id": "3C:71:BF:4A:92:11"
+    },
+    "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+    "tof": 385,
+    "dimensions": "300x200x400",
+    "createdAt": "2026-10-30T11:07:47.000Z",
+    "updatedAt": "2026-10-30T11:07:47.000Z"
+  }
+}
+```
+
+---
+
+### 6. Get Captures for a Specific Gateway Hub
+**`GET /api/hardware/captures/hub/:hubId`** — _Protected_
+
+Retrieves all captures recorded under all boxes connected to a specific gateway Hub. Accepts either Hub ObjectId or Hub MAC address.
+
+**Path Parameter:**
+- `hubId`: Hub ObjectId or MAC address (e.g. `6ae46078ba40a72fb41abf80` or `3C:71:BF:4A:92:11`)
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub captures retrieved successfully",
+  "data": {
+    "captures": [
+      {
+        "_id": "6ae47aa385d305a394464885",
+        "kitchenBoxId": {
+          "_id": "6ae46078ba40a72fb41abf88",
+          "name": "Chana Dal Container 2",
+          "mac_id": "10:20:30:40:50:99"
+        },
+        "hubId": {
+          "_id": "6ae46078ba40a72fb41abf80",
+          "name": "Jaipur North Godown Hub",
+          "mac_id": "3C:71:BF:4A:92:11"
+        },
+        "image": "https://cdn.arangtik.com/captures/cam01_sample_depth.jpg",
+        "tof": 385,
+        "dimensions": "300x200x400",
+        "createdAt": "2026-10-30T11:07:47.000Z",
+        "updatedAt": "2026-10-30T11:07:47.000Z"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+---
+
+### 7. Delete KitchenBox Capture
+**`DELETE /api/hardware/captures/:id`** — _Protected_
+
+Permanently deletes a capture record from the database.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox capture deleted successfully",
+  "data": {
+    "id": "6ae47aa385d305a394464885",
+    "message": "KitchenBox capture deleted successfully"
+  }
+}
+```

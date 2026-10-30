@@ -9,6 +9,7 @@ const uploadRoutes = require('../modules/upload/upload.routes');
 const integrationRoutes = require('../modules/integration/user/user.routes');
 const hubIntegrationRoutes = require('../modules/integration/hub/hub.routes');
 const kitchenBoxIntegrationRoutes = require('../modules/integration/kitchenBox/kitchenBox.routes');
+const kitchenBoxCaptureIntegrationRoutes = require('../modules/integration/kitchenBoxCaptures/kitchenBoxCapture.routes');
 const outfitRoutes = require('../modules/outfit/outfit.routes');
 const orderRoutes = require('../modules/order/order.routes');
 const laundryRoutes = require('../modules/order/laundry/laundry.routes');
@@ -41,7 +42,7 @@ router.use('/face-recognition', faceRecognitionRoutes);
 // Integration & External Admin Sync Routes (Protected by x-api-key)
 router.use('/integration/hubs', hubIntegrationRoutes);
 router.use('/integration/boxes', kitchenBoxIntegrationRoutes);
-router.use('/integration/kitchen-boxes', kitchenBoxIntegrationRoutes);
+router.use('/integration/captures', kitchenBoxCaptureIntegrationRoutes);
 router.use('/integration', integrationRoutes);
 
 // Smart Outfit Suggestion & Styling Routes
@@ -79,6 +80,8 @@ const hubRoutes = require('../modules/hardware/hub/hub.routes');
 const kitchenBoxRoutes = require('../modules/hardware/kitchenBox/kitchenBox.routes');
 router.use('/hardware/hubs', hubRoutes);
 router.use('/hardware/boxes', kitchenBoxRoutes);
+const kitchenBoxCaptureRoutes = require('../modules/hardware/kitchenBoxCaptures/kitchenBoxCapture.routes');
+router.use('/hardware/captures', kitchenBoxCaptureRoutes);
 // Admin Module Routes
 router.use('/admin', adminRoutes);
 

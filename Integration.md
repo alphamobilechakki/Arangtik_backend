@@ -613,7 +613,77 @@ Content-Type: application/json
 
 ---
 
-## 6. Summary of Integration Endpoints
+## 6. KitchenBox Captures Integration API
+
+Endpoint for synchronizing IoT sensor measurement snapshots (depth reading via ToF distance sensor, container camera image, and dimensions).
+
+---
+
+### 6.1 Record a New Sensor Snapshot
+**`POST /api/integration/captures`**
+
+Records a new measurement snapshot for a kitchen box and gateway hub. When recorded, it automatically updates and synchronizes the parent `KitchenBox` record's latest `tof` reading, `image`, and `dimensions`.
+
+**Headers:**
+```http
+x-api-key: <YOUR_INTEGRATION_API_KEY>
+Content-Type: application/json
+```
+
+**Request Body:**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kitchenBoxId` | string | **Yes** | KitchenBox MongoDB `_id` or MAC address (e.g. `6ae46078ba40a72fb41abf88` or `10:20:30:40:50:99`) |
+| `hubId` | string | No | Gateway Hub MongoDB `_id` or MAC address. If omitted, automatically resolves from the box's parent Hub |
+| `image` | string | No | URL of the container / commodity photo |
+| `tof` | number | No | ToF depth distance reading in millimeters (e.g. `310`) |
+| `dimensions` | string | No | Container dimensions (e.g. `300x200x400`). Defaults to box's dimensions if omitted |
+
+**Example Request:**
+```json
+{
+  "kitchenBoxId": "6ae46078ba40a72fb41abf88",
+  "hubId": "6ae46078ba40a72fb41abf80",
+  "image": "https://cdn.arangtik.com/captures/grain_depth_01.jpg",
+  "tof": 310,
+  "dimensions": "300x200x400"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "_id": "6ae47f0842fe046aabb46dca",
+    "kitchenBoxId": {
+      "_id": "6ae46078ba40a72fb41abf88",
+      "name": "Chana Dal Container 2",
+      "mac_id": "10:20:30:40:50:99",
+      "item_name": "Roasted Chana Dal",
+      "dimensions": "300x200x400",
+      "status": "activated"
+    },
+    "hubId": {
+      "_id": "6ae46078ba40a72fb41abf80",
+      "name": "Jaipur North Godown Hub",
+      "mac_id": "3C:71:BF:4A:92:11",
+      "status": "active"
+    },
+    "image": "https://cdn.arangtik.com/captures/grain_depth_01.jpg",
+    "tof": 310,
+    "dimensions": "300x200x400",
+    "createdAt": "2026-10-30T11:27:04.583Z",
+    "updatedAt": "2026-10-30T11:27:04.583Z"
+  },
+  "message": "KitchenBox sensor capture snapshot recorded successfully",
+  "success": true
+}
+```
+
+---
+
+## 7. Summary of Integration Endpoints
 
 | Resource | Method | Endpoint | Description |
 |---|---|---|---|
@@ -625,4 +695,5 @@ Content-Type: application/json
 | **KitchenBox** | `GET` | `/api/integration/boxes` | List all kitchen containers with ToF readings & parent hub |
 | **KitchenBox** | `GET` | `/api/integration/boxes/:id` | Single KitchenBox details by MongoDB `_id` or MAC |
 | **KitchenBox** | `GET` | `/api/integration/boxes/hub/:hubId` | All KitchenBoxes paired to a specific Hub (`_id` or MAC) |
+| **Capture** | `POST` | `/api/integration/captures` | Record new sensor snapshot (`tof`, `image`, `dimensions`) & auto-sync box |
 
