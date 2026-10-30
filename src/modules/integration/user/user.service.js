@@ -1,5 +1,5 @@
-const User = require('../auth/user.model');
-const WardrobeItem = require('../wardrobe/wardrobeItem.model');
+const User = require('../../auth/user.model');
+const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
 
 // Fields safe to export to authorized partner/admin (excludes face embeddings and raw secrets)
 const SAFE_USER_FIELDS =

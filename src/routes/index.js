@@ -6,7 +6,9 @@ const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
 const faceRecognitionRoutes = require('../modules/faceRecognition/faceRecognition.routes');
 const clothAnalysisRoutes = require('../modules/clothAnalysis/clothAnalysis.routes');
 const uploadRoutes = require('../modules/upload/upload.routes');
-const integrationRoutes = require('../modules/integration/integration.routes');
+const integrationRoutes = require('../modules/integration/user/user.routes');
+const hubIntegrationRoutes = require('../modules/integration/hub/hub.routes');
+const kitchenBoxIntegrationRoutes = require('../modules/integration/kitchenBox/kitchenBox.routes');
 const outfitRoutes = require('../modules/outfit/outfit.routes');
 const orderRoutes = require('../modules/order/order.routes');
 const laundryRoutes = require('../modules/order/laundry/laundry.routes');
@@ -37,6 +39,9 @@ router.use('/wardrobe', wardrobeRoutes);
 router.use('/face-recognition', faceRecognitionRoutes);
 
 // Integration & External Admin Sync Routes (Protected by x-api-key)
+router.use('/integration/hubs', hubIntegrationRoutes);
+router.use('/integration/boxes', kitchenBoxIntegrationRoutes);
+router.use('/integration/kitchen-boxes', kitchenBoxIntegrationRoutes);
 router.use('/integration', integrationRoutes);
 
 // Smart Outfit Suggestion & Styling Routes

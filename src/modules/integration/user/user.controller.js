@@ -1,7 +1,7 @@
-const asyncHandler = require('../../utils/asyncHandler');
-const ApiResponse = require('../../utils/apiResponse');
-const ApiError = require('../../utils/apiError');
-const integrationService = require('./integration.service');
+const asyncHandler = require('../../../utils/asyncHandler');
+const ApiResponse = require('../../../utils/apiResponse');
+const ApiError = require('../../../utils/apiError');
+const userService = require('./user.service');
 
 /**
  * Controller: Get list of all users
@@ -10,7 +10,7 @@ const integrationService = require('./integration.service');
 const getUsers = asyncHandler(async (req, res) => {
   const { page, limit, search, status, gender, accountType, sortBy, order } = req.query;
 
-  const result = await integrationService.getAllUsers({
+  const result = await userService.getAllUsers({
     page,
     limit,
     search,
@@ -37,7 +37,7 @@ const getUserDetail = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'User ID or Phone number is required');
   }
 
-  const user = await integrationService.getUserByIdOrPhone(identifier);
+  const user = await userService.getUserByIdOrPhone(identifier);
 
   if (!user) {
     throw new ApiError(404, 'User not found with the given ID or Phone');
@@ -53,7 +53,7 @@ const getUserDetail = asyncHandler(async (req, res) => {
  * GET /api/v1/integration/stats
  */
 const getStats = asyncHandler(async (req, res) => {
-  const stats = await integrationService.getUsersStats();
+  const stats = await userService.getUsersStats();
 
   return res
     .status(200)
