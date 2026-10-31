@@ -62,77 +62,7 @@ class KitchenBoxService {
     };
   }
 
-  // ─── Get by ID ─────────────────────────────────────────────────────────────
 
-  async getKitchenBoxById(id) {
-    const box = await KitchenBox.findById(id).lean();
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-    return box;
-  }
-
-  // ─── Get by MAC ID ─────────────────────────────────────────────────────────
-
-  async getKitchenBoxByMac(mac_id) {
-    const box = await KitchenBox.findOne({ mac_id: mac_id.trim().toUpperCase() }).lean();
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-    return box;
-  }
-
-  // ─── Update general info ───────────────────────────────────────────────────
-
-  async updateKitchenBox(id, data) {
-    const box = await KitchenBox.findById(id);
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-
-    if (data.name !== undefined) {
-      if (!String(data.name).trim()) throw new ApiError(400, 'Name cannot be empty');
-      box.name = String(data.name).trim();
-    }
-    if (data.item_name !== undefined) box.item_name = data.item_name ? String(data.item_name).trim() : null;
-    if (data.dimensions !== undefined) box.dimensions = data.dimensions ? String(data.dimensions).trim() : null;
-    if (data.image !== undefined) box.image = data.image || null;
-
-    await box.save();
-    return box;
-  }
-
-  // ─── Update ToF reading (called by hub device) ─────────────────────────────
-
-  async updateTof(id, tof) {
-    const value = parseFloat(tof);
-    if (isNaN(value)) throw new ApiError(400, 'tof must be a valid number (distance in mm)');
-
-    const box = await KitchenBox.findById(id);
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-
-    box.tof = value;
-    await box.save();
-    return box;
-  }
-
-  // ─── Update status ─────────────────────────────────────────────────────────
-
-  async updateStatus(id, status) {
-    const allowed = ['provisioned', 'activated', 'maintenance', 'deactivated'];
-    if (!allowed.includes(status)) {
-      throw new ApiError(400, `Status must be one of: ${allowed.join(', ')}`);
-    }
-
-    const box = await KitchenBox.findById(id);
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-
-    box.status = status;
-    await box.save();
-    return box;
-  }
-
-  // ─── Delete ────────────────────────────────────────────────────────────────
-
-  async deleteKitchenBox(id) {
-    const box = await KitchenBox.findByIdAndDelete(id);
-    if (!box) throw new ApiError(404, 'KitchenBox not found');
-    return { message: 'KitchenBox deleted successfully' };
-  }
 }
 
 module.exports = new KitchenBoxService();

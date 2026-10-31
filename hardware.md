@@ -572,3 +572,212 @@ Retrieves all captures recorded under all boxes connected to a specific gateway 
 **`DELETE /api/hardware/captures/:id`** — _Protected_
 
 Permanently deletes a capture record from the database.
+
+---
+
+### Admin Hub QR Code APIs — `/api/admin/hardware/hubs`
+
+#### 24. Generate QR Code by MAC Address
+**`GET /api/admin/hardware/hubs/qr-code?mac_id=AA:BB:CC:DD:EE:FF`** — _Protected (Admin)_
+
+Generates a high-contrast QR code image referencing the Hub's MAC ID. Automatically saves static PNG to `/uploads/qr_<MAC>.png` and returns both base64 Data URI and accessible file URL.
+
+**Query Parameters:**
+- `mac_id` (string, required): Hardware MAC address (e.g. `94:A9:90:D3:0A:08`).
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "QR Code generated successfully",
+  "data": {
+    "mac_id": "94:A9:90:D3:0A:08",
+    "qrCode": "data:image/png;base64,iVBORw0KGgo...",
+    "qrCodeUrl": "http://localhost:8083/uploads/qr_94A990D30A08.png"
+  }
+}
+```
+
+---
+
+#### 25. Get QR Code for a Hub by ID
+**`GET /api/admin/hardware/hubs/:id/qr-code`** — _Protected (Admin)_
+
+Retrieves or auto-generates the QR code image for a specific registered Hub device.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub QR Code retrieved successfully",
+  "data": {
+    "hubId": "6ae32a10cad5521f756a33e2",
+    "name": "Jaipur North Godown Hub",
+    "mac_id": "94:A9:90:D3:0A:08",
+    "status": "active",
+    "qrCode": "data:image/png;base64,iVBORw0KGgo...",
+    "qrCodeUrl": "http://localhost:8083/uploads/qr_94A990D30A08.png"
+  }
+}
+```
+
+---
+
+#### 26. Bulk Create Hubs with MAC IDs
+**`POST /api/admin/hardware/hubs/bulk`** (or `/multiple`) — _Protected (Admin)_
+
+Allows administrators to batch create multiple Hub devices using just a list of MAC IDs (or multiline raw string). Validates format, skips duplicates, auto-generates QR codes, and returns a detailed batch summary.
+
+**Request Body (Format A - Array of MACs):**
+```json
+{
+  "mac_ids": [
+    "AA:BB:CC:DD:EE:01",
+    "AA:BB:CC:DD:EE:02",
+    "AA:BB:CC:DD:EE:03"
+  ],
+  "namePrefix": "Godown Hub"
+}
+```
+
+**Request Body (Format B - Multiline String from Barcode Scanners / Sheets):**
+```json
+{
+  "mac_ids": "AA:BB:CC:DD:EE:01\nAA:BB:CC:DD:EE:02\nAA:BB:CC:DD:EE:03"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Batch hub creation completed: 2 created, 1 skipped, 0 failed",
+  "data": {
+    "totalRequested": 3,
+    "totalCreated": 2,
+    "totalSkipped": 1,
+    "totalFailed": 0,
+    "created": [
+      {
+        "_id": "6ae5b6c7e80dbe25d75262bd",
+        "name": "Godown Hub AA:BB:CC:DD:EE:01",
+        "mac_id": "AA:BB:CC:DD:EE:01",
+        "status": "not configured",
+        "qr_code": "http://localhost:8083/uploads/qr_AABBCCDDEE01.png",
+        "createdAt": "2026-10-31T09:37:11.058Z"
+      }
+    ],
+    "skipped": [
+      {
+        "mac_id": "AA:BB:CC:DD:EE:03",
+        "reason": "Hub with this MAC ID already registered in database"
+      }
+    ],
+    "failed": []
+  }
+}
+```
+
+
+---
+
+#### 27. Generate KitchenBox QR Code by MAC Address
+**`GET /api/admin/hardware/boxes/qr-code?mac_id=AA:BB:CC:DD:EE:FF`** (or `/api/admin/hardware/kitchenBox/qr-code`) — _Protected (Admin)_
+
+Generates a high-contrast QR code image referencing a KitchenBox's MAC ID. Automatically saves static PNG to `/uploads/qr_box_<MAC>.png` and returns both base64 Data URI and accessible file URL.
+
+**Query Parameters:**
+- `mac_id` (string, required): Hardware MAC address (e.g. `24:0A:C4:11:00:55`).
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox QR Code generated successfully",
+  "data": {
+    "mac_id": "24:0A:C4:11:00:55",
+    "qrCode": "data:image/png;base64,iVBORw0KGgo...",
+    "qrCodeUrl": "http://localhost:8083/uploads/qr_box_240AC4110055.png"
+  }
+}
+```
+
+---
+
+#### 28. Get QR Code for a KitchenBox by ID
+**`GET /api/admin/hardware/boxes/:id/qr-code`** (or `/api/admin/hardware/kitchenBox/:id/qr-code`) — _Protected (Admin)_
+
+Retrieves or auto-generates the QR code image for a specific registered KitchenBox device.
+
+**Response `200 OK`:**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox QR Code retrieved successfully",
+  "data": {
+    "boxId": "6ae32a10cad5521f756a33e2",
+    "name": "Box 24:0A:C4:11:00:55",
+    "mac_id": "24:0A:C4:11:00:55",
+    "status": "provisioned",
+    "qrCode": "data:image/png;base64,iVBORw0KGgo...",
+    "qrCodeUrl": "http://localhost:8083/uploads/qr_box_240AC4110055.png"
+  }
+}
+```
+
+---
+
+#### 29. Bulk Create KitchenBoxes with MAC IDs (Only MAC ID)
+**`POST /api/admin/hardware/boxes/bulk`** (or `/multiple`, or `/api/admin/hardware/kitchenBox/bulk`) — _Protected (Admin)_
+
+Allows administrators to batch provision multiple KitchenBox devices using just their MAC addresses. Validates MAC format, skips duplicates, auto-names each container (`Box <MAC_ID>`), sets status to `'provisioned'`, auto-generates QR codes, and returns comprehensive batch statistics.
+
+**Request Body (Format A - Array of MACs):**
+```json
+{
+  "mac_ids": [
+    "EE:11:22:33:44:01",
+    "EE:11:22:33:44:02",
+    "EE:11:22:33:44:03"
+  ]
+}
+```
+
+**Request Body (Format B - Multiline String from Textarea):**
+```json
+{
+  "mac_ids": "EE:11:22:33:44:01\nEE:11:22:33:44:02\nEE:11:22:33:44:03"
+}
+```
+
+**Response `201 Created`:**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Batch kitchen box creation completed: 3 created, 0 skipped, 0 failed",
+  "data": {
+    "totalProcessed": 3,
+    "totalCreated": 3,
+    "totalSkipped": 0,
+    "totalFailed": 0,
+    "created": [
+      {
+        "_id": "6ae5b6c7e80dbe25d75262bd",
+        "name": "Box EE:11:22:33:44:01",
+        "mac_id": "EE:11:22:33:44:01",
+        "status": "provisioned",
+        "qr_code": "http://localhost:8083/uploads/qr_box_EE1122334401.png",
+        "createdAt": "2026-10-31T11:20:00.000Z"
+      }
+    ],
+    "skipped": [],
+    "failed": []
+  }
+}
+```

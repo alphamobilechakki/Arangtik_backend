@@ -4,7 +4,6 @@ const kitchenBoxSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'KitchenBox name is required'],
       trim: true,
       maxlength: [100, 'Name cannot exceed 100 characters'],
     },
@@ -21,19 +20,20 @@ const kitchenBoxSchema = new mongoose.Schema(
       ],
     },
 
-    // Parent hub this box is paired to
+    // Parent hub this box is paired to (optional until paired to a gateway)
     hub_mac_id: {
       type: String,
-      required: [true, 'hub_mac_id is required'],
       trim: true,
       uppercase: true,
+      default: null,
       index: true,
     },
 
+    // Assigned owner/customer (optional until assigned)
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'userId is required'],
+      default: null,
       index: true,
     },
 
@@ -61,6 +61,10 @@ const kitchenBoxSchema = new mongoose.Schema(
     image: {
       type: String,
       trim: true,
+      default: null,
+    },
+    qr_code: {
+      type: String,
       default: null,
     },
 

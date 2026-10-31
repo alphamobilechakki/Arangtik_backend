@@ -4,7 +4,6 @@ const hubSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Hub name is required'],
       trim: true,
       maxlength: [100, 'Hub name cannot exceed 100 characters'],
     },
@@ -45,9 +44,14 @@ const hubSchema = new mongoose.Schema(
     // not configured → configured → active → deactivated
     status: {
       type: String,
-      enum: ['not configured', 'configured', 'active', 'deactivated'],
+      enum: ['not configured', 'configured', 'activated', 'deactivated'],
       default: 'not configured',
       index: true,
+    },
+
+    qr_code: {
+      type: String,
+      default: null,
     },
   },
   {
