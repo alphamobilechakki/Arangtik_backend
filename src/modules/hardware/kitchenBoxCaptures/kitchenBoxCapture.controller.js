@@ -1,11 +1,16 @@
 const asyncHandler = require('../../../utils/asyncHandler');
 const ApiResponse = require('../../../utils/apiResponse');
 const kitchenBoxCaptureService = require('./kitchenBoxCapture.service');
+const { saveBase64Image } = require('../../../middlewares/upload.middleware');
 
 class KitchenBoxCaptureController {
   // POST /hardware/captures
   create = asyncHandler(async (req, res) => {
-    const capture = await kitchenBoxCaptureService.createCapture(req.body);
+    let payload = { ...req.body };
+    if (payload.image && typeof payload.image === 'string') {
+      payload.image = await saveBase64Image(payload.image, req);
+    }
+    const capture = await kitchenBoxCaptureService.createCapture(payload);
     return ApiResponse.created(res, capture, 'KitchenBox capture saved successfully');
   });
 

@@ -3,6 +3,7 @@ const KitchenBoxCapture = require('./kitchenBoxCapture.model');
 const KitchenBox = require('../kitchenBox/kitchenBox.model');
 const Hub = require('../hub/hub.model');
 const ApiError = require('../../../utils/apiError');
+const { saveBase64Image } = require('../../../middlewares/upload.middleware');
 
 class KitchenBoxCaptureService {
   /**
@@ -75,21 +76,33 @@ class KitchenBoxCaptureService {
       }
     }
 
-    // 4. Create Capture
+    // 4. Save and resolve image URL (convert base64 if needed)
+    let finalImageUrl = image ? String(image).trim() : null;
+    if (
+      finalImageUrl &&
+      (finalImageUrl.startsWith('data:image') ||
+        finalImageUrl.startsWith('/9j/') ||
+        finalImageUrl.startsWith('iVBORw') ||
+        (finalImageUrl.length > 100 && !finalImageUrl.startsWith('http') && !finalImageUrl.startsWith('/')))
+    ) {
+      finalImageUrl = await saveBase64Image(finalImageUrl);
+    }
+
+    // 5. Create Capture
     const capture = new KitchenBoxCapture({
       kitchenBoxId: box._id,
       hubId: resolvedHub._id,
-      image: image ? String(image).trim() : null,
+      image: finalImageUrl,
       tof: parsedTof,
       dimensions: dimensions ? String(dimensions).trim() : box.dimensions || null,
     });
 
     await capture.save();
 
-    // 5. Update latest readings on the KitchenBox container
+    // 6. Update latest readings on the KitchenBox container
     const boxUpdates = {};
     if (parsedTof !== null) boxUpdates.tof = parsedTof;
-    if (image) boxUpdates.image = String(image).trim();
+    if (finalImageUrl) boxUpdates.image = finalImageUrl;
     if (dimensions) boxUpdates.dimensions = String(dimensions).trim();
 
     if (Object.keys(boxUpdates).length > 0) {

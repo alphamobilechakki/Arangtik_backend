@@ -7,8 +7,7 @@ const adminVendorRoutes = require('./vendor/adminVendor.routes');
 // Admin Submodule: Authentication (/api/admin/auth/login, /api/admin/auth/me)
 router.use('/auth', adminAuthRoutes);
 
-// Admin Submodule: Categories Management (/api/admin/categories & /api/admin/vendor-categories)
-router.use('/vendor-categories', categoryRoutes);
+// Admin Submodule: Categories Management (/api/admin/categories)
 router.use('/categories', categoryRoutes);
 
 // Admin Submodule: Vendors Hub Management (/api/admin/vendors)

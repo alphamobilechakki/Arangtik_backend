@@ -113,27 +113,76 @@ const getImageUrl = (filename, req = null) => {
  */
 const saveBase64Image = async (base64Str, req = null) => {
   if (!base64Str || typeof base64Str !== 'string') return base64Str;
-  if (!base64Str.startsWith('data:image')) return base64Str;
+
+  const trimmed = base64Str.trim();
+
+  // If already an accessible URL or relative static path, return untouched
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('/api/uploads/')
+  ) {
+    return trimmed;
+  }
+
+  let ext = 'jpg';
+  let base64Data = null;
+
+  // 1. Data URI match (data:image/jpeg;base64,...) with /s flag for multi-line support
+  const dataUriMatch = trimmed.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/s);
+  if (dataUriMatch) {
+    ext = dataUriMatch[1].toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
+    if (ext === 'svg+xml') ext = 'svg';
+    base64Data = dataUriMatch[2].replace(/\s+/g, '');
+  } else if (trimmed.startsWith('/9j/')) {
+    // Raw JPEG base64 (FF D8 FF magic bytes)
+    ext = 'jpg';
+    base64Data = trimmed.replace(/\s+/g, '');
+  } else if (trimmed.startsWith('iVBORw')) {
+    // Raw PNG base64 (89 50 4E 47 magic bytes)
+    ext = 'png';
+    base64Data = trimmed.replace(/\s+/g, '');
+  } else if (trimmed.startsWith('R0lGOD')) {
+    // Raw GIF base64
+    ext = 'gif';
+    base64Data = trimmed.replace(/\s+/g, '');
+  } else if (trimmed.startsWith('UklGR')) {
+    // Raw WebP base64
+    ext = 'webp';
+    base64Data = trimmed.replace(/\s+/g, '');
+  } else if (trimmed.length > 50 && /^[A-Za-z0-9+/=\r\n]+$/.test(trimmed)) {
+    // General raw base64 buffer string
+    ext = 'jpg';
+    base64Data = trimmed.replace(/\s+/g, '');
+  }
+
+  if (!base64Data) {
+    return base64Str;
+  }
 
   try {
-    const matches = base64Str.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
+    const buffer = Buffer.from(base64Data, 'base64');
+    if (!buffer || buffer.length === 0) {
       return base64Str;
     }
 
-    let ext = matches[1].toLowerCase();
-    if (ext === 'jpeg') ext = 'jpg';
-    if (ext === 'svg+xml') ext = 'svg';
-    const buffer = Buffer.from(matches[2], 'base64');
-
-    if (!fs.existsSync(UPLOAD_DIR)) {
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    }
+    [UPLOAD_DIR, LOCAL_SRC_UPLOAD_DIR].forEach((dir) => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
 
     const filename = generateShortFilename(`.${ext}`);
-    const filePath = path.join(UPLOAD_DIR, filename);
+    const targetPath = path.join(UPLOAD_DIR, filename);
 
-    await fs.promises.writeFile(filePath, buffer);
+    const writePromises = [fs.promises.writeFile(targetPath, buffer)];
+    if (UPLOAD_DIR !== LOCAL_SRC_UPLOAD_DIR) {
+      writePromises.push(fs.promises.writeFile(path.join(LOCAL_SRC_UPLOAD_DIR, filename), buffer));
+    }
+    await Promise.all(writePromises);
+
     return getImageUrl(filename, req);
   } catch (err) {
     console.error('Error saving base64 image:', err);
