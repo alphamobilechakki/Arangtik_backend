@@ -2519,3 +2519,194 @@ GET /api/vendor/lookup?phone=919810112233
 | `GET` | `/api/vendor/transactions` | Protected (Vendor) | Retrieve financial payment records and settlements |
 
 
+
+
+---
+
+## 7. Hardware Hub & IoT Module (`/api/hardware/hubs`)
+
+The Hardware Hub module manages smart IoT hubs deployed in households. Users scan the hardware QR code to extract the device `mac_id`, configure hub Wi-Fi credentials, assign it to their account, and activate or deactivate the device.
+
+---
+
+### 7.1. Activate Hub
+*Activates a pre-configured physical hub after scanning its QR code, assigns it to the authenticated user, and sets Wi-Fi credentials.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/hardware/hubs/activate`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `mac_id` | `string` | **Yes** | Device MAC address extracted from QR scan (e.g., `AA:BB:CC:11:22:33` or `AABBCC112233`). |
+| `name` | `string` | No | Custom display name for the hub (e.g., `Smart Kitchen Hub`). |
+| `wifi` | `object` | No | Wi-Fi network credentials for the hardware device. |
+| `wifi.ssid` | `string` | No | SSID / Network name. |
+| `wifi.password` | `string` | No | Wi-Fi password (stored securely, excluded from default queries). |
+| `status` | `string` | No | Lifecycle status (defaults to `activated`). |
+
+##### Request Example
+```json
+{
+  "mac_id": "AA:BB:CC:11:22:33",
+  "name": "Smart Kitchen Hub Alpha",
+  "wifi": {
+    "ssid": "Home_WiFi_5G",
+    "password": "SecretWifiPassword99"
+  },
+  "status": "activated"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub activated successfully",
+  "data": {
+    "_id": "6ae8612b3f5414cd07ea82d3",
+    "name": "Smart Kitchen Hub Alpha",
+    "mac_id": "AA:BB:CC:11:22:33",
+    "userId": "6ae8612a3f5414cd07ea82b0",
+    "wifi": {
+      "ssid": "Home_WiFi_5G"
+    },
+    "status": "activated",
+    "qr_code": null,
+    "createdAt": "2026-11-02T10:08:43.580Z",
+    "updatedAt": "2026-11-02T10:08:43.892Z",
+    "__v": 0
+  }
+}
+```
+
+##### HTTP 404 Not Found (Non-existent Hub)
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "Hub not found with this MAC ID",
+  "errors": []
+}
+```
+
+---
+
+### 7.2. Get User Hubs
+*Retrieves all active or registered hardware hubs belonging to the authenticated user.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/hardware/hubs/get-myhubs`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hubs retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae8612b3f5414cd07ea82d3",
+      "name": "Smart Kitchen Hub Alpha",
+      "mac_id": "AA:BB:CC:11:22:33",
+      "userId": "6ae8612a3f5414cd07ea82b0",
+      "wifi": {
+        "ssid": "Home_WiFi_5G"
+      },
+      "status": "activated",
+      "qr_code": null,
+      "createdAt": "2026-11-02T10:08:43.580Z",
+      "updatedAt": "2026-11-02T10:08:43.892Z",
+      "__v": 0
+    }
+  ]
+}
+```
+
+---
+
+### 7.3. Deactivate Hub
+*Deactivates a user's hub using its MAC ID.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/hardware/hubs/deactivate`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `mac_id` | `string` | **Yes** | Device MAC address to deactivate. |
+
+##### Request Example
+```json
+{
+  "mac_id": "AA:BB:CC:11:22:33"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Hub deactivated successfully",
+  "data": {
+    "_id": "6ae8612b3f5414cd07ea82d3",
+    "name": "Smart Kitchen Hub Alpha",
+    "mac_id": "AA:BB:CC:11:22:33",
+    "userId": "6ae8612a3f5414cd07ea82b0",
+    "wifi": {
+      "ssid": "Home_WiFi_5G"
+    },
+    "status": "deactivated",
+    "qr_code": null,
+    "createdAt": "2026-11-02T10:08:43.580Z",
+    "updatedAt": "2026-11-02T10:08:44.100Z",
+    "__v": 0
+  }
+}
+```
+
+##### HTTP 404 Not Found
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "Hub not found or not assigned to this user",
+  "errors": []
+}
+```
+
+---
+
+### 7.4. Hardware Hub Quick Reference Table
+
+| Method | Endpoint | Access | Short Description |
+| :--- | :--- | :--- | :--- |
+| `PATCH` | `/api/hardware/hubs/activate` | Protected (User) | Find existing hub by `mac_id`, update details, assign user, and activate |
+| `GET` | `/api/hardware/hubs/get-myhubs` | Protected (User) | List all hardware hubs assigned to authenticated user |
+| `PATCH` | `/api/hardware/hubs/deactivate` | Protected (User) | Deactivate hub by `mac_id` |
+

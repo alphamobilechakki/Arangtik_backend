@@ -3,26 +3,27 @@ const ApiResponse = require('../../../utils/apiResponse');
 const hubService = require('./hub.service');
 
 class HubController {
-  // POST /hardware/hubs
-  create = asyncHandler(async (req, res) => {
-    const hub = await hubService.createHub({
-      ...req.body,
-      userId: req.body.userId || req.user?.id || null,
-    });
-    return ApiResponse.created(res, hub, 'Hub registered successfully');
+  // PATCH /hardware/hubs/activate
+  activate = asyncHandler(async (req, res) => {
+    const userId = req.user?.id || req.body.userId;
+    const hub = await hubService.activateHub(req.body, userId);
+    return ApiResponse.success(res, hub, 'Hub activated successfully');
+  });
+
+  // PATCH /hardware/hubs/deactivate
+  deactivate = asyncHandler(async (req, res) => {
+    const userId = req.user?.id || req.body.userId;
+    const hub = await hubService.deactivateHub(req.body, userId);
+    return ApiResponse.success(res, hub, 'Hub deactivated successfully');
   });
 
   // GET /hardware/hubs
-  getAll = asyncHandler(async (req, res) => {
-    const result = await hubService.getHubs({
-      ...req.query,
-      userId: req.query.userId || req.user?.id,
-    });
-    return ApiResponse.success(res, result, 'Hubs retrieved successfully');
+  getMyHubs = asyncHandler(async (req, res) => {
+    const hubs = await hubService.getMyHubs(req.user?.id || req.query.userId);
+    return ApiResponse.success(res, hubs, 'Hubs retrieved successfully');
   });
-
-
 }
 
 module.exports = new HubController();
+
 

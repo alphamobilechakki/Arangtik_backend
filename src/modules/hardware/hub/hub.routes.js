@@ -4,13 +4,9 @@ const router = express.Router();
 const hubController = require('./hub.controller');
 const { protect } = require('../../../middlewares/auth.middleware');
 
-// ── Register / List ─────────────────────────────────────────────────────────
-router
-  .route('/')
-  .post(protect, hubController.create)   // Register a new hub
-  .get(protect, hubController.getAll);   // List hubs (filtered by user)
-
-
-
+router.patch('/activate', protect, hubController.activate); // activate the hubs by scanning
+router.patch('/deactivate', protect, hubController.deactivate); // deactivate by mac_id or hubId in body
+router.get('/get-myhubs', protect, hubController.getMyHubs);
 module.exports = router;
+
 

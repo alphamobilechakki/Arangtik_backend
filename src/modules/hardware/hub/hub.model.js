@@ -41,11 +41,11 @@ const hubSchema = new mongoose.Schema(
       },
     },
 
-    // not configured → configured → active → deactivated
+    //  configured → active → deactivated
     status: {
       type: String,
-      enum: ['not configured', 'configured', 'activated', 'deactivated'],
-      default: 'not configured',
+      enum: ['configured', 'activated', 'deactivated'],
+      default: 'configured',
       index: true,
     },
 
