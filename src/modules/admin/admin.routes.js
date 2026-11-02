@@ -22,7 +22,7 @@ const kitchenBoxCaptureRoutes = require('./hardware/kitchenBoxCaptures/kitchenBo
 router.use('/auth', adminAuthRoutes);
 
 // ── Core Management Routes ──────────────────────────────────
-router.use('/categories', categoryRoutes);
+router.use('/vendor-categories', categoryRoutes);
 router.use('/services', categoryServiceRoutes);
 router.use('/store-types', storeTypeRoutes);
 
