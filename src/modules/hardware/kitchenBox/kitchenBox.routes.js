@@ -4,13 +4,11 @@ const router = express.Router();
 const kitchenBoxController = require('./kitchenBox.controller');
 const { protect } = require('../../../middlewares/auth.middleware');
 
-// ── Register / List ──────────────────────────────────────────────────────────
-router
-  .route('/')
-  .post(protect, kitchenBoxController.create)   // Register a new box
-  .get(protect, kitchenBoxController.getAll);   // List boxes (by user / hub)
-
+router.patch('/activate', protect, kitchenBoxController.activate);
+router.patch('/deactivate', protect, kitchenBoxController.deactivate);
+router.get('/get-myboxes', protect, kitchenBoxController.getMyBoxes);
 
 
 module.exports = router;
+
 

@@ -2710,3 +2710,198 @@ The Hardware Hub module manages smart IoT hubs deployed in households. Users sca
 | `GET` | `/api/hardware/hubs/get-myhubs` | Protected (User) | List all hardware hubs assigned to authenticated user |
 | `PATCH` | `/api/hardware/hubs/deactivate` | Protected (User) | Deactivate hub by `mac_id` |
 
+
+
+---
+
+## 8. Hardware KitchenBox Module (`/api/hardware/boxes`)
+
+The KitchenBox module manages IoT smart kitchen storage containers. After scanning the box's QR code, the user activates the device, pairs it optionally to a local parent Gateway Hub, specifies stored item details and dimensions, and tracks/deactivates the container.
+
+---
+
+### 8.1. Activate KitchenBox
+*Activates a physical KitchenBox after QR code scanning, associates it with the authenticated user, pairs it with an existing parent hub, and configures box details.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/hardware/boxes/activate`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `mac_id` | `string` | **Yes** | KitchenBox MAC address from QR scan (e.g., `24:0A:C4:AA:BB:CC` or `240AC4AABBCC`). |
+| `name` | `string` | No | Custom friendly name for the box (e.g., `Spice Container Box 1`). |
+| `hub_mac_id` | `string` | No | Parent Gateway Hub MAC address this box connects to. |
+| `item_name` | `string` | No | Name of grocery/item stored inside (e.g., `Turmeric Powder`). |
+| `dimensions` | `string` | No | Physical box dimensions e.g. `150x100x80` (in mm). |
+| `status` | `string` | No | Lifecycle status (defaults to `activated`). |
+
+##### Request Example
+```json
+{
+  "mac_id": "24:0A:C4:AA:BB:CC",
+  "name": "Spice Container Box 1",
+  "hub_mac_id": "24:0A:C4:00:11:22",
+  "item_name": "Turmeric Powder",
+  "dimensions": "150x100x80",
+  "status": "activated"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox activated successfully",
+  "data": {
+    "_id": "6ae864ed702b8960a8725334",
+    "name": "Spice Container Box 1",
+    "mac_id": "24:0A:C4:AA:BB:CC",
+    "hub_mac_id": "24:0A:C4:00:11:22",
+    "userId": "6ae864ec702b8960a87252fd",
+    "item_name": "Turmeric Powder",
+    "dimensions": "150x100x80",
+    "tof": null,
+    "image": null,
+    "qr_code": null,
+    "status": "activated",
+    "createdAt": "2026-11-02T10:24:45.716Z",
+    "updatedAt": "2026-11-02T10:24:46.012Z",
+    "__v": 0
+  }
+}
+```
+
+##### HTTP 404 Not Found (KitchenBox Not Found)
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "KitchenBox not found with this MAC ID",
+  "errors": []
+}
+```
+
+---
+
+### 8.2. Get User KitchenBoxes
+*Retrieves all kitchen storage boxes owned by or assigned to the authenticated user.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/hardware/boxes/get-myboxes`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBoxes retrieved successfully",
+  "data": [
+    {
+      "_id": "6ae864ed702b8960a8725334",
+      "name": "Spice Container Box 1",
+      "mac_id": "24:0A:C4:AA:BB:CC",
+      "hub_mac_id": "24:0A:C4:00:11:22",
+      "userId": "6ae864ec702b8960a87252fd",
+      "item_name": "Turmeric Powder",
+      "dimensions": "150x100x80",
+      "tof": null,
+      "image": null,
+      "qr_code": null,
+      "status": "activated",
+      "createdAt": "2026-11-02T10:24:45.716Z",
+      "updatedAt": "2026-11-02T10:24:46.012Z",
+      "__v": 0
+    }
+  ]
+}
+```
+
+---
+
+### 8.3. Deactivate KitchenBox
+*Deactivates a user's kitchen storage box using its MAC ID.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/hardware/boxes/deactivate`
+- **Access**: `Protected (User)`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `mac_id` | `string` | **Yes** | Device MAC address of the box to deactivate. |
+
+##### Request Example
+```json
+{
+  "mac_id": "24:0A:C4:AA:BB:CC"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "KitchenBox deactivated successfully",
+  "data": {
+    "_id": "6ae864ed702b8960a8725334",
+    "name": "Spice Container Box 1",
+    "mac_id": "24:0A:C4:AA:BB:CC",
+    "hub_mac_id": "24:0A:C4:00:11:22",
+    "userId": "6ae864ec702b8960a87252fd",
+    "item_name": "Turmeric Powder",
+    "dimensions": "150x100x80",
+    "tof": null,
+    "image": null,
+    "qr_code": null,
+    "status": "deactivated",
+    "createdAt": "2026-11-02T10:24:45.716Z",
+    "updatedAt": "2026-11-02T10:24:46.129Z",
+    "__v": 0
+  }
+}
+```
+
+##### HTTP 404 Not Found
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "KitchenBox not found or not assigned to this user",
+  "errors": []
+}
+```
+
+---
+
+### 8.4. KitchenBox Quick Reference Table
+
+| Method | Endpoint | Access | Short Description |
+| :--- | :--- | :--- | :--- |
+| `PATCH` | `/api/hardware/boxes/activate` | Protected (User) | Find existing box by `mac_id`, update details, assign user & hub, and activate |
+| `GET` | `/api/hardware/boxes/get-myboxes` | Protected (User) | List all kitchen boxes assigned to authenticated user |
+| `PATCH` | `/api/hardware/boxes/deactivate` | Protected (User) | Deactivate kitchen box by `mac_id` |

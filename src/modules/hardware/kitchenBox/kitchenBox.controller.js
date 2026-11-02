@@ -3,22 +3,24 @@ const ApiResponse = require('../../../utils/apiResponse');
 const kitchenBoxService = require('./kitchenBox.service');
 
 class KitchenBoxController {
-  // POST /hardware/boxes
-  create = asyncHandler(async (req, res) => {
-    const box = await kitchenBoxService.createKitchenBox({
-      ...req.body,
-      userId: req.body.userId || req.user?.id,
-    });
-    return ApiResponse.created(res, box, 'KitchenBox registered successfully');
+  // PATCH /hardware/boxes/activate
+  activate = asyncHandler(async (req, res) => {
+    const userId = req.user?.id || req.body.userId;
+    const box = await kitchenBoxService.activateKitchenBox(req.body, userId);
+    return ApiResponse.success(res, box, 'KitchenBox activated successfully');
   });
 
-  // GET /hardware/boxes
-  getAll = asyncHandler(async (req, res) => {
-    const result = await kitchenBoxService.getKitchenBoxes({
-      ...req.query,
-      userId: req.query.userId || req.user?.id,
-    });
-    return ApiResponse.success(res, result, 'KitchenBoxes retrieved successfully');
+  // PATCH /hardware/boxes/deactivate
+  deactivate = asyncHandler(async (req, res) => {
+    const userId = req.user?.id || req.body.userId;
+    const box = await kitchenBoxService.deactivateKitchenBox(req.body, userId);
+    return ApiResponse.success(res, box, 'KitchenBox deactivated successfully');
+  });
+
+  // GET /hardware/boxes/get-myboxes
+  getMyBoxes = asyncHandler(async (req, res) => {
+    const boxes = await kitchenBoxService.getMyBoxes(req.user?.id || req.query.userId);
+    return ApiResponse.success(res, boxes, 'KitchenBoxes retrieved successfully');
   });
 
 
