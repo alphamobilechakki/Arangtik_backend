@@ -2905,3 +2905,61 @@ The KitchenBox module manages IoT smart kitchen storage containers. After scanni
 | `PATCH` | `/api/hardware/boxes/activate` | Protected (User) | Find existing box by `mac_id`, update details, assign user & hub, and activate |
 | `GET` | `/api/hardware/boxes/get-myboxes` | Protected (User) | List all kitchen boxes assigned to authenticated user |
 | `PATCH` | `/api/hardware/boxes/deactivate` | Protected (User) | Deactivate kitchen box by `mac_id` |
+
+---
+
+## 9. Density Category & Product Admin Management APIs
+
+### 9.1. Density Category Endpoints (`/api/admin/density-categories`)
+
+| Method | Endpoint | Access | Short Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/admin/density-categories` | Protected (Admin) | Create a new density category (e.g. Flour, Rice, Oil) |
+| `GET` | `/api/admin/density-categories` | Public / Admin | List all density categories (supports `?page=1&limit=10&search=&includeDeleted=false`) |
+| `GET` | `/api/admin/density-categories/:id` | Public / Admin | Get a single density category by ID |
+| `PATCH` | `/api/admin/density-categories/:id` | Protected (Admin) | Update materialType, defaultDensity, or densityUnit |
+| `DELETE` | `/api/admin/density-categories/:id` | Protected (Admin) | Delete a category (blocked if referenced by products) |
+
+#### DensityCategory Schema
+```json
+{
+  "_id": "6ae9852f...",
+  "materialType": "Wheat Flour",
+  "defaultDensity": 0.59,
+  "densityUnit": "g/ml",
+  "createdAt": "2026-11-03T06:50:00.000Z",
+  "updatedAt": "2026-11-03T06:50:00.000Z"
+}
+```
+
+---
+
+### 9.2. Product Endpoints (`/api/admin/products`)
+
+| Method | Endpoint | Access | Short Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/admin/products` | Protected (Admin) | Create a new product (supports `name`, `aliases`, `densityCategoryId`, `densityOverride`) |
+| `GET` | `/api/admin/products` | Public / Admin | List all products with populated category (`?search=` searches name and aliases) |
+| `GET` | `/api/admin/products/:id` | Public / Admin | Get single product with populated category and effectiveDensity |
+| `PATCH` | `/api/admin/products/:id` | Protected (Admin) | Update product name, aliases, category, or densityOverride |
+| `DELETE` | `/api/admin/products/:id` | Protected (Admin) | Delete a product |
+
+#### Product Schema & Virtuals
+```json
+{
+  "_id": "6ae9853a...",
+  "name": "Ashirvaad Shudh Chakki Atta",
+  "aliases": ["Atta", "Chakki Atta", "Gehu Atta"],
+  "densityCategoryId": {
+    "_id": "6ae9852f...",
+    "materialType": "Wheat Flour",
+    "defaultDensity": 0.59,
+    "densityUnit": "g/ml"
+  },
+  "densityOverride": null,
+  "effectiveDensity": 0.59,
+  "createdAt": "2026-11-03T06:51:00.000Z",
+  "updatedAt": "2026-11-03T06:51:00.000Z"
+}
+```
+
