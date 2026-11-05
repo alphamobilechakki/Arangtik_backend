@@ -24,191 +24,73 @@ const extractFilesFromReq = (req) => {
 };
 
 /**
- * @desc    Analyze uploaded photo(s) to extract clothes and return auto-filled fields (Single or Bulk)
- * @route   POST /api/wardrobe/analyze-photo
- * @access  Private
- */
-const analyzePhoto = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const files = extractFilesFromReq(req);
-  const options = {
-    wardrobeId: req.body?.wardrobeId || req.query?.wardrobeId || null,
-    verifyFace: req.body?.verifyFace === 'true' || req.body?.verifyFace === true,
-    faceBoxes: req.body?.faceBoxes || null,
-  };
-
-  if (files.length === 0) {
-    return res.status(400).json({
-      statusCode: 400,
-      success: false,
-      message: 'Please upload at least one clothing photo under field "photo" or "photos"',
-    });
-  }
-
-  // Single photo analysis mode
-  if (files.length === 1) {
-    const result = await wardrobeService.analyzePhoto(userId, files[0], options);
-    return ApiResponse.success(res, result, 'Photo analyzed successfully with clothing recognition');
-  }
-
-  // Bulk photos analysis mode (multiple photos)
-  const results = [];
-  let totalGarments = 0;
-  for (const file of files) {
-    try {
-      const singleRes = await wardrobeService.analyzePhoto(userId, file, options);
-      results.push(singleRes);
-      totalGarments += singleRes.detectedItemsCount || 1;
-    } catch (err) {
-      console.warn(`[analyzePhoto bulk] Error analyzing file ${file.filename}:`, err.message);
-      results.push({ filename: file.filename, error: err.message });
-    }
-  }
-
-  return ApiResponse.success(
-    res,
-    {
-      totalPhotosAnalyzed: files.length,
-      totalGarmentsDetected: totalGarments,
-      items: results,
-    },
-    `Bulk photos analyzed successfully (${totalGarments} garment(s) detected across ${files.length} photos)`
-  );
-});
-
-/**
- * @desc    Add item(s) to wardrobe store (supports JSON, Single Photo, or Bulk Photos)
+ * @desc    Add item to wardrobe store (Single unified endpoint)
+ *          Handles photo upload, with/without person mode, Python AI split & background Gemini analysis
  * @route   POST /api/wardrobe/add-item
  * @access  Private
  */
 const addItem = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
+  const mode = req.body.mode || req.body.personMode || req.body.type || (req.body.withPerson === 'true' || req.body.withPerson === true ? 'with_person' : 'without_person');
 
-  // Bulk Add mode (if multiple photos uploaded)
-  if (files.length > 1) {
+  // Multi-Photo or Single Photo Upload mode (e.g. 1 to 50 gallery photos)
+  if (files.length > 0) {
+    const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
     const createdItems = [];
     const duplicateItems = [];
+
+    // Har image ke liye alag item create hoga aur background me process hoga
     for (const file of files) {
       try {
-        const item = await wardrobeService.addItem(userId, req.body, file);
-        if (item) {
-          const isDup = item.isDuplicate || item.isExistingItem || createdItems.some((c) => String(c._id) === String(item._id));
-          if (isDup) {
-            duplicateItems.push(item);
-          } else {
-            createdItems.push(item);
-          }
+        const result = await clothAnalysisService.processAndSaveWardrobeItem(userId, file, {
+          ...req.body,
+          mode,
+        });
+
+        if (result.isDuplicate) {
+          duplicateItems.push(result.item);
+        } else if (result.item) {
+          createdItems.push(result.item);
         }
       } catch (err) {
-        console.warn(`[addItem bulk] Error adding file ${file.filename}:`, err.message);
+        console.warn(`[addItem] Error processing photo ${file.filename}:`, err.message);
       }
     }
+
+    // Single photo response format
+    if (files.length === 1) {
+      if (duplicateItems.length > 0 && createdItems.length === 0) {
+        return ApiResponse.success(
+          res,
+          {
+            item: duplicateItems[0],
+            isDuplicate: true,
+            duplicates: duplicateItems,
+            items: [],
+          },
+          `This dress already exists in your Almari as "${duplicateItems[0].name}" (skipped duplicate addition).`
+        );
+      }
+      return ApiResponse.created(res, createdItems[0], 'Item added successfully to wardrobe store');
+    }
+
+    // Multiple photos response format (e.g. 10 photos uploaded from gallery at once)
     return ApiResponse.created(
       res,
       {
-        totalPhotosReceived: files.length,
-        totalItemsCreated: createdItems.length,
-        duplicateItemsSkipped: duplicateItems.length,
+        totalUploaded: files.length,
+        totalCreated: createdItems.length,
+        totalDuplicates: duplicateItems.length,
         items: createdItems,
         duplicates: duplicateItems,
       },
-      duplicateItems.length > 0 && createdItems.length > 0
-        ? `Bulk processing complete: ${createdItems.length} new item(s) added, ${duplicateItems.length} duplicate dress(es) already in Almari (skipped).`
-        : duplicateItems.length > 0
-        ? `All ${duplicateItems.length} dress(es) already exist in this Almari (duplicate addition skipped).`
-        : `Bulk items added successfully (${createdItems.length} items added to wardrobe)`
+      `${createdItems.length} item(s) added successfully! Processing each photo in background.`
     );
   }
 
-  // Batch Add mode from UI selection array (e.g. items selected by user after analyze-photo)
-  let itemsList = req.body?.items;
-  if (typeof itemsList === 'string') {
-    try {
-      itemsList = JSON.parse(itemsList);
-    } catch (e) {
-      itemsList = null;
-    }
-  }
-
-  if (Array.isArray(itemsList) && itemsList.length > 0) {
-    const createdItems = [];
-    for (const singleItem of itemsList) {
-      try {
-        const item = await wardrobeService.addItemFromDetection(userId, singleItem, {
-          wardrobeId: req.body.wardrobeId || singleItem.wardrobeId,
-          sourcePhotoUrl: singleItem.sourcePhotoUrl || singleItem.originalImageUrl || '',
-          sourceImageHash: singleItem.sourceImageHash || null,
-        });
-        createdItems.push(item);
-      } catch (err) {
-        console.warn(`[addItem multi-select] Error adding item "${singleItem.name}":`, err.message);
-      }
-    }
-    return ApiResponse.created(
-      res,
-      {
-        totalItemsCreated: createdItems.length,
-        items: createdItems,
-      },
-      `Successfully added ${createdItems.length} selected item(s) to wardrobe`
-    );
-  }
-
-  // Auto-Add All mode for single outfit photo containing multiple garments
-  const singleFile = files[0] || null;
-  if (
-    singleFile &&
-    (req.body.autoAddAll === true ||
-      req.body.autoAddAll === 'true' ||
-      req.body.addAll === true ||
-      req.body.addAll === 'true')
-  ) {
-    const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
-    const analysisResult = await clothAnalysisService.analyzePhoto(userId, singleFile, {
-      wardrobeId: req.body.wardrobeId,
-    });
-    const detectedItems = analysisResult.analysis || [];
-    if (detectedItems.length > 1) {
-      const createdItems = [];
-      for (const det of detectedItems) {
-        try {
-          const item = await wardrobeService.addItemFromDetection(userId, det, {
-            wardrobeId: req.body.wardrobeId,
-            sourcePhotoUrl: formatUploadUrl(`/uploads/${singleFile.filename}`),
-            sourceImageHash: analysisResult.sourceImageHash,
-          });
-          createdItems.push(item);
-        } catch (err) {
-          console.warn(`[addItem autoAddAll] Error adding item "${det.name}":`, err.message);
-        }
-      }
-      return ApiResponse.created(
-        res,
-        {
-          totalItemsCreated: createdItems.length,
-          items: createdItems,
-        },
-        `Detected and added all ${createdItems.length} items from photo to wardrobe`
-      );
-    }
-  }
-
-  const item = await wardrobeService.addItem(userId, req.body, singleFile);
-
-  if (item && (item.isDuplicate || item.isExistingItem)) {
-    return ApiResponse.success(
-      res,
-      {
-        item,
-        isDuplicate: true,
-        duplicates: [item],
-        items: [],
-      },
-      `This dress already exists in your Almari as "${item.name}" (skipped duplicate addition).`
-    );
-  }
-
+  // Fallback for manual JSON item creation without photo
+  const item = await wardrobeService.addItem(userId, req.body, null);
   return ApiResponse.created(res, item, 'Item added successfully to wardrobe store');
 });
 
@@ -259,76 +141,6 @@ const deleteItem = asyncHandler(async (req, res) => {
   const result = await wardrobeService.deleteItem(userId, req.params.id, permanent);
 
   return ApiResponse.success(res, result, 'Wardrobe item deleted/archived successfully');
-});
-
-/**
- * @desc    Ingest clothes from gallery photos (Face Match -> AI Garment Extract -> Digital Wardrobe Ingest)
- * @route   POST /api/wardrobe/ingest-gallery
- * @access  Private
- */
-const ingestGalleryPhotos = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const files = req.files || (req.file ? [req.file] : []);
-  const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
-    autoCreateNewItems: req.body.autoCreateNewItems !== 'false' && req.body.autoCreateNewItems !== false,
-    threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
-  };
-
-  const result = await wardrobeService.ingestGalleryPhotos(userId, files, options);
-
-  return ApiResponse.success(
-    res,
-    result,
-    `Gallery scanned: ${result.matchedUserImagesCount} photos matched your face, ${result.newWardrobeItemsCreated.length} new items added to wardrobe`
-  );
-});
-
-/**
- * @desc    Bulk add standalone dress photos (1 to 100 photos)
- * @route   POST /api/wardrobe/bulk-add-photos
- * @access  Private
- */
-const bulkAddPhotos = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const files = req.files || (req.file ? [req.file] : []);
-  const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
-    storagePlace: req.body.storagePlace || 'Main Closet',
-  };
-
-  const result = await wardrobeService.bulkAddDressPhotos(userId, files, options);
-
-  return ApiResponse.success(
-    res,
-    result,
-    `Bulk processing complete: ${result.newItemsCreated.length} items added to wardrobe, ${result.existingMatches.length} existing items matched`
-  );
-});
-
-/**
- * @desc    Scan a single user gallery photo for authenticated user & extract clothing
- * @route   POST /api/wardrobe/scan-gallery-photo
- * @access  Private
- */
-const scanGalleryPhoto = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const file = req.file || (req.files?.photo?.[0] || req.files?.image?.[0]);
-  const options = {
-    wardrobeId: req.body.wardrobeId || null,
-    collectionId: req.body.collectionId || null,
-    threshold: req.body.threshold ? parseFloat(req.body.threshold) : null,
-  };
-
-  const result = await wardrobeService.scanGalleryPhoto(userId, file, options);
-
-  const message = result.matched
-    ? `User matched successfully! Extracted ${result.detectedItemsCount} clothing items.`
-    : 'User face not detected in this photo. Skipped clothing extraction.';
-
-  return ApiResponse.success(res, result, message);
 });
 
 /**
@@ -459,8 +271,4 @@ module.exports = {
   updateItem,
   deleteItem,
   generateItem3D,
-  analyzePhoto,
-  scanGalleryPhoto,
-  bulkAddPhotos,
-  ingestGalleryPhotos,
 };

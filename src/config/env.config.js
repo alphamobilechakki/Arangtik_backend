@@ -36,13 +36,12 @@ module.exports = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
 
-  // Face Recognition Configuration
-  FACE_MATCH_THRESHOLD: parseFloat(process.env.FACE_MATCH_THRESHOLD) || 0.55, // Euclidean distance threshold (<= 0.55 matches true faces in group photos/collages and rejects non-matching people)
-  FACE_MIN_CONFIDENCE: parseFloat(process.env.FACE_MIN_CONFIDENCE) || 0.55,
-  FACE_MIN_SIZE: parseInt(process.env.FACE_MIN_SIZE, 10) || 45, // Minimum face bounding box width/height in pixels
-  FACE_AI_SERVICE_URL: process.env.FACE_AI_SERVICE_URL || '', // Optional external Python microservice
-  FACE_AI_TIMEOUT_MS: parseInt(process.env.FACE_AI_TIMEOUT_MS, 10) || 15000,
+  // Python Garment AI Service (Person Parsing, Garment Splitting, Inpainting, Background Removal)
+  PYTHON_BG_REMOVAL_URL: process.env.PYTHON_BG_REMOVAL_URL || 'https://bg.arangtik.com/api/background-removal',
+  PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || process.env.PYTHON_PARSING_SERVICE_URL || 'http://localhost:8000',
+  PYTHON_SERVICE_TIMEOUT_MS: parseInt(process.env.PYTHON_SERVICE_TIMEOUT_MS, 10) || 30000,
 
+  
   // Firebase Cloud Messaging (FCM) Configuration
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || '',
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',

@@ -8,7 +8,7 @@ const upload = require('../../middlewares/upload.middleware');
 router.use(protect);
 
 /* ==========================================================================
-   1. WARDROBE / CLOSET APIs (E.g., "My Wardrobe", "Mummy Wardrobe")
+   1. WARDROBE / CLOSET CONTAINER APIs (E.g., "My Wardrobe", "Mummy Wardrobe")
    ========================================================================== */
 
 const uploadWardrobeMedia = upload.fields([
@@ -36,31 +36,22 @@ router.patch('/restore-wardrobe/:id', wardrobeController.restoreWardrobe);
 // Delete Wardrobe Container (Soft delete by default, hard via ?hard=true)
 router.delete('/delete-wardrobe/:id', wardrobeController.deleteWardrobe);
 
-// Unified media upload handler for 1 to 100 photos
+/* ==========================================================================
+   2. SINGLE & MULTI-PHOTO CLOTH ITEM ADDITION API
+   ========================================================================== */
+
+// Media upload handler: supports 1 photo or multi-photo uploads (e.g. 1 to 50 gallery photos)
 const uploadClothMedia = upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'image', maxCount: 1 },
   { name: 'file', maxCount: 1 },
-  { name: 'photos', maxCount: 100 },
-  { name: 'images', maxCount: 100 },
-  { name: 'files', maxCount: 100 },
+  { name: 'photos', maxCount: 50 },
+  { name: 'images', maxCount: 50 },
+  { name: 'files', maxCount: 50 },
 ]);
 
-/* ==========================================================================
-   2. CLOTH SCAN & EXTRACTION APIs
-   ========================================================================== */
-
-// Scan Item (AI scans photo(s), detects garments, extracts colors/taxonomy, checks duplicates)
-router.post('/scan-item', uploadClothMedia, wardrobeController.analyzePhoto);
-
-// Add / Extract Item
+// Single Unified Add Item Endpoint (Handles 1 to 50 photos, with/without person mode, Python AI split & background Gemini analysis)
 router.post('/add-item', uploadClothMedia, wardrobeController.addItem);
-
-// Bulk Add Standalone Photos
-router.post('/bulk-add-photos', upload.array('photos', 100), wardrobeController.bulkAddPhotos);
-
-// Ingest Gallery Photos
-router.post('/ingest-gallery', upload.array('photos', 100), wardrobeController.ingestGalleryPhotos);
 
 /* ==========================================================================
    3. WARDROBE ITEMS MANAGEMENT (CRUD)
@@ -77,8 +68,5 @@ router.patch('/edit-item/:id', wardrobeController.updateItem);
 
 // Delete Item by ID
 router.delete('/delete-item/:id', wardrobeController.deleteItem);
-
-// Generate 3D Garment Model
-router.post('/generate-3d/:id', wardrobeController.generateItem3D);
 
 module.exports = router;

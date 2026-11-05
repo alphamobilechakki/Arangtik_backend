@@ -144,6 +144,13 @@ const WardrobeItemSchema = new mongoose.Schema(
       default: 'ACTIVE',
       index: true,
     },
+    // Background Processing Status (For instant UI timer / loader)
+    processingStatus: {
+      type: String,
+      enum: ['PROCESSING', 'COMPLETED', 'FAILED'],
+      default: 'COMPLETED',
+      index: true,
+    },
     // Usage & Favorite State
     isFavorite: {
       type: Boolean,

@@ -4,7 +4,6 @@ const Wardrobe = require('./wardrobe.model');
 const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
-const tripo3dService = require('../../services/model3D/tripo3d.service');
 const { formatUploadUrl } = require('../../utils/url.util');
 
 /**
@@ -63,28 +62,7 @@ const createWardrobe = async (userId, data, files = null) => {
     }
   }
 
-  let referenceFace = undefined;
-  const targetFaceImg = ownerFaceImage || coverImage;
-  if (targetFaceImg) {
-    try {
-      const faceAIService = require('../../services/faceAI/faceAI.service');
-      const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-      const resolvedPath = faceRecognitionService.resolveImagePath(targetFaceImg);
-      if (fs.existsSync(resolvedPath)) {
-        const face = await faceAIService.extractReferenceFace(resolvedPath);
-        referenceFace = {
-          embedding: face.embedding,
-          boundingBox: face.boundingBox,
-          detectionConfidence: face.confidence,
-          lastGeneratedAt: new Date(),
-          imagePath: formatUploadUrl(targetFaceImg),
-        };
-        console.log(`[createWardrobe] Reference face generated successfully for wardrobe "${name}"`);
-      }
-    } catch (fErr) {
-      console.warn(`[createWardrobe] Could not extract face from wardrobe image (${fErr.message})`);
-    }
-  }
+
 
   if (isDefault) {
     await Wardrobe.updateMany(
@@ -969,104 +947,6 @@ const addItemFromDetection = async (userId, detection, extraData = {}) => {
   return await addItem(userId, itemPayload);
 };
 
-/**
- * Generate 3D Model for a wardrobe item using Hugging Face TripoSR
- */
-const generateItem3DModel = async (userId, itemId) => {
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
-  if (!item) {
-    throw new ApiError(404, 'Wardrobe item not found');
-  }
-
-  // Find best image to reconstruct (prefer cropped/segmented image, else primary image)
-  const primaryImg =
-    item.images?.find((img) => img.type === 'CROPPED' || img.type === 'SEGMENTED')?.url ||
-    item.images?.find((img) => img.isPrimary)?.url ||
-    item.images?.[0]?.url ||
-    item.sourcePhotoUrl;
-
-  if (!primaryImg) {
-    throw new ApiError(400, 'This item does not have a valid photo to convert to 3D');
-  }
-
-  // Set status to PROCESSING
-  item.model3d = {
-    url: item.model3d?.url || null,
-    filename: item.model3d?.filename || null,
-    status: 'PROCESSING',
-    engine: 'TripoSR',
-    generatedAt: null,
-    error: null,
-  };
-  await item.save();
-
-  try {
-    const result = await tripo3dService.generate3DFromImage(primaryImg, {
-      resolution: 128,
-      foregroundRatio: 0.85,
-    });
-
-    item.model3d = {
-      url: result.url,
-      filename: result.filename,
-      status: 'COMPLETED',
-      engine: result.engine || 'TripoSR',
-      generatedAt: new Date(),
-      error: null,
-    };
-    await item.save();
-
-    // Dispatch FCM Notification
-    try {
-      const notificationService = require('../notification/notification.service');
-      notificationService
-        .sendToUser(userId, {
-          title: '3D Garment Ready ✨',
-          body: `Your 3D model for "${item.name}" has been generated and is ready to view!`,
-          data: {
-            type: 'GARMENT_3D_COMPLETED',
-            itemId: item._id.toString(),
-            modelUrl: result.url || '',
-          },
-          type: 'GARMENT_3D_COMPLETED',
-        })
-        .catch((err) => console.warn('[FCM 3D Notification Warning]:', err.message));
-    } catch (fcmErr) {
-      console.warn('[FCM 3D Notification Warning]:', fcmErr.message);
-    }
-
-    return item;
-  } catch (err) {
-    console.error(`[generateItem3DModel] Failed for item ${itemId}:`, err.message);
-    item.model3d = {
-      url: item.model3d?.url || null,
-      filename: item.model3d?.filename || null,
-      status: 'FAILED',
-      engine: 'TripoSR',
-      generatedAt: null,
-      error: err.message,
-    };
-    await item.save();
-
-    try {
-      const notificationService = require('../notification/notification.service');
-      notificationService
-        .sendToUser(userId, {
-          title: '3D Generation Failed',
-          body: `Could not generate 3D model for "${item.name}". Please try again.`,
-          data: {
-            type: 'GARMENT_3D_FAILED',
-            itemId: item._id.toString(),
-          },
-          type: 'GARMENT_3D_FAILED',
-        })
-        .catch(() => {});
-    } catch (fcmErr) {}
-
-    throw new ApiError(500, `3D Model generation failed: ${err.message}`);
-  }
-};
-
 module.exports = {
   createWardrobe,
   getWardrobes,
@@ -1080,7 +960,6 @@ module.exports = {
   getItemById,
   updateItem,
   deleteItem,
-  generateItem3DModel,
   // Delegated AI Cloth Analysis & Ingestion functions for full backward compatibility
   analyzePhoto: clothAnalysisService.analyzePhoto,
   scanGalleryPhoto: clothAnalysisService.scanGalleryPhoto,

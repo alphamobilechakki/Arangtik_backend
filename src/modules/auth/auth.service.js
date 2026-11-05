@@ -249,28 +249,9 @@ class AuthService {
 
     // Handle file upload if provided
     if (file) {
-      const imagePath = formatUploadUrl(`/uploads/${file.filename}`);
-      const targetPath = file.path;
-
-      try {
-        const faceAIService = require('../../services/faceAI/faceAI.service');
-        const face = await faceAIService.extractReferenceFace(targetPath);
-        user.referenceFace = {
-          embedding: face.embedding,
-          boundingBox: face.boundingBox,
-          detectionConfidence: face.confidence,
-          lastGeneratedAt: new Date(),
-          imagePath: imagePath,
-        };
-      } catch (err) {
-        console.warn(`[updateProfile] Biometric extraction note: ${err.message}`);
-        // If it's a strict single face validation error, throw to inform caller
-        if (err.statusCode) throw err;
-      }
-      user.profileImage = imagePath;
+      user.profileImage = formatUploadUrl(`/uploads/${file.filename}`);
     } else if (updateData.profileImage !== undefined && updateData.profileImage !== user.profileImage) {
       user.profileImage = updateData.profileImage;
-      user.referenceFace = undefined;
     }
 
     await user.save();
@@ -291,29 +272,9 @@ class AuthService {
       throw new ApiError(404, 'User not found');
     }
 
-    const faceAIService = require('../../services/faceAI/faceAI.service');
-    const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-    const targetPath = filePath || faceRecognitionService.resolveImagePath(imagePath);
-
-    if (!fs.existsSync(targetPath)) {
-      throw new ApiError(400, 'Profile image file could not be found on server storage');
-    }
-
-    // 1. Automatically validate image contains exactly 1 high-quality face & extract 128-d vector
-    const face = await faceAIService.extractReferenceFace(targetPath);
-
-    // 2. Save both profile image path and reference face biometric embedding
     user.profileImage = imagePath;
-    user.referenceFace = {
-      embedding: face.embedding,
-      boundingBox: face.boundingBox,
-      detectionConfidence: face.confidence,
-      lastGeneratedAt: new Date(),
-      imagePath: imagePath,
-    };
-
     await user.save();
-    console.log(`[updateProfileImage] Profile image uploaded and reference face embedding generated for user: ${userId}`);
+    console.log(`[updateProfileImage] Profile image uploaded successfully for user: ${userId}`);
 
     return {
       _id: user._id,
@@ -322,12 +283,6 @@ class AuthService {
       role: user.role,
       status: user.status,
       profileImage: user.profileImage,
-      referenceFace: {
-        hasReferenceFace: true,
-        boundingBox: face.boundingBox,
-        detectionConfidence: face.confidence,
-        lastGeneratedAt: user.referenceFace.lastGeneratedAt,
-      },
     };
   }
 }

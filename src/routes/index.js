@@ -3,8 +3,6 @@ const router = express.Router();
 
 const authRoutes = require('../modules/auth/auth.routes');
 const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
-const faceRecognitionRoutes = require('../modules/faceRecognition/faceRecognition.routes');
-const clothAnalysisRoutes = require('../modules/clothAnalysis/clothAnalysis.routes');
 const uploadRoutes = require('../modules/upload/upload.routes');
 const integrationRoutes = require('../modules/integration/user/user.routes');
 const hubIntegrationRoutes = require('../modules/integration/hub/hub.routes');
@@ -30,14 +28,10 @@ router.use('/upload', uploadRoutes);
 // Auth Routes
 router.use('/auth', authRoutes);
 
-// Cloth Analysis & AI Vision Routes
-router.use('/cloth-analysis', clothAnalysisRoutes);
 
 // Wardrobe Store Routes
 router.use('/wardrobe', wardrobeRoutes);
 
-// Face Recognition Routes
-router.use('/face-recognition', faceRecognitionRoutes);
 
 // Integration & External Admin Sync Routes (Protected by x-api-key)
 router.use('/integration/hubs', hubIntegrationRoutes);

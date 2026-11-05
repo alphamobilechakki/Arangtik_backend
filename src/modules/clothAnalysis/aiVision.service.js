@@ -3,7 +3,6 @@ const path = require('path');
 const sharp = require('sharp');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GEMINI_API_KEY, OPENAI_API_KEY } = require('../../config/env.config');
-const segmentationService = require('../../services/segmentation/segmentation.service');
 const { formatUploadUrl } = require('../../utils/url.util');
 
 // Ensure crops directory exists
@@ -895,27 +894,8 @@ const cropDetectedItems = async (originalImagePath, detectedItems, options = {})
           // Skin exclusion should only run if explicitly requested in options and never for ladies or accessories
           const shouldExcludeSkin = Boolean(options.excludeSkin) && !isLadiesGarment(item) && !isAccessory;
 
-          // Background Removal: Run neural segmentation by default so dress/item background is cleanly removed
-          const shouldSegment = options.removeBackground !== false && process.env.DISABLE_SEGMENTATION !== 'true';
-          if (shouldSegment) {
-            try {
-              const segResult = await segmentationService.segmentClothing(cropFilePath, {
-                filenamePrefix: `seg-${index}`,
-                polygon: relativePolygon,
-                usePolygonMask: false,
-                excludeSkin: shouldExcludeSkin,
-                garmentColor: item.attributes?.primaryColor || item.color || '',
-                autoInpaint: false,
-                isAccessory: isAccessory,
-              });
-              if (segResult && segResult.outputUrl) {
-                cropFilename = segResult.filename;
-                cropUrl = segResult.outputUrl;
-              }
-            } catch (segErr) {
-              console.warn(`[aiVision] Segmentation fallback to rectangular crop for item ${index}:`, segErr.message);
-            }
-          }
+          // Segmentation & inpainting offloaded to Python service
+          // Clean rectangular crop retained as fallback
         } catch (cropErr) {
           console.warn(`[aiVision] Sharp crop failed for item ${index}:`, cropErr.message);
         }
@@ -1042,7 +1022,141 @@ const matchAgainstWardrobe = (detectedItems, existingWardrobeItems) => {
   });
 };
 
+
+/**
+ * Fast & Precision Fashion Vision AI for single isolated garments
+ * Evaluates clean clothing item (from Python parsing or flat-lay) and extracts full attributes.
+ */
+const analyzeSingleClothWithGemini = async (imagePathOrBuffer) => {
+  let visionBuffer;
+  let visionMimeType = 'image/jpeg';
+  let metadata = {};
+
+  try {
+    metadata = await sharp(imagePathOrBuffer).metadata();
+    visionBuffer = await sharp(imagePathOrBuffer)
+      .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, progressive: true })
+      .toBuffer();
+  } catch (err) {
+    if (typeof imagePathOrBuffer === 'string') {
+      visionBuffer = fs.readFileSync(imagePathOrBuffer);
+      visionMimeType = imagePathOrBuffer.endsWith('.png')
+        ? 'image/png'
+        : imagePathOrBuffer.endsWith('.webp')
+        ? 'image/webp'
+        : 'image/jpeg';
+    } else {
+      visionBuffer = imagePathOrBuffer;
+    }
+  }
+
+  if (!GEMINI_API_KEY) {
+    return {
+      name: 'Dress Item',
+      category: 'UPPER_WEAR',
+      subCategory: 'T-Shirt',
+      color: 'Multi-Color',
+      attributes: { primaryColor: 'Multi-Color' },
+      tags: ['Cloth']
+    };
+  }
+
+  const prompt = `
+You are an expert World-Class Fashion Vision AI.
+Analyze this single clothing garment or fashion product photo.
+Return ONLY a valid JSON object (no markdown, no backticks, no extra text) with the following exact structure:
+{
+  "name": "Highly descriptive fashion title (e.g. Navy Blue Oxford Cotton Button-Down Shirt)",
+  "category": "UPPER_WEAR" | "LOWER_WEAR" | "TRADITIONAL" | "OUTERWEAR" | "FOOTWEAR" | "ACCESSORIES" | "INNERWEAR",
+  "subCategory": "T-Shirt" | "Shirt" | "Jeans" | "Trousers" | "Saree" | "Kurta" | "Dress" | "Skirt" | "Jacket" | "Shorts" | "Shoes" | "Other",
+  "color": "Dominant primary color name (e.g. Navy Blue, Off-White, Olive Green, Black, Maroon)",
+  "attributes": {
+    "primaryColor": "Dominant color name",
+    "secondaryColors": ["Secondary accent colors if any"],
+    "pattern": "SOLID" | "STRIPED" | "CHECKED" | "PRINTED" | "EMBROIDERED" | "FLORAL" | "TEXTURED" | "OTHER",
+    "fabric": "COTTON" | "LINEN" | "DENIM" | "SILK" | "WOOL" | "POLYESTER" | "RAYON" | "SATIN" | "VELVET" | "LEATHER" | "OTHER",
+    "fit": "REGULAR_FIT" | "SLIM_FIT" | "LOOSE_FIT" | "OVERSIZED" | "RELAXED" | "SKINNY" | "OTHER",
+    "neckline": "Round Neck" | "Collar" | "V-Neck" | "Mock Neck" | "Mandarin" | "Polo" | "Square Neck" | "Hooded" | "None" | "Other",
+    "sleeveStyle": "FULL_SLEEVE" | "HALF_SLEEVE" | "SLEEVELESS" | "THREE_QUARTER" | "CAP_SLEEVE" | "OTHER",
+    "occasions": ["CASUAL", "FORMAL", "PARTY", "ETHNIC", "SPORTS", "WORK", "LOUNGEWEAR"],
+    "seasons": ["SUMMER", "WINTER", "SPRING", "AUTUMN", "ALL_SEASON"],
+    "styleAesthetic": "CASUAL" | "STREETWEAR" | "CLASSIC" | "MINIMALIST" | "BOHEMIAN" | "VINTAGE" | "FORMAL" | "OTHER"
+  },
+  "tags": ["Array of keywords like color, subCategory, fabric, pattern, occasion"]
+}
+`;
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  for (const modelName of VISION_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: visionBuffer.toString('base64'),
+            mimeType: visionMimeType,
+          },
+        },
+      ]);
+      const text = result.response.text().trim();
+      const cleanJson = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed && parsed.name && parsed.category) {
+        const attrs = parsed.attributes || {};
+        const primaryColor = parsed.color || attrs.primaryColor || 'Unknown';
+        return {
+          name: String(parsed.name).trim(),
+          category: String(parsed.category).trim().toUpperCase(),
+          subCategory: String(parsed.subCategory || 'Other').trim(),
+          color: primaryColor,
+          attributes: {
+            primaryColor,
+            secondaryColors: Array.isArray(attrs.secondaryColors) ? attrs.secondaryColors : [],
+            pattern: String(attrs.pattern || 'SOLID').trim().toUpperCase(),
+            fabric: String(attrs.fabric || 'COTTON').trim().toUpperCase(),
+            fit: String(attrs.fit || 'REGULAR_FIT').trim().toUpperCase(),
+            neckline: String(attrs.neckline || 'Round Neck').trim(),
+            sleeveStyle: String(attrs.sleeveStyle || 'HALF_SLEEVE').trim().toUpperCase(),
+            sleeveLength: String(attrs.sleeveStyle || attrs.sleeveLength || 'HALF_SLEEVE').trim().toUpperCase(),
+            occasions: Array.isArray(attrs.occasions) ? attrs.occasions : (attrs.occasion ? [attrs.occasion] : ['CASUAL']),
+            seasons: Array.isArray(attrs.seasons) ? attrs.seasons : (attrs.season ? [attrs.season] : ['ALL_SEASON']),
+            styleAesthetic: String(attrs.styleAesthetic || attrs.style || 'CASUAL').trim().toUpperCase(),
+          },
+          tags: Array.isArray(parsed.tags) && parsed.tags.length > 0
+            ? parsed.tags
+            : [primaryColor, parsed.subCategory, parsed.category].filter(Boolean),
+        };
+      }
+    } catch (err) {
+      console.warn(`[aiVision.analyzeSingleCloth] Model ${modelName} failed: ${err.message}`);
+    }
+  }
+
+  return {
+    name: 'Dress Item',
+    category: 'UPPER_WEAR',
+    subCategory: 'T-Shirt',
+    color: 'Multi-Color',
+    attributes: {
+      primaryColor: 'Multi-Color',
+      secondaryColors: [],
+      pattern: 'SOLID',
+      fabric: 'COTTON',
+      fit: 'REGULAR_FIT',
+      neckline: 'Round Neck',
+      sleeveStyle: 'HALF_SLEEVE',
+      occasions: ['CASUAL'],
+      seasons: ['ALL_SEASON'],
+      styleAesthetic: 'CASUAL',
+    },
+    tags: ['Cloth', 'Upper Wear'],
+  };
+};
+
 module.exports = {
+  analyzeSingleClothWithGemini,
   analyzeImageWithGemini,
   analyzeWithOpenAIVision,
   cropDetectedItems,

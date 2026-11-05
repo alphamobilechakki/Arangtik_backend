@@ -1,10 +1,13 @@
 const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
 const crypto = require('crypto');
 const Wardrobe = require('../wardrobe/wardrobe.model');
 const WardrobeItem = require('../wardrobe/wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const aiVisionService = require('./aiVision.service');
 const { formatUploadUrl } = require('../../utils/url.util');
+const { PYTHON_SERVICE_URL, PYTHON_BG_REMOVAL_URL, PYTHON_SERVICE_TIMEOUT_MS } = require('../../config/env.config');
 
 /**
  * Deterministic SHA-256 canonical hash of original source image
@@ -24,6 +27,415 @@ const calculateSourceImageHash = (filePathOrBuffer) => {
 /**
  * Analyze an uploaded photo from gallery or camera to detect garments, crop them, and match with wardrobe
  */
+
+/**
+ * Calls Python AI Microservice for Person Parsing, Garment Splitting, and Inpainting
+ * @param {string} imagePath Local path to original image file
+ * @param {string} mode 'with_person' | 'without_person'
+ * @returns {Promise<Array<{ localPath: string, url: string, filename: string, garmentType?: string, isFallback?: boolean }>>}
+ */
+const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
+  if (!fs.existsSync(imagePath)) {
+    throw new ApiError(400, `Image file not found: ${imagePath}`);
+  }
+
+  const normalizedMode = String(mode).toLowerCase().includes('without') ? 'without_person' : 'with_person';
+  const baseServiceUrl = (PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const bgRemovalUrl = (PYTHON_BG_REMOVAL_URL || 'https://bg.arangtik.com/api/background-removal').replace(/\/+$/, '');
+  const fileName = path.basename(imagePath);
+  const ext = path.extname(imagePath).toLowerCase();
+  const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+  const fileBuffer = fs.readFileSync(imagePath);
+
+  // Determine endpoints based on mode:
+  // - without_person: Live Background Removal endpoint (https://bg.arangtik.com/api/background-removal)
+  // - with_person: Person Parsing & Garment Splitting endpoint
+  let candidateEndpoints = [];
+  if (normalizedMode === 'without_person') {
+    candidateEndpoints = [
+      bgRemovalUrl,
+      bgRemovalUrl.replace(/^https:/i, 'http:'),
+      'https://bg.arangtik.com/api/background-removal',
+      'http://bg.arangtik.com/api/background-removal',
+      `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/api/background-removal`,
+      `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/background-removal`,
+    ];
+  } else {
+    candidateEndpoints = [
+      process.env.PYTHON_PARSING_SERVICE_URL || `${baseServiceUrl}/process`,
+      `${baseServiceUrl}/parse-garments`,
+      baseServiceUrl,
+      baseServiceUrl.replace(/^https:/i, 'http:'),
+    ];
+  }
+  candidateEndpoints = candidateEndpoints.filter(Boolean).filter((u, idx, arr) => arr.indexOf(u) === idx);
+
+  console.log(`[PythonGarmentAI] Calling Python microservice (mode: ${normalizedMode}, endpoints: ${candidateEndpoints[0]}, file: ${fileName})`);
+
+  let response = null;
+  let lastError = null;
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const formData = new FormData();
+      const fileBlob = new Blob([fileBuffer], { type: mimeType });
+      formData.append('image', fileBlob, fileName);
+      formData.append('file', fileBlob, fileName);
+      formData.append('mode', normalizedMode);
+      formData.append('type', normalizedMode);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PYTHON_SERVICE_TIMEOUT_MS || 30000);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        response = res;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  // Graceful fallback if Python service is offline / unreachable during development
+  if (!response) {
+    console.warn(`[PythonGarmentAI] Python service unreachable at ${baseServiceUrl} (${lastError?.message || 'Check connection'}). Fallback to original image.`);
+    return [
+      {
+        localPath: imagePath,
+        url: formatUploadUrl(`/uploads/${fileName}`),
+        filename: fileName,
+        isFallback: true,
+      },
+    ];
+  }
+
+  const cropsDir = path.join(__dirname, '../../../uploads/crops');
+  if (!fs.existsSync(cropsDir)) {
+    fs.mkdirSync(cropsDir, { recursive: true });
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+
+  // Case A: Binary image stream returned directly
+  if (contentType.startsWith('image/')) {
+    const arrayBuffer = await response.arrayBuffer();
+    const outFilename = `garment_${Date.now()}_0.webp`;
+    const outPath = path.join(cropsDir, outFilename);
+    await sharp(Buffer.from(arrayBuffer)).webp({ quality: 90 }).toFile(outPath);
+
+    return [
+      {
+        localPath: outPath,
+        url: formatUploadUrl(`/uploads/crops/${outFilename}`),
+        filename: outFilename,
+      },
+    ];
+  }
+
+  // Case B: JSON Response
+  try {
+    const jsonResult = await response.json();
+    const items = jsonResult.garments || jsonResult.items || jsonResult.images || jsonResult.results || [];
+    const processedList = [];
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const base64Data = it.image || it.imageBase64 || it.data || (typeof it === 'string' ? it : null);
+        const garmentType = it.garmentType || it.type || it.label || null;
+
+        if (base64Data && typeof base64Data === 'string' && (base64Data.startsWith('data:') || base64Data.length > 200)) {
+          const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+          const buf = Buffer.from(cleanBase64, 'base64');
+          const outName = `garment_${Date.now()}_${i}.webp`;
+          const outPath = path.join(cropsDir, outName);
+          await sharp(buf).webp({ quality: 90 }).toFile(outPath);
+
+          processedList.push({
+            localPath: outPath,
+            url: formatUploadUrl(`/uploads/crops/${outName}`),
+            filename: outName,
+            garmentType,
+          });
+        } else if (it.url || it.imageUrl) {
+          processedList.push({
+            localPath: null,
+            url: it.url || it.imageUrl,
+            filename: path.basename(it.url || it.imageUrl),
+            garmentType,
+          });
+        }
+      }
+    } else if (jsonResult.image || jsonResult.imageUrl || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || jsonResult.result) {
+      const singleData = jsonResult.image || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || (typeof jsonResult.result === 'string' ? jsonResult.result : null);
+      if (singleData && typeof singleData === 'string' && (singleData.startsWith('data:') || singleData.length > 200)) {
+        const cleanBase64 = singleData.replace(/^data:image\/\w+;base64,/, '');
+        const buf = Buffer.from(cleanBase64, 'base64');
+        const outName = `garment_${Date.now()}_0.webp`;
+        const outPath = path.join(cropsDir, outName);
+        await sharp(buf).webp({ quality: 90 }).toFile(outPath);
+
+        processedList.push({
+          localPath: outPath,
+          url: formatUploadUrl(`/uploads/crops/${outName}`),
+          filename: outName,
+        });
+      } else if (jsonResult.imageUrl) {
+        processedList.push({
+          localPath: null,
+          url: jsonResult.imageUrl,
+          filename: path.basename(jsonResult.imageUrl),
+        });
+      }
+    }
+
+    if (processedList.length > 0) {
+      return processedList;
+    }
+  } catch (parseErr) {
+    console.warn('[PythonGarmentAI] Error parsing Python JSON response:', parseErr.message);
+  }
+
+  return [
+    {
+      localPath: imagePath,
+      url: formatUploadUrl(`/uploads/${fileName}`),
+      filename: fileName,
+      isFallback: true,
+    },
+  ];
+};
+
+/**
+ * Universal Wardrobe Item Processing & Persistence Pipeline:
+ * 1. Takes uploaded image + mode ('with_person' | 'without_person')
+ * 2. If 'with_person', Python handles person parsing, garment splitting & inpainting
+ * 3. Node.js analyzes clean garment images with Gemini Vision for fashion taxonomy & attributes
+ * 4. Checks duplicate & saves WardrobeItem to MongoDB
+ */
+/**
+ * Asynchronously processes garment with Python & Gemini in the background
+ * without blocking user response.
+ */
+const runBackgroundClothingPipeline = async (itemId, userId, file, options = {}) => {
+  const mode = options.mode || options.personMode || options.type || (options.withPerson === 'true' || options.withPerson === true ? 'with_person' : 'without_person');
+  const targetWardrobeId = options.wardrobeId || null;
+  const originalImageUrl = formatUploadUrl(`/uploads/${file.filename}`);
+
+  console.log(`[BackgroundWorker] Starting clothing processing for itemId: ${itemId}, mode: ${mode}`);
+
+  try {
+    // 1. Send image to Python for parsing, splitting & inpainting
+    const processedGarments = await callPythonGarmentService(file.path, mode);
+    const primaryGarment = processedGarments[0] || {
+      localPath: file.path,
+      url: originalImageUrl,
+      filename: file.filename,
+      isFallback: true,
+    };
+
+    // 2. Analyze primary clean garment with Gemini Vision (Node.js)
+    let aiAttributes = {};
+    try {
+      aiAttributes = await aiVisionService.analyzeSingleClothWithGemini(primaryGarment.localPath || file.path);
+    } catch (gErr) {
+      console.warn(`[BackgroundWorker] Gemini analysis warning for item ${itemId}: ${gErr.message}`);
+      aiAttributes = {
+        name: options.name || 'Dress Item',
+        category: options.category || (primaryGarment.garmentType === 'lower_wear' ? 'LOWER_WEAR' : 'UPPER_WEAR'),
+        subCategory: options.subCategory || 'Other',
+        color: options.color || 'Multi-Color',
+        attributes: {},
+        tags: ['Cloth'],
+      };
+    }
+
+    const finalName = options.name || aiAttributes.name || 'Dress Item';
+    const finalCategory = options.category || aiAttributes.category || 'UPPER_WEAR';
+    const finalSubCategory = options.subCategory || aiAttributes.subCategory || '';
+    const finalColor = options.color || aiAttributes.color || aiAttributes.attributes?.primaryColor || '';
+    const primaryImgUrl = primaryGarment.url || originalImageUrl;
+
+    // 3. Update initial WardrobeItem to COMPLETED
+    await WardrobeItem.findByIdAndUpdate(itemId, {
+      name: finalName,
+      category: finalCategory,
+      subCategory: finalSubCategory,
+      color: finalColor,
+      pattern: options.pattern || aiAttributes.attributes?.pattern || 'SOLID',
+      fabric: options.fabric || aiAttributes.attributes?.fabric || 'COTTON',
+      fit: options.fit || aiAttributes.attributes?.fit || 'REGULAR_FIT',
+      neckline: options.neckline || aiAttributes.attributes?.neckline || 'Round Neck',
+      sleeveLength: options.sleeveLength || aiAttributes.attributes?.sleeveLength || 'HALF_SLEEVE',
+      sleeveStyle: options.sleeveStyle || aiAttributes.attributes?.sleeveStyle || 'HALF_SLEEVE',
+      occasion: options.occasion || aiAttributes.attributes?.occasions || ['CASUAL'],
+      season: options.season || aiAttributes.attributes?.seasons || ['ALL_SEASON'],
+      style: options.style || aiAttributes.attributes?.styleAesthetic || 'CASUAL',
+      tags: options.tags || aiAttributes.tags || [],
+      attributes: aiAttributes.attributes || {},
+      images: [
+        {
+          url: primaryImgUrl,
+          type: primaryGarment.isFallback ? 'ORIGINAL' : 'SEGMENTED',
+          isPrimary: true,
+          filename: primaryGarment.filename || file.filename,
+        },
+        {
+          url: originalImageUrl,
+          type: 'ORIGINAL',
+          isPrimary: false,
+          filename: file.filename,
+        },
+      ],
+      processingStatus: 'COMPLETED',
+    });
+
+    console.log(`✅ [BackgroundWorker] Completed processing item ${itemId}: "${finalName}" (${finalCategory})`);
+
+    // 4. If Python split multiple garments (e.g. Upper wear + Lower wear separated from 1 photo)
+    if (processedGarments.length > 1) {
+      for (let idx = 1; idx < processedGarments.length; idx++) {
+        const extraGarment = processedGarments[idx];
+        try {
+          const extraAi = await aiVisionService.analyzeSingleClothWithGemini(extraGarment.localPath || file.path);
+          await WardrobeItem.create({
+            userId,
+            wardrobeId: targetWardrobeId,
+            name: extraAi.name || 'Dress Item',
+            category: extraAi.category || (extraGarment.garmentType === 'lower_wear' ? 'LOWER_WEAR' : 'UPPER_WEAR'),
+            subCategory: extraAi.subCategory || '',
+            color: extraAi.color || '',
+            pattern: extraAi.attributes?.pattern || 'SOLID',
+            fabric: extraAi.attributes?.fabric || 'COTTON',
+            fit: extraAi.attributes?.fit || 'REGULAR_FIT',
+            neckline: extraAi.attributes?.neckline || 'Round Neck',
+            sleeveLength: extraAi.attributes?.sleeveLength || 'HALF_SLEEVE',
+            sleeveStyle: extraAi.attributes?.sleeveStyle || 'HALF_SLEEVE',
+            occasion: extraAi.attributes?.occasions || ['CASUAL'],
+            season: extraAi.attributes?.seasons || ['ALL_SEASON'],
+            style: extraAi.attributes?.styleAesthetic || 'CASUAL',
+            tags: extraAi.tags || [],
+            attributes: extraAi.attributes || {},
+            images: [
+              {
+                url: extraGarment.url || originalImageUrl,
+                type: 'SEGMENTED',
+                isPrimary: true,
+                filename: extraGarment.filename || file.filename,
+              },
+            ],
+            sourceType: options.sourceType || 'CAMERA_CAPTURE',
+            sourcePhotoUrl: originalImageUrl,
+            sourceImageIndex: idx,
+            processingStatus: 'COMPLETED',
+            isActive: true,
+          });
+          console.log(`✅ [BackgroundWorker] Extra split garment created from photo: "${extraAi.name}"`);
+        } catch (extraErr) {
+          console.warn('[BackgroundWorker] Extra garment creation warning:', extraErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`❌ [BackgroundWorker] Failed to process item ${itemId}: ${err.message}`);
+    await WardrobeItem.findByIdAndUpdate(itemId, {
+      processingStatus: 'FAILED',
+      name: options.name || 'Dress Item',
+      category: options.category || 'UPPER_WEAR',
+    });
+  }
+};
+
+/**
+ * Universal Wardrobe Item Processing & Persistence Pipeline:
+ * 1. Takes uploaded image + mode ('with_person' | 'without_person')
+ * 2. Immediately saves item with status='PROCESSING' and returns to UI in <200ms
+ * 3. Asynchronously triggers Python parsing, garment split, and Gemini cloth analysis
+ */
+const processAndSaveWardrobeItem = async (userId, file, options = {}) => {
+  if (!file) {
+    throw new ApiError(400, 'Please upload an image');
+  }
+
+  const mode = options.mode || options.personMode || options.type || (options.withPerson === 'true' || options.withPerson === true ? 'with_person' : 'without_person');
+  let targetWardrobeId = options.wardrobeId || null;
+  if (!targetWardrobeId) {
+    const defaultW = (await Wardrobe.findOne({ userId, isDefault: true })) || (await Wardrobe.findOne({ userId }));
+    if (defaultW) targetWardrobeId = defaultW._id;
+  }
+
+  const sourceImageHash = calculateSourceImageHash(file.path);
+  const originalImageUrl = formatUploadUrl(`/uploads/${file.filename}`);
+
+  // Duplicate check
+  const isOverride = options.allowDuplicate === true || options.allowDuplicate === 'true' || options.forceAdd === true || options.forceAdd === 'true';
+  if (sourceImageHash && !isOverride) {
+    const existing = await WardrobeItem.findOne({
+      userId,
+      ...(targetWardrobeId ? { wardrobeId: targetWardrobeId } : {}),
+      sourceImageHash,
+    });
+
+    if (existing) {
+      const doc = existing.toObject ? existing.toObject() : existing;
+      doc.isDuplicate = true;
+      doc.isExistingItem = true;
+      return {
+        success: true,
+        isDuplicate: true,
+        item: doc,
+        items: [],
+        duplicates: [doc],
+      };
+    }
+  }
+
+  // Create immediate item with PROCESSING status
+  const initialItem = await WardrobeItem.create({
+    userId,
+    wardrobeId: targetWardrobeId,
+    name: options.name || 'Analyzing Outfit...',
+    category: options.category || 'PENDING',
+    subCategory: options.subCategory || '',
+    color: options.color || '',
+    processingStatus: 'PROCESSING',
+    images: [
+      {
+        url: originalImageUrl,
+        type: 'ORIGINAL',
+        isPrimary: true,
+        filename: file.filename,
+      },
+    ],
+    sourceType: options.sourceType || 'CAMERA_CAPTURE',
+    sourcePhotoUrl: originalImageUrl,
+    sourceImageHash,
+    isActive: true,
+  });
+
+  // Launch async processing in the background (fire-and-forget, non-blocking)
+  setImmediate(() => {
+    runBackgroundClothingPipeline(initialItem._id, userId, file, { ...options, mode, wardrobeId: targetWardrobeId })
+      .catch((err) => console.error('[BackgroundWorker] Uncaught async error:', err.message));
+  });
+
+  return {
+    success: true,
+    isProcessing: true,
+    mode,
+    item: initialItem,
+    items: [initialItem],
+    duplicates: [],
+  };
+};
+
 const analyzePhoto = async (userId, file, options = {}) => {
   if (!file) {
     throw new ApiError(400, 'Please upload an image to analyze');
@@ -106,28 +518,8 @@ const analyzePhoto = async (userId, file, options = {}) => {
     }
   }
 
-  // Support either pre-detected faceBoxes (from Step 1) or on-demand face verification
-  let userFaceBoxes = options.faceBoxes || [];
-  if (typeof userFaceBoxes === 'string') {
-    try {
-      userFaceBoxes = JSON.parse(userFaceBoxes);
-    } catch (e) {
-      userFaceBoxes = [];
-    }
-  }
-  if (userFaceBoxes.length === 0 && (options.verifyFace === true || options.verifyFace === 'true')) {
-    try {
-      const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-      const scanResult = await faceRecognitionService.scanGalleryImage(userId, file.path, { filename: file.filename }, null, targetWardrobeId);
-      if (scanResult.matched && scanResult.matchedFaces?.length > 0) {
-        userFaceBoxes = scanResult.matchedFaces.map((f) => f.boundingBox);
-      }
-    } catch (err) {
-      // Optional face scan error ignored
-    }
-  }
-
-  // 1. Detect garments and extract attributes using AI (filtering for matched user if available)
+  // 1. Detect garments and extract attributes
+  const userFaceBoxes = [];
   const rawDetections = await aiVisionService.analyzeImageWithGemini(file.path, userFaceBoxes);
 
   // 2. Crop detected clothing pieces from the original image
@@ -307,8 +699,7 @@ const scanGalleryPhoto = async (userId, file, options = {}) => {
     }
   }
 
-  const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-  const fileMeta = {
+    const fileMeta = {
     filename: file.filename,
     size: file.size,
     mimetype: file.mimetype,
@@ -667,8 +1058,7 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
     throw new ApiError(400, 'Please provide at least one photo from the gallery to ingest');
   }
 
-  const faceRecognitionService = require('../faceRecognition/faceRecognition.service');
-  const autoCreateNewItems = options.autoCreateNewItems !== false;
+    const autoCreateNewItems = options.autoCreateNewItems !== false;
   const threshold = options.threshold || null;
 
   let targetOwnerName = '';
@@ -948,6 +1338,9 @@ const ingestGalleryPhotos = async (userId, files = [], options = {}) => {
 };
 
 module.exports = {
+  runBackgroundClothingPipeline,
+  callPythonGarmentService,
+  processAndSaveWardrobeItem,
   calculateSourceImageHash,
   analyzePhoto,
   scanGalleryPhoto,
