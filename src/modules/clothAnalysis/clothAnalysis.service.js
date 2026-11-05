@@ -164,16 +164,35 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
             filename: outName,
             garmentType,
           });
-        } else if (it.url || it.imageUrl) {
+        } else if (it.url || it.imageUrl || it.output_png_url || it.png_url || it.output_url) {
+          const rawUrl = it.output_png_url || it.png_url || it.output_url || it.imageUrl || it.url;
+          const fullUrl = rawUrl.startsWith('http') ? rawUrl : `https://bg.arangtik.com${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+          let savedLocalPath = null;
+          let savedFilename = path.basename(fullUrl);
+
+          try {
+            const dlRes = await fetch(fullUrl);
+            if (dlRes.ok) {
+              const dlBuf = Buffer.from(await dlRes.arrayBuffer());
+              const outName = `garment_${Date.now()}_${i}.webp`;
+              const outPath = path.join(cropsDir, outName);
+              await sharp(dlBuf).webp({ quality: 90 }).toFile(outPath);
+              savedLocalPath = outPath;
+              savedFilename = outName;
+            }
+          } catch (dlErr) {
+            console.warn(`[PythonGarmentAI] Could not download remote cutout from ${fullUrl}:`, dlErr.message);
+          }
+
           processedList.push({
-            localPath: null,
-            url: it.url || it.imageUrl,
-            filename: path.basename(it.url || it.imageUrl),
+            localPath: savedLocalPath,
+            url: savedLocalPath ? formatUploadUrl(`/uploads/crops/${savedFilename}`) : fullUrl,
+            filename: savedFilename,
             garmentType,
           });
         }
       }
-    } else if (jsonResult.image || jsonResult.imageUrl || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || jsonResult.result) {
+    } else if (jsonResult.image || jsonResult.imageUrl || jsonResult.output_png_url || jsonResult.png_url || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || jsonResult.result) {
       const singleData = jsonResult.image || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || (typeof jsonResult.result === 'string' ? jsonResult.result : null);
       if (singleData && typeof singleData === 'string' && (singleData.startsWith('data:') || singleData.length > 200)) {
         const cleanBase64 = singleData.replace(/^data:image\/\w+;base64,/, '');
@@ -187,12 +206,33 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
           url: formatUploadUrl(`/uploads/crops/${outName}`),
           filename: outName,
         });
-      } else if (jsonResult.imageUrl) {
-        processedList.push({
-          localPath: null,
-          url: jsonResult.imageUrl,
-          filename: path.basename(jsonResult.imageUrl),
-        });
+      } else {
+        const rawSingleUrl = jsonResult.output_png_url || jsonResult.png_url || jsonResult.output_url || jsonResult.imageUrl || jsonResult.url;
+        if (rawSingleUrl) {
+          const fullSingleUrl = rawSingleUrl.startsWith('http') ? rawSingleUrl : `https://bg.arangtik.com${rawSingleUrl.startsWith('/') ? '' : '/'}${rawSingleUrl}`;
+          let savedLocalPath = null;
+          let savedFilename = path.basename(fullSingleUrl);
+
+          try {
+            const dlRes = await fetch(fullSingleUrl);
+            if (dlRes.ok) {
+              const dlBuf = Buffer.from(await dlRes.arrayBuffer());
+              const outName = `garment_${Date.now()}_0.webp`;
+              const outPath = path.join(cropsDir, outName);
+              await sharp(dlBuf).webp({ quality: 90 }).toFile(outPath);
+              savedLocalPath = outPath;
+              savedFilename = outName;
+            }
+          } catch (dlErr) {
+            console.warn(`[PythonGarmentAI] Could not download remote cutout from ${fullSingleUrl}:`, dlErr.message);
+          }
+
+          processedList.push({
+            localPath: savedLocalPath,
+            url: savedLocalPath ? formatUploadUrl(`/uploads/crops/${savedFilename}`) : fullSingleUrl,
+            filename: savedFilename,
+          });
+        }
       }
     }
 
