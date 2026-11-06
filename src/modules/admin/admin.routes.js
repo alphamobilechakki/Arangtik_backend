@@ -10,6 +10,7 @@ const categoryServiceRoutes = require('../categoryService/categoryService.routes
 const storeTypeRoutes = require('./storeType/storeType.routes');
 const densityCategoryRoutes = require('./densityCategory/densityCategory.routes');
 const productRoutes = require('./product/product.routes');
+const adminSubscriptionRoutes = require('./subscription/adminSubscription.routes');
 
 // ── Vendor & Order Management ──────────────────────────────
 const adminVendorRoutes = require('./vendor/adminVendor.routes');
@@ -29,6 +30,7 @@ router.use('/services', categoryServiceRoutes);
 router.use('/store-types', storeTypeRoutes);
 router.use('/density-categories', densityCategoryRoutes);
 router.use('/products', productRoutes);
+router.use('/subscription', adminSubscriptionRoutes);
 
 // ── Business Management Routes ──────────────────────────────
 router.use('/vendors', adminVendorRoutes);

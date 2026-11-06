@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const laundryController = require('./laundry.controller');
 const { protect } = require('../../../middlewares/auth.middleware');
+const { checkQuota } = require('../../../middlewares/quota.middleware');
 
 // All laundry endpoints require authentication
 router.use(protect);
@@ -13,7 +14,7 @@ router.post('/vendors/eligible', laundryController.getEligibleVendors);
 
 // Laundry Work Orders
 router.route('/orders')
-  .post(laundryController.createOrder)
+  .post(checkQuota('laundryOrders'), laundryController.createOrder)
   .get(laundryController.getOrders);
 
 router.route('/orders/:id')

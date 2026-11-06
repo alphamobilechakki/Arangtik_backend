@@ -2963,3 +2963,577 @@ The KitchenBox module manages IoT smart kitchen storage containers. After scanni
 }
 ```
 
+
+
+---
+
+## 14. Subscription & Razorpay Payment Module (`/api/subscription` & `/api/admin/subscription`)
+
+The Subscription Module provides complete lifecycle support for plan discovery, Razorpay order generation, HMAC-SHA256 signature verification, quota snapshots, rolling monthly credit usage tracking, and administrative control over prices and feature limits.
+
+### 14.1 User / Customer Endpoints (`/api/subscription`)
+
+#### 14.1.1 Get Public Active Subscription Plans
+- **Method / Endpoint:** `GET /api/subscription/plans`
+- **Access:** Public
+- **Description:** Returns all active subscription tiers (**Basic**, **Plus**, **Pro**) with their dynamic pricing tiers (1, 3, 6, 12 months with/without jewellery), feature limits, and capability flags.
+
+##### Request
+```http
+GET /api/subscription/plans HTTP/1.1
+Host: api.arangtik.com
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Active plans retrieved successfully",
+  "data": [
+    {
+      "_id": "672b14649bb77b5a5ef01a11",
+      "code": "basic",
+      "name": "Basic",
+      "description": "Essential personal wardrobe organization and styling basics",
+      "displayOrder": 1,
+      "isPopular": false,
+      "pricing": [
+        { "durationMonths": 1, "priceWithout": 99, "priceWith": 199 },
+        { "durationMonths": 6, "priceWithout": 499, "priceWith": 999 },
+        { "durationMonths": 12, "priceWithout": 399, "priceWith": 599 }
+      ],
+      "limits": {
+        "wardrobes": 2,
+        "clothingItems": 30,
+        "aiOutfitSuggestions": 5,
+        "virtualTryOn": 2,
+        "laundryOrders": 2,
+        "favouriteOutfits": 10,
+        "jewelleryCollections": 1,
+        "jewelleryItems": 10
+      },
+      "features": {
+        "basicCategorization": true,
+        "occasionSuggestions": false,
+        "weatherSuggestions": false,
+        "colourSuggestions": false,
+        "jewelleryEnabled": false
+      },
+      "isActive": true
+    },
+    {
+      "_id": "672b14649bb77b5a5ef01a12",
+      "code": "plus",
+      "name": "Plus",
+      "description": "Smart styling with occasion, weather and color-coordinated insights",
+      "displayOrder": 2,
+      "isPopular": true,
+      "pricing": [
+        { "durationMonths": 1, "priceWithout": 199, "priceWith": 299 },
+        { "durationMonths": 6, "priceWithout": 999, "priceWith": 1499 },
+        { "durationMonths": 12, "priceWithout": 1999, "priceWith": 2999 }
+      ],
+      "limits": {
+        "wardrobes": 5,
+        "clothingItems": 70,
+        "aiOutfitSuggestions": 15,
+        "virtualTryOn": 5,
+        "laundryOrders": 5,
+        "favouriteOutfits": 30,
+        "jewelleryCollections": 3,
+        "jewelleryItems": 45
+      },
+      "features": {
+        "basicCategorization": true,
+        "occasionSuggestions": true,
+        "weatherSuggestions": true,
+        "colourSuggestions": true,
+        "jewelleryEnabled": false
+      },
+      "isActive": true
+    },
+    {
+      "_id": "672b14649bb77b5a5ef01a13",
+      "code": "pro",
+      "name": "Pro",
+      "description": "Unlimited style mastery with maximum wardrobes, AI try-ons, and limits",
+      "displayOrder": 3,
+      "isPopular": false,
+      "pricing": [
+        { "durationMonths": 1, "priceWithout": 399, "priceWith": 599 },
+        { "durationMonths": 6, "priceWithout": 1799, "priceWith": 2699 },
+        { "durationMonths": 12, "priceWithout": 3599, "priceWith": 5399 }
+      ],
+      "limits": {
+        "wardrobes": 10,
+        "clothingItems": 150,
+        "aiOutfitSuggestions": 30,
+        "virtualTryOn": 10,
+        "laundryOrders": 10,
+        "favouriteOutfits": 80,
+        "jewelleryCollections": 5,
+        "jewelleryItems": 125
+      },
+      "features": {
+        "basicCategorization": true,
+        "occasionSuggestions": true,
+        "weatherSuggestions": true,
+        "colourSuggestions": true,
+        "jewelleryEnabled": false
+      },
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+#### 14.1.2 Create Razorpay Subscription Order
+- **Method / Endpoint:** `POST /api/subscription/create-order`
+- **Access:** Private (`protect`)
+- **Description:** Creates an official Razorpay order (converted to paise) and registers a `pending` subscription record in MongoDB.
+
+##### Request
+```http
+POST /api/subscription/create-order HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "planCode": "plus",
+  "durationMonths": 1,
+  "includesJewellery": false
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Razorpay order created successfully",
+  "data": {
+    "orderId": "order_Ox871Fas899AqL",
+    "amount": 19900,
+    "currency": "INR",
+    "keyId": "rzp_live_xxxxxxxxxxxx",
+    "plan": {
+      "code": "plus",
+      "name": "Plus",
+      "durationMonths": 1,
+      "includesJewellery": false,
+      "priceInRupees": 199
+    }
+  }
+}
+```
+
+---
+
+#### 14.1.3 Verify Razorpay Payment & Activate Subscription
+- **Method / Endpoint:** `POST /api/subscription/verify`
+- **Access:** Private (`protect`)
+- **Description:** Verifies the cryptographic HMAC-SHA256 signature generated by Razorpay Checkout. Activates the subscription, freezes the current plan limits & features into `limitsSnapshot` (protecting against future admin edits), computes the expiration timestamp, and initializes rolling 30-day monthly quotas.
+
+##### Request
+```http
+POST /api/subscription/verify HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "razorpayOrderId": "order_Ox871Fas899AqL",
+  "razorpayPaymentId": "pay_Ox8923Nks091Ac",
+  "razorpaySignature": "9b1d7cfbf88df253a652d8c3621768469d84635848bbdc0658403bc68112d8a4"
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Subscription activated successfully",
+  "data": {
+    "success": true,
+    "subscription": {
+      "_id": "672b19289bb77b5a5ef01a22",
+      "userId": "670c53802e5a1b32d201a055",
+      "planId": "672b14649bb77b5a5ef01a12",
+      "planCode": "plus",
+      "planName": "Plus",
+      "durationMonths": 1,
+      "includesJewellery": false,
+      "status": "active",
+      "razorpayOrderId": "order_Ox871Fas899AqL",
+      "razorpayPaymentId": "pay_Ox8923Nks091Ac",
+      "amountPaid": 199,
+      "currency": "INR",
+      "startedAt": "2026-11-06T06:15:00.000Z",
+      "expiresAt": "2026-12-06T06:15:00.000Z",
+      "monthlyUsage": {
+        "aiOutfitSuggestions": 0,
+        "virtualTryOn": 0,
+        "laundryOrders": 0,
+        "cycleStartAt": "2026-11-06T06:15:00.000Z",
+        "cycleEndAt": "2026-12-06T06:15:00.000Z"
+      },
+      "limitsSnapshot": {
+        "wardrobes": 5,
+        "clothingItems": 70,
+        "aiOutfitSuggestions": 15,
+        "virtualTryOn": 5,
+        "laundryOrders": 5,
+        "favouriteOutfits": 30,
+        "jewelleryCollections": 3,
+        "jewelleryItems": 45
+      },
+      "featuresSnapshot": {
+        "basicCategorization": true,
+        "occasionSuggestions": true,
+        "weatherSuggestions": true,
+        "colourSuggestions": true,
+        "jewelleryEnabled": false
+      }
+    }
+  }
+}
+```
+
+---
+
+#### 14.1.4 Get Current Logged-in User Subscription Status
+- **Method / Endpoint:** `GET /api/subscription/my`
+- **Access:** Private (`protect`)
+- **Description:** Returns the active subscription details, snapshot limits, and current monthly rolling usage. If the 30-day quota cycle has expired, automatically cycles the quota window and resets counters.
+
+##### Request
+```http
+GET /api/subscription/my HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+```
+
+##### Response (`200 OK` - Active Subscription)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Current subscription retrieved successfully",
+  "data": {
+    "hasActiveSubscription": true,
+    "subscription": {
+      "_id": "672b19289bb77b5a5ef01a22",
+      "userId": "670c53802e5a1b32d201a055",
+      "planCode": "plus",
+      "planName": "Plus",
+      "durationMonths": 1,
+      "status": "active",
+      "amountPaid": 199,
+      "startedAt": "2026-11-06T06:15:00.000Z",
+      "expiresAt": "2026-12-06T06:15:00.000Z",
+      "monthlyUsage": {
+        "aiOutfitSuggestions": 4,
+        "virtualTryOn": 1,
+        "laundryOrders": 2,
+        "cycleStartAt": "2026-11-06T06:15:00.000Z",
+        "cycleEndAt": "2026-12-06T06:15:00.000Z"
+      },
+      "limitsSnapshot": {
+        "wardrobes": 5,
+        "clothingItems": 70,
+        "aiOutfitSuggestions": 15,
+        "virtualTryOn": 5,
+        "laundryOrders": 5,
+        "favouriteOutfits": 30
+      }
+    }
+  }
+}
+```
+
+##### Response (`200 OK` - Free / Expired Tier)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Current subscription retrieved successfully",
+  "data": {
+    "hasActiveSubscription": false,
+    "subscription": null
+  }
+}
+```
+
+---
+
+#### 14.1.5 Razorpay Server Webhook Endpoint
+- **Method / Endpoint:** `POST /api/subscription/webhook`
+- **Access:** Public (Protected by `X-Razorpay-Signature` validation)
+- **Description:** Idempotent server-to-server webhook handler for events like `payment.captured` or `order.paid` to guarantee subscription activation even if user closes the app prematurely.
+
+##### Request
+```http
+POST /api/subscription/webhook HTTP/1.1
+Host: api.arangtik.com
+X-Razorpay-Signature: 6e9114ad044434ff1b4...
+Content-Type: application/json
+
+{
+  "entity": "event",
+  "event": "payment.captured",
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_Ox8923Nks091Ac",
+        "order_id": "order_Ox871Fas899AqL",
+        "amount": 19900,
+        "status": "captured"
+      }
+    }
+  }
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Webhook handled successfully",
+  "data": {
+    "status": "processed"
+  }
+}
+```
+
+---
+
+### 14.2 Admin Management Endpoints (`/api/admin/subscription`)
+
+All admin routes require Admin Bearer Authentication or Admin API Key (`x-api-key`).
+
+#### 14.2.1 Get All Subscription Plans (Admin View)
+- **Method / Endpoint:** `GET /api/admin/subscription/plans`
+- **Access:** Admin (`protectAdmin`)
+- **Query Parameters:**
+  - `isActive` (optional boolean, e.g. `?isActive=true`)
+
+##### Request
+```http
+GET /api/admin/subscription/plans HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Subscription plans retrieved successfully",
+  "data": [
+    {
+      "_id": "672b14649bb77b5a5ef01a11",
+      "code": "basic",
+      "name": "Basic",
+      "pricing": [
+        { "durationMonths": 1, "priceWithout": 99, "priceWith": 199 },
+        { "durationMonths": 6, "priceWithout": 499, "priceWith": 999 },
+        { "durationMonths": 12, "priceWithout": 399, "priceWith": 599 }
+      ],
+      "limits": {
+        "wardrobes": 2,
+        "clothingItems": 30,
+        "aiOutfitSuggestions": 5,
+        "virtualTryOn": 2,
+        "laundryOrders": 2,
+        "favouriteOutfits": 10
+      },
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+#### 14.2.2 Update Plan Pricing & Limits Dynamically
+- **Method / Endpoint:** `PUT /api/admin/subscription/plans/:id`
+- **Access:** Admin (`protectAdmin`)
+- **Description:** Allows the admin to change prices for any duration tier, edit quotas (wardrobes, clothing items, monthly AI try-ons), and toggle features (e.g. enabling the jewellery tier).
+
+##### Request
+```http
+PUT /api/admin/subscription/plans/672b14649bb77b5a5ef01a11 HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+Content-Type: application/json
+
+{
+  "name": "Basic",
+  "description": "Essential personal wardrobe organization and styling basics",
+  "isPopular": false,
+  "pricing": [
+    { "durationMonths": 1, "priceWithout": 99, "priceWith": 199 },
+    { "durationMonths": 6, "priceWithout": 499, "priceWith": 999 },
+    { "durationMonths": 12, "priceWithout": 399, "priceWith": 599 }
+  ],
+  "limits": {
+    "wardrobes": 3,
+    "clothingItems": 35,
+    "aiOutfitSuggestions": 6,
+    "virtualTryOn": 3,
+    "laundryOrders": 2,
+    "favouriteOutfits": 12
+  },
+  "features": {
+    "basicCategorization": true,
+    "occasionSuggestions": false,
+    "weatherSuggestions": false,
+    "colourSuggestions": false,
+    "jewelleryEnabled": false
+  }
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Subscription plan updated successfully",
+  "data": {
+    "_id": "672b14649bb77b5a5ef01a11",
+    "code": "basic",
+    "name": "Basic",
+    "limits": {
+      "wardrobes": 3,
+      "clothingItems": 35,
+      "aiOutfitSuggestions": 6,
+      "virtualTryOn": 3,
+      "laundryOrders": 2,
+      "favouriteOutfits": 12
+    },
+    "updatedAt": "2026-11-06T06:18:00.000Z"
+  }
+}
+```
+
+---
+
+#### 14.2.3 Toggle Plan Active / Disabled Status
+- **Method / Endpoint:** `PATCH /api/admin/subscription/plans/:id/toggle`
+- **Access:** Admin (`protectAdmin`)
+
+##### Request
+```http
+PATCH /api/admin/subscription/plans/672b14649bb77b5a5ef01a11/toggle HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Subscription plan is now inactive",
+  "data": {
+    "_id": "672b14649bb77b5a5ef01a11",
+    "code": "basic",
+    "name": "Basic",
+    "isActive": false
+  }
+}
+```
+
+---
+
+#### 14.2.4 Subscription Analytics Dashboard Stats
+- **Method / Endpoint:** `GET /api/admin/subscription/stats`
+- **Access:** Admin (`protectAdmin`)
+- **Description:** Returns aggregate subscription metrics for the admin dashboard.
+
+##### Request
+```http
+GET /api/admin/subscription/stats HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Subscription stats retrieved successfully",
+  "data": {
+    "totalSubscribers": 142,
+    "activeSubscriptions": 138,
+    "totalRevenue": 48200,
+    "distribution": [
+      { "_id": "basic", "count": 48 },
+      { "_id": "plus", "count": 67 },
+      { "_id": "pro", "count": 23 }
+    ]
+  }
+}
+```
+
+---
+
+#### 14.2.5 Get User Subscriptions List
+- **Method / Endpoint:** `GET /api/admin/subscription/users`
+- **Access:** Admin (`protectAdmin`)
+- **Query Parameters:**
+  - `page` (number, default: `1`)
+  - `limit` (number, default: `20`)
+  - `status` (string, e.g. `active`, `pending`, `expired`)
+  - `planCode` (string, e.g. `basic`, `plus`, `pro`)
+
+##### Request
+```http
+GET /api/admin/subscription/users?status=active&page=1&limit=2 HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "User subscriptions retrieved successfully",
+  "data": {
+    "subscriptions": [
+      {
+        "_id": "672b19289bb77b5a5ef01a22",
+        "userId": {
+          "_id": "670c53802e5a1b32d201a055",
+          "name": "Abhishek Sharma",
+          "phone": "918949056321",
+          "profileImage": "https://api.arangtik.com/uploads/user.png"
+        },
+        "planCode": "plus",
+        "planName": "Plus",
+        "durationMonths": 1,
+        "status": "active",
+        "amountPaid": 199,
+        "startedAt": "2026-11-06T06:15:00.000Z",
+        "expiresAt": "2026-12-06T06:15:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 2,
+      "total": 138,
+      "totalPages": 69
+    }
+  }
+}
+```

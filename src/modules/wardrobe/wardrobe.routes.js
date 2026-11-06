@@ -3,6 +3,7 @@ const router = express.Router();
 const wardrobeController = require('./wardrobe.controller');
 const { protect } = require('../../middlewares/auth.middleware');
 const upload = require('../../middlewares/upload.middleware');
+const { checkQuota } = require('../../middlewares/quota.middleware');
 
 // All wardrobe routes are protected
 router.use(protect);
@@ -19,7 +20,7 @@ const uploadWardrobeMedia = upload.fields([
 ]);
 
 // Create Wardrobe
-router.post('/create-wardrobe', uploadWardrobeMedia, wardrobeController.createWardrobe);
+router.post('/create-wardrobe', checkQuota('wardrobes'), uploadWardrobeMedia, wardrobeController.createWardrobe);
 
 // Get All Wardrobes / Stores
 router.get('/get-wardrobes', wardrobeController.getWardrobes);
@@ -51,7 +52,7 @@ const uploadClothMedia = upload.fields([
 ]);
 
 // Single Unified Add Item Endpoint (Handles 1 to 50 photos, with/without person mode, Python AI split & background Gemini analysis)
-router.post('/add-item', uploadClothMedia, wardrobeController.addItem);
+router.post('/add-item', checkQuota('clothingItems'), uploadClothMedia, wardrobeController.addItem);
 
 /* ==========================================================================
    3. WARDROBE ITEMS MANAGEMENT (CRUD)

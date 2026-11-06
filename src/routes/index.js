@@ -16,6 +16,7 @@ const notificationRoutes = require('../modules/notification/notification.routes'
 const categoryRoutes = require('../modules/category/category.routes');
 const categoryServiceRoutes = require('../modules/categoryService/categoryService.routes');
 const adminRoutes = require('../modules/admin/admin.routes');
+const subscriptionRoutes = require('../modules/subscription/subscription.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -77,6 +78,7 @@ router.use('/hardware/boxes', kitchenBoxRoutes);
 const kitchenBoxCaptureRoutes = require('../modules/hardware/kitchenBoxCaptures/kitchenBoxCapture.routes');
 router.use('/hardware/captures', kitchenBoxCaptureRoutes);
 // Admin Module Routes
+router.use('/subscription', subscriptionRoutes);
 router.use('/admin', adminRoutes);
 
 module.exports = router;
