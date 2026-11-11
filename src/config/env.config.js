@@ -17,10 +17,24 @@ module.exports = {
   // OTP Configuration
   OTP_EXPIRY: parseInt(process.env.OTP_EXPIRY, 10) || 10, // minutes
   OTP_DEV_MODE: process.env.OTP_DEV_MODE === 'true',
+  OTP_LENGTH: parseInt(process.env.OTP_LENGTH, 10) || 4,
   TEST_PHONE: process.env.TEST_PHONE || '918949056321',
   TEST_OTP: process.env.TEST_OTP || '1234',
 
-  // API24 WhatsApp Gateway Configuration
+  // VoiceNSMS SMS OTP Gateway Configuration
+  SMS_API_URL:
+    process.env.SMS_API_URL || 'https://api.voicensms.in/SMSAPI/webresources/CreateSMSCampaignPost',
+  SMS_UKEY: process.env.SMS_UKEY || 'wAyyRoOjRX5nhTpHCFdDTz3vb',
+  SMS_SENDER_ID: process.env.SMS_SENDER_ID || 'ARNGTK',
+  SMS_FILE_TYPE: parseInt(process.env.SMS_FILE_TYPE, 10) || 2,
+  SMS_LANGUAGE: parseInt(process.env.SMS_LANGUAGE, 10) || 0,
+  SMS_CREDIT_TYPE: parseInt(process.env.SMS_CREDIT_TYPE, 10) || 2,
+  SMS_TEMPLATE_ID: parseInt(process.env.SMS_TEMPLATE_ID, 10) || 0,
+  SMS_MESSAGE_TEMPLATE:
+    process.env.SMS_MESSAGE_TEMPLATE ||
+    'Welcome to Arangtik! Use OTP {#otp#} to verify your Arangtik app account. Do not share this code with anyone.',
+
+  // API24 WhatsApp Gateway Configuration (Used for Laundry Orders & Legacy WhatsApp Notifications)
   API24_BASE_URL: process.env.API24_BASE_URL || 'https://api24.in/api/v1',
   API24_API_KEY: process.env.API24_API_KEY || '',
   API24_API_SECRET: process.env.API24_API_SECRET || '',

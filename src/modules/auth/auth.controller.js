@@ -5,14 +5,14 @@ const { formatUploadUrl } = require('../../utils/url.util');
 
 class AuthController {
   /**
-   * @desc    Send OTP to user phone via WhatsApp and check if existing user
+   * @desc    Send OTP to user phone via SMS and check if existing user
    * @route   POST /api/auth/send-otp
    * @access  Public
    */
   sendOtp = asyncHandler(async (req, res) => {
     const { phone } = req.body;
     const result = await authService.sendOtp(phone);
-    return ApiResponse.success(res, result, 'OTP sent successfully to your WhatsApp number');
+    return ApiResponse.success(res, result, 'OTP sent successfully to your mobile number');
   });
 
   /**

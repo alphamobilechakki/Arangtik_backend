@@ -50,7 +50,7 @@ The Auth module handles passwordless OTP-based authentication via WhatsApp/SMS, 
 ---
 
 ### 2.1. Send OTP
-*Initiates passwordless login or registration by sending a 4-digit verification OTP.*
+*Initiates passwordless login or registration by sending a 4-digit verification OTP via VoiceNSMS.*
 
 - **Method**: `POST`
 - **Full Endpoint**: `/api/auth/send-otp`
@@ -79,7 +79,7 @@ The Auth module handles passwordless OTP-based authentication via WhatsApp/SMS, 
 {
   "statusCode": 200,
   "success": true,
-  "message": "OTP sent successfully to your WhatsApp number",
+  "message": "OTP sent successfully to your mobile number",
   "data": {
     "phone": "918949056321",
     "isExistingUser": true,
@@ -521,7 +521,7 @@ None.
 
 | Method | Endpoint | Access | Short Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/send-otp` | Public | Send 4-digit verification OTP to user via WhatsApp |
+| `POST` | `/api/auth/send-otp` | Public | Send verification OTP to user via SMS (VoiceNSMS) |
 | `POST` | `/api/auth/verify-otp` | Public | Verify OTP, authenticate/register user, return JWT token |
 | `GET` | `/api/auth/me` | Protected | Fetch authenticated user's profile details |
 | `GET` | `/api/auth/profile` | Protected | Alias route to fetch authenticated user's profile |
@@ -1060,7 +1060,7 @@ Every vendor document in the `vendor` collection adheres to the following data m
 ---
 
 ### 5.1. Send Vendor OTP
-*Sends a 4-digit verification code to the vendor's WhatsApp mobile number to initiate registration or sign in.*
+*Sends a 4-digit verification code to the vendor's mobile number via VoiceNSMS SMS to initiate registration or sign in.*
 
 - **Method**: `POST`
 - **Full Endpoint**: `/api/vendor/send-otp`
@@ -2492,7 +2492,7 @@ GET /api/vendor/lookup?phone=919810112233
 
 | Method | Endpoint | Access | Short Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/vendor/send-otp` | Public | Send 4-digit verification OTP to vendor WhatsApp |
+| `POST` | `/api/vendor/send-otp` | Public | Send verification OTP to vendor via SMS (VoiceNSMS) |
 | `POST` | `/api/vendor/verify-otp` | Public | Verify OTP, authenticate vendor, return JWT token and profile |
 | `GET` | `/api/vendor/profile` | Protected (Vendor) | Retrieve authenticated vendor profile & business details |
 | `PATCH` | `/api/vendor/profile` | Protected (Vendor) | Update trade business name, address, and GPS coordinates |
