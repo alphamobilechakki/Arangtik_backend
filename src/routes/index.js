@@ -78,6 +78,8 @@ router.use('/hardware/boxes', kitchenBoxRoutes);
 const kitchenBoxCaptureRoutes = require('../modules/hardware/kitchenBoxCaptures/kitchenBoxCapture.routes');
 router.use('/hardware/captures', kitchenBoxCaptureRoutes);
 // Admin Module Routes
+const coinRoutes = require('../modules/subscription/coins/coin.routes');
+router.use('/coins', coinRoutes);
 router.use('/subscription', subscriptionRoutes);
 router.use('/admin', adminRoutes);
 

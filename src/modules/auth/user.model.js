@@ -53,10 +53,27 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: 'en',
     },
+    // GeoJSON Point: [longitude, latitude]
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+      },
+      coordinates: {
+        type: [Number],
+      },
+    },
+
+
     profileImage: {
       type: String,
       trim: true,
       default: '',
+    },
+    wallet: {
+      type: Number,
+      default: 0,
+      min: [0, 'Wallet balance cannot be negative'],
     },
     referenceFace: {
       embedding: {
@@ -77,9 +94,15 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Indexes
+userSchema.index({ location: '2dsphere' }, { sparse: true });
+
 const { formatUploadUrl } = require('../../utils/url.util');
 
 userSchema.pre('save', function (next) {
+  if (this.location && (!Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2)) {
+    this.location = undefined;
+  }
   if (this.profileImage) {
     this.profileImage = formatUploadUrl(this.profileImage);
   }

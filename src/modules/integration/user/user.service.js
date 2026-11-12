@@ -3,7 +3,7 @@ const WardrobeItem = require('../../wardrobe/wardrobeItem.model');
 
 // Fields safe to export to authorized partner/admin (excludes face embeddings and raw secrets)
 const SAFE_USER_FIELDS =
-  '_id name phone role status gender accountType country currency preferredLanguage profileImage createdAt updatedAt';
+'_id name phone role status gender accountType country currency preferredLanguage location wallet profileImage createdAt updatedAt';
 
 /**
  * Fetch list of users with pagination, search, and filtering

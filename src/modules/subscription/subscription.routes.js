@@ -9,6 +9,7 @@ router.get('/plans', subscriptionController.getPlans);
 // Webhook endpoint (Raw body/verification)
 router.post('/webhook', subscriptionController.handleWebhook);
 
+
 // User-protected subscription endpoints
 router.use(protect);
 router.get('/my', subscriptionController.getMySubscription);

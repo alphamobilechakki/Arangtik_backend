@@ -21,19 +21,46 @@ class AuthController {
    * @access  Public
    */
   verifyOtp = asyncHandler(async (req, res) => {
-    const { phone, otp, name, fcmToken, deviceToken, platform, deviceId, deviceModel, appVersion } = req.body;
+    const {
+      phone,
+      otp,
+      name,
+      fcmToken,
+      deviceToken,
+      platform,
+      deviceId,
+      deviceModel,
+      appVersion,
+      location,
+      latitude,
+      longitude,
+      lat,
+      lng,
+      coordinates,
+    } = req.body;
     const tokenToRegister = fcmToken || deviceToken || req.body?.token;
     const deviceData = tokenToRegister
       ? {
-          token: tokenToRegister,
-          platform,
-          deviceId,
-          deviceModel,
-          appVersion,
-        }
+        token: tokenToRegister,
+        platform,
+        deviceId,
+        deviceModel,
+        appVersion,
+      }
       : null;
 
-    const result = await authService.verifyOtp(phone, otp, name, deviceData);
+    const locationData =
+      location !== undefined
+        ? location
+        : latitude !== undefined ||
+          longitude !== undefined ||
+          lat !== undefined ||
+          lng !== undefined ||
+          coordinates !== undefined
+          ? { latitude, longitude, lat, lng, coordinates }
+          : undefined;
+
+    const result = await authService.verifyOtp(phone, otp, name, deviceData, locationData);
     return ApiResponse.success(res, result, 'Authentication successful');
   });
 

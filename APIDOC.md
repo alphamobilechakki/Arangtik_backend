@@ -117,6 +117,9 @@ The Auth module handles passwordless OTP-based authentication via WhatsApp/SMS, 
 | `phone` | `string` | **Yes** | Phone number used to request OTP. |
 | `otp` | `string` | **Yes** | 4-digit verification code (e.g., `"1234"`). |
 | `name` | `string` | No | Name for new user registration (defaults to empty string if omitted). |
+| `location` | `object` or `string` | No | User location. Accepts GeoJSON `{ "type": "Point", "coordinates": [longitude, latitude] }`, `{ "latitude": 28.6139, "longitude": 77.2090 }`, `{ "lat": 28.6139, "lng": 77.2090 }`, or stringified JSON. |
+| `latitude` / `lat` | `number` | No | Flat latitude coordinate (between -90 and 90). |
+| `longitude` / `lng` | `number` | No | Flat longitude coordinate (between -180 and 180). |
 | `fcmToken` / `deviceToken` | `string` | No | FCM device push notification token to register immediately on login. |
 | `platform` | `string` | No | Operating system platform: `"ANDROID"`, `"IOS"`, `"WEB"`, or `"OTHER"`. |
 | `deviceId` | `string` | No | Unique hardware / device identifier string. |
@@ -129,6 +132,10 @@ The Auth module handles passwordless OTP-based authentication via WhatsApp/SMS, 
   "phone": "918949056321",
   "otp": "1234",
   "name": "Monika",
+  "location": {
+    "latitude": 28.6139,
+    "longitude": 77.2090
+  },
   "fcmToken": "fcm_sample_token_xyz987",
   "platform": "ANDROID",
   "deviceId": "device_pixel_8_uuid",
@@ -156,6 +163,11 @@ The Auth module handles passwordless OTP-based authentication via WhatsApp/SMS, 
       "country": "India",
       "currency": "INR",
       "preferredLanguage": "en",
+      "location": {
+        "type": "Point",
+        "coordinates": [77.2090, 28.6139]
+      },
+      "wallet": 0,
       "profileImage": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg",
       "role": "user",
       "status": "active"
@@ -214,6 +226,11 @@ None.
     "country": "India",
     "currency": "INR",
     "preferredLanguage": "en",
+    "location": {
+      "type": "Point",
+      "coordinates": [77.2090, 28.6139]
+    },
+    "wallet": 0,
     "profileImage": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg",
     "createdAt": "2026-10-03T05:39:56.149Z",
     "updatedAt": "2026-10-27T07:28:41.531Z"
@@ -234,7 +251,7 @@ None.
 ---
 
 ### 2.4. Update Profile
-*Updates profile metadata (name, gender, country, currency, language, account type). Supports either JSON format or Multipart/Form-Data if attaching a profile photo (`image` or `profileImage`).*
+*Updates profile metadata (name, gender, country, currency, language, account type, location). Supports either JSON format or Multipart/Form-Data if attaching a profile photo (`image` or `profileImage`).*
 
 - **Method**: `PATCH` or `PUT`
 - **Full Endpoint**: `/api/auth/profile`
@@ -255,6 +272,9 @@ None.
 | `country` | `string` | No | User country (e.g., `"India"`). |
 | `currency` | `string` | No | User currency code (e.g., `"INR"`, `"USD"`). |
 | `preferredLanguage` | `string` | No | Preferred ISO language code (e.g., `"en"`, `"hi"`). |
+| `location` | `object` or `string` or `null` | No | GeoJSON `{ "type": "Point", "coordinates": [longitude, latitude] }`, `{ "latitude": 28.6, "longitude": 77.2 }`, `{ "lat": 28.6, "lng": 77.2 }`, stringified JSON, or `null` to clear location. |
+| `latitude` / `lat` | `number` | No | Flat latitude coordinate (between -90 and 90). |
+| `longitude` / `lng` | `number` | No | Flat longitude coordinate (between -180 and 180). |
 | `image` / `profileImage` | `file` or `string` | No | Image file upload (multipart) or existing image URL string. |
 
 ##### JSON Request Example
@@ -265,7 +285,11 @@ None.
   "accountType": "INDIVIDUAL",
   "country": "India",
   "currency": "INR",
-  "preferredLanguage": "en"
+  "preferredLanguage": "en",
+  "location": {
+    "latitude": 28.6139,
+    "longitude": 77.2090
+  }
 }
 ```
 
@@ -288,6 +312,11 @@ None.
     "country": "India",
     "currency": "INR",
     "preferredLanguage": "en",
+    "location": {
+      "type": "Point",
+      "coordinates": [77.2090, 28.6139]
+    },
+    "wallet": 0,
     "profileImage": "http://localhost:8083/uploads/img_mv6gxfw5_31f57b.jpg",
     "createdAt": "2026-10-03T05:39:56.149Z",
     "updatedAt": "2026-10-27T07:28:41.531Z"
@@ -3534,6 +3563,794 @@ Authorization: Bearer <ADMIN_JWT_TOKEN>
       "total": 138,
       "totalPages": 69
     }
+  }
+}
+```
+
+
+---
+
+## 15. Coin Packages, Wallet & Virtual Currency Module (`/api/coins` & `/api/admin/coin-packages`)
+
+The Coin Module manages dynamic virtual currency packages, Razorpay payment order generation, cryptographic signature verification, atomic wallet crediting with strict idempotency (preventing duplicate credits), atomic coin debits with overdraft prevention, a transaction ledger, and full administrative package management.
+
+All coin endpoints are also accessible via the `/api/subscription/coins/*` sub-route alias for client compatibility.
+
+---
+
+### 15.1 User / Customer Coin Endpoints (`/api/coins`)
+
+#### 15.1.1 Get Active Coin Packages
+*Fetches all publicly available, active coin packages sorted by price.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/coins/packages`
+- **Sub-Route Alias**: `/api/subscription/coins/packages`
+- **Access**: `Public` (No Authorization required)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  ```
+
+##### Request Example
+```http
+GET /api/coins/packages HTTP/1.1
+Host: api.arangtik.com
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Active coin packages retrieved successfully",
+  "data": [
+    {
+      "_id": "6af55d0ea41fe69ef52eae9e",
+      "name": "Starter Pack",
+      "coins": 5000,
+      "bonusCoins": 0,
+      "price": 10,
+      "currency": "INR",
+      "description": "Perfect for quick top-ups and trying out AI features",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.500Z",
+      "updatedAt": "2026-11-12T06:30:38.500Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaea1",
+      "name": "Value Pack",
+      "coins": 10000,
+      "bonusCoins": 500,
+      "price": 20,
+      "currency": "INR",
+      "description": "Popular choice! 10,000 coins + 500 bonus coins (5% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.584Z",
+      "updatedAt": "2026-11-12T06:30:38.584Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaea4",
+      "name": "Style Pack",
+      "coins": 15000,
+      "bonusCoins": 1200,
+      "price": 30,
+      "currency": "INR",
+      "description": "Great for weekly AI outfit suggestions and virtual try-ons (8% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.649Z",
+      "updatedAt": "2026-11-12T06:30:38.649Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaea7",
+      "name": "Pro Pack",
+      "coins": 30000,
+      "bonusCoins": 3000,
+      "price": 50,
+      "currency": "INR",
+      "description": "Best seller! 30,000 coins + 3,000 bonus coins (10% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.717Z",
+      "updatedAt": "2026-11-12T06:30:38.717Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaeaa",
+      "name": "Super Saver Pack",
+      "coins": 50000,
+      "bonusCoins": 6000,
+      "price": 80,
+      "currency": "INR",
+      "description": "Generous styling bundle! 50,000 coins + 6,000 bonus coins (12% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.779Z",
+      "updatedAt": "2026-11-12T06:30:38.779Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaead",
+      "name": "Mega Pack",
+      "coins": 100000,
+      "bonusCoins": 15000,
+      "price": 150,
+      "currency": "INR",
+      "description": "Ultimate value! 100,000 coins + 15,000 bonus coins (15% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.842Z",
+      "updatedAt": "2026-11-12T06:30:38.842Z"
+    },
+    {
+      "_id": "6af55d0ea41fe69ef52eaeb0",
+      "name": "VIP Wardrobe Master",
+      "coins": 250000,
+      "bonusCoins": 50000,
+      "price": 350,
+      "currency": "INR",
+      "description": "Maximum power bundle! 250,000 coins + 50,000 bonus coins (20% extra)",
+      "isActive": true,
+      "createdAt": "2026-11-12T06:30:38.911Z",
+      "updatedAt": "2026-11-12T06:30:38.911Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 15.1.2 Create Razorpay Order for Coin Package
+*Creates an official Razorpay order in paise, generates a unique receipt under 40 characters, and registers a `pending` CoinPurchase document in MongoDB.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/coins/create-order`
+- **Sub-Route Alias**: `/api/subscription/coins/create-order`
+- **Access**: `Protected` (Requires User Bearer Token)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <USER_JWT_TOKEN>
+  ```
+
+##### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `packageId` | `string` | **Yes** | MongoDB ObjectId of the active coin package to purchase. |
+
+##### Request Example
+```json
+{
+  "packageId": "6af55d0ea41fe69ef52eae9e"
+}
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Razorpay order created successfully",
+  "data": {
+    "orderId": "order_TzExAvvZD9EChU",
+    "amount": 1000,
+    "currency": "INR",
+    "keyId": "rzp_live_TwnLtrKVjnzbyb",
+    "package": {
+      "id": "6af55d0ea41fe69ef52eae9e",
+      "name": "Starter Pack",
+      "coins": 5000,
+      "bonusCoins": 0,
+      "totalCoins": 5000,
+      "price": 10,
+      "currency": "INR"
+    },
+    "purchaseId": "6af59ca8dce108d9e3733a52"
+  }
+}
+```
+
+###### HTTP 400 Bad Request (Missing Package ID)
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Package ID is required",
+  "errors": []
+}
+```
+
+###### HTTP 401 Unauthorized (Missing / Expired Token)
+```json
+{
+  "statusCode": 401,
+  "success": false,
+  "message": "Unauthorized access, token missing",
+  "errors": []
+}
+```
+
+###### HTTP 404 Not Found (Invalid Package)
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "Active coin package not found",
+  "errors": []
+}
+```
+
+---
+
+#### 15.1.3 Verify Razorpay Payment & Credit Coins
+*Verifies the cryptographic HMAC-SHA256 signature returned by Razorpay Checkout. Upon verification, atomically transitions the purchase status to `completed`, credits `totalCoins` (`purchasedCoins + bonusCoins`) directly to `User.wallet`, and writes an immutable audit record in `CoinTransaction`. If called repeatedly or concurrently, returns `alreadyProcessed: true` and safely prevents duplicate crediting.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/coins/verify`
+- **Sub-Route Alias**: `/api/subscription/coins/verify`
+- **Access**: `Protected` (Requires User Bearer Token)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <USER_JWT_TOKEN>
+  ```
+
+##### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `razorpayOrderId` | `string` | **Yes** | Order ID returned by `/create-order` (e.g., `"order_TzExAvvZD9EChU"`). |
+| `razorpayPaymentId` | `string` | **Yes** | Payment ID returned by Razorpay Checkout (e.g., `"pay_live_1794481320734"`). |
+| `razorpaySignature` | `string` | **Yes** | Cryptographic HMAC-SHA256 verification signature from Razorpay. |
+
+##### Request Example
+```json
+{
+  "razorpayOrderId": "order_TzExAvvZD9EChU",
+  "razorpayPaymentId": "pay_live_1794481320734",
+  "razorpaySignature": "34c38dc9c719e7fa69910d55e975a5e3e2b260d5bfaeb7a8684eb430d42129cb"
+}
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (First-Time Verification & Wallet Credit - Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Payment verified and coins credited successfully",
+  "data": {
+    "success": true,
+    "message": "Payment verified and coins credited successfully",
+    "creditedCoins": 5000,
+    "walletBalance": 5000,
+    "purchase": {
+      "_id": "6af59ca8dce108d9e3733a52",
+      "userId": "6af59ca6dce108d9e37339df",
+      "packageId": "6af55d0ea41fe69ef52eae9e",
+      "amount": 10,
+      "currency": "INR",
+      "purchasedCoins": 5000,
+      "bonusCoins": 0,
+      "totalCoins": 5000,
+      "paymentOrderId": "order_TzExAvvZD9EChU",
+      "paymentId": "pay_live_1794481320734",
+      "paymentStatus": "completed",
+      "completedAt": "2026-11-12T11:02:00.810Z"
+    },
+    "transaction": {
+      "_id": "6af59ca8dce108d9e3733a5e",
+      "userId": "6af59ca6dce108d9e37339df",
+      "type": "credit",
+      "amount": 5000,
+      "reason": "Purchased Starter Pack",
+      "referenceId": "6af59ca8dce108d9e3733a52",
+      "status": "success",
+      "metadata": {
+        "paymentOrderId": "order_TzExAvvZD9EChU",
+        "paymentId": "pay_live_1794481320734",
+        "purchasedCoins": 5000,
+        "bonusCoins": 0,
+        "amountPaid": 10,
+        "balanceAfter": 5000
+      },
+      "createdAt": "2026-11-12T11:02:00.813Z"
+    }
+  }
+}
+```
+
+###### HTTP 200 OK (Duplicate Call / Idempotency - Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Payment verified and coins credited successfully",
+  "data": {
+    "success": true,
+    "alreadyProcessed": true,
+    "message": "Payment was already processed and coins are in your wallet",
+    "walletBalance": 5000,
+    "purchase": {
+      "_id": "6af59ca8dce108d9e3733a52",
+      "paymentOrderId": "order_TzExAvvZD9EChU",
+      "paymentStatus": "completed",
+      "totalCoins": 5000
+    }
+  }
+}
+```
+
+###### HTTP 400 Bad Request (Invalid Signature)
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Invalid payment signature. Verification failed",
+  "errors": []
+}
+```
+
+---
+
+#### 15.1.4 Get User Coin Wallet Balance & Summary
+*Returns the authenticated user's live wallet balance and latest 5 transactions.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/coins/wallet`
+- **Sub-Route Alias**: `/api/subscription/coins/wallet`
+- **Access**: `Protected` (Requires User Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <USER_JWT_TOKEN>
+  ```
+
+##### Request Example
+```http
+GET /api/coins/wallet HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <USER_JWT_TOKEN>
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wallet details retrieved successfully",
+  "data": {
+    "balance": 5000,
+    "recentTransactions": [
+      {
+        "_id": "6af59ca8dce108d9e3733a5e",
+        "userId": "6af59ca6dce108d9e37339df",
+        "type": "credit",
+        "amount": 5000,
+        "reason": "Purchased Starter Pack",
+        "referenceId": "6af59ca8dce108d9e3733a52",
+        "status": "success",
+        "metadata": {
+          "paymentOrderId": "order_TzExAvvZD9EChU",
+          "paymentId": "pay_live_1794481320734",
+          "purchasedCoins": 5000,
+          "bonusCoins": 0,
+          "amountPaid": 10,
+          "balanceAfter": 5000
+        },
+        "createdAt": "2026-11-12T11:02:00.813Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 15.1.5 Debit Coins for Feature Usage
+*Atomically debits coins from the user's wallet with balance validation. Guarantees overdraft prevention using MongoDB's atomic `{ _id, wallet: { $gte: amount } }` check. Records a permanent `debit` transaction in `CoinTransaction`.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/coins/debit`
+- **Sub-Route Alias**: `/api/subscription/coins/debit`
+- **Access**: `Protected` (Requires User Bearer Token)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <USER_JWT_TOKEN>
+  ```
+
+##### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `amount` | `number` | **Yes** | Number of coins to debit (positive integer $\ge 1$). |
+| `reason` | `string` | **Yes** | Descriptive reason for the debit (e.g., `"AI Outfit Suggestion Feature Usage"`). |
+| `referenceId` | `string` | No | Optional external reference ID (e.g., outfit ID, order ID, or session ID). |
+
+##### Request Example
+```json
+{
+  "amount": 450,
+  "reason": "AI Outfit Suggestion Feature Usage",
+  "referenceId": "ref_outfit_gen_99"
+}
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coins debited successfully",
+  "data": {
+    "success": true,
+    "debitedAmount": 450,
+    "remainingBalance": 4550,
+    "transaction": {
+      "_id": "6af59ca9dce108d9e3733a88",
+      "userId": "6af59ca6dce108d9e37339df",
+      "type": "debit",
+      "amount": 450,
+      "reason": "AI Outfit Suggestion Feature Usage",
+      "referenceId": "ref_outfit_gen_99",
+      "status": "success",
+      "metadata": {
+        "balanceAfter": 4550
+      },
+      "createdAt": "2026-11-12T11:02:01.181Z"
+    }
+  }
+}
+```
+
+###### HTTP 400 Bad Request (Insufficient Balance - Tested)
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Insufficient coin balance. Required: 10000, Available: 5000",
+  "errors": []
+}
+```
+
+---
+
+#### 15.1.6 Get Paginated Coin Transaction History
+*Retrieves full historical audit ledger of all coin credits and debits for the authenticated user.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/coins/transactions`
+- **Sub-Route Alias**: `/api/subscription/coins/transactions`
+- **Access**: `Protected` (Requires User Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <USER_JWT_TOKEN>
+  ```
+
+##### Query Parameters
+| Parameter | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `page` | `number` | No | `1` | Page number for pagination. |
+| `limit` | `number` | No | `20` | Items per page (max: 100). |
+| `type` | `string` | No | — | Filter by type: `"credit"` or `"debit"`. |
+
+##### Request Example
+```http
+GET /api/coins/transactions?page=1&limit=10 HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <USER_JWT_TOKEN>
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Transactions retrieved successfully",
+  "data": {
+    "transactions": [
+      {
+        "_id": "6af59ca9dce108d9e3733a88",
+        "userId": "6af59ca6dce108d9e37339df",
+        "type": "debit",
+        "amount": 450,
+        "reason": "AI Outfit Suggestion Feature Usage",
+        "referenceId": "ref_outfit_gen_99",
+        "status": "success",
+        "metadata": {
+          "balanceAfter": 4550
+        },
+        "createdAt": "2026-11-12T11:02:01.181Z"
+      },
+      {
+        "_id": "6af59ca8dce108d9e3733a5e",
+        "userId": "6af59ca6dce108d9e37339df",
+        "type": "credit",
+        "amount": 5000,
+        "reason": "Purchased Starter Pack",
+        "referenceId": "6af59ca8dce108d9e3733a52",
+        "status": "success",
+        "metadata": {
+          "paymentOrderId": "order_TzExAvvZD9EChU",
+          "paymentId": "pay_live_1794481320734",
+          "purchasedCoins": 5000,
+          "bonusCoins": 0,
+          "amountPaid": 10,
+          "balanceAfter": 5000
+        },
+        "createdAt": "2026-11-12T11:02:00.813Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 2,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 15.1.7 Razorpay Coin Payment Webhook
+*Server-to-server webhook endpoint called directly by Razorpay servers upon payment events (`payment.captured` or `order.paid`). Prevents duplicate crediting if `/verify` was already completed by the mobile app or web client.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/coins/webhook`
+- **Sub-Route Alias**: `/api/subscription/coins/webhook`
+- **Access**: `Public / Razorpay Signed`
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  x-razorpay-signature: <HMAC_SHA256_HEX_SIGNATURE>
+  ```
+
+##### Request Body
+Razorpay standardized webhook payload containing `event: "payment.captured"` and `payload.payment.entity`.
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Webhook handled successfully",
+  "data": {
+    "processed": false,
+    "reason": "Event not applicable or already processed"
+  }
+}
+```
+
+---
+
+### 15.2 Admin Coin Package Management Endpoints (`/api/admin/coin-packages`)
+
+#### 15.2.1 Get All Coin Packages (Admin View)
+*Returns all coin packages (both active and inactive) with pagination, case-insensitive keyword search, and status filtering.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/coin-packages`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  ```
+
+##### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `page` | `number` | No | Page number (default: `1`). |
+| `limit` | `number` | No | Items per page (default: `20`). |
+| `search` | `string` | No | Search query matching package name or description. |
+| `isActive` | `boolean` | No | Filter by active status (`true` / `false`). |
+
+##### Request Example
+```http
+GET /api/admin/coin-packages?page=1&limit=10&isActive=true HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin packages retrieved successfully",
+  "data": {
+    "coinPackages": [
+      {
+        "_id": "6af55d0ea41fe69ef52eae9e",
+        "name": "Starter Pack",
+        "coins": 5000,
+        "bonusCoins": 0,
+        "price": 10,
+        "currency": "INR",
+        "description": "Perfect for quick top-ups and trying out AI features",
+        "isActive": true
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "totalCount": 7,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 15.2.2 Create New Coin Package
+*Creates a dynamic coin package bundle with optional bonus incentive coins.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/admin/coin-packages`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  ```
+
+##### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | **Yes** | Unique package title (e.g., `"Mega Gamer Chest"`). |
+| `coins` | `number` | **Yes** | Base coin allocation (positive integer $\ge 1$). |
+| `bonusCoins` | `number` | No | Extra incentive coins (default: `0`). |
+| `price` | `number` | **Yes** | Selling price in currency (number $> 0$). |
+| `currency` | `string` | No | Currency code (default: `"INR"`). |
+| `description` | `string` | No | Marketing description. |
+| `isActive` | `boolean` | No | Availability status (default: `true`). |
+
+##### Request Example
+```json
+{
+  "name": "Mega Gamer Chest",
+  "coins": 20000,
+  "bonusCoins": 2000,
+  "price": 39,
+  "currency": "INR",
+  "description": "Special promotional bundle for AI styling & virtual try-ons"
+}
+```
+
+##### Response Cycle
+
+###### HTTP 201 Created (Tested)
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Coin package created successfully",
+  "data": {
+    "_id": "6af59b7f3f8833ba63d6fe18",
+    "name": "Mega Gamer Chest",
+    "coins": 20000,
+    "bonusCoins": 2000,
+    "price": 39,
+    "currency": "INR",
+    "description": "Special promotional bundle for AI styling & virtual try-ons",
+    "isActive": true,
+    "createdAt": "2026-11-12T10:57:03.186Z",
+    "updatedAt": "2026-11-12T10:57:03.186Z"
+  }
+}
+```
+
+###### HTTP 400 Bad Request (Duplicate Name)
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "A coin package with this name already exists",
+  "errors": []
+}
+```
+
+---
+
+#### 15.2.3 Get Single Coin Package by ID
+*Retrieves a coin package's configuration by its MongoDB ObjectId.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/coin-packages/:id`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token)
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin package retrieved successfully",
+  "data": {
+    "_id": "6af59b7f3f8833ba63d6fe18",
+    "name": "Mega Gamer Chest",
+    "coins": 20000,
+    "bonusCoins": 2000,
+    "price": 39,
+    "currency": "INR",
+    "isActive": true
+  }
+}
+```
+
+---
+
+#### 15.2.4 Update Coin Package
+*Modifies an existing package's parameters (e.g. price, coin values, description).*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/admin/coin-packages/:id`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token)
+
+##### Request Example
+```json
+{
+  "price": 45,
+  "description": "Updated price for holiday promotional bundle"
+}
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin package updated successfully",
+  "data": {
+    "_id": "6af59b7f3f8833ba63d6fe18",
+    "name": "Mega Gamer Chest",
+    "price": 45,
+    "description": "Updated price for holiday promotional bundle",
+    "updatedAt": "2026-11-12T10:57:03.450Z"
+  }
+}
+```
+
+---
+
+#### 15.2.5 Activate / Deactivate Coin Package
+*Toggles a package's live visibility without deleting its purchase records.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/admin/coin-packages/:id/status`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token)
+
+##### Request Example
+```json
+{
+  "isActive": false
+}
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin package deactivated successfully",
+  "data": {
+    "_id": "6af59b7f3f8833ba63d6fe18",
+    "name": "Mega Gamer Chest",
+    "isActive": false
   }
 }
 ```
