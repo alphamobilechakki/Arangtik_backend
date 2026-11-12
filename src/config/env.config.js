@@ -65,7 +65,7 @@ module.exports = {
   FCM_DEV_MODE: process.env.FCM_DEV_MODE === 'true',
 
   // Razorpay Gateway Configuration
-  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || '',
-  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
-  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+  RAZORPAY_KEY_ID: (process.env.RAZORPAY_KEY_ID || '').trim(),
+  RAZORPAY_KEY_SECRET: (process.env.RAZORPAY_KEY_SECRET || '').trim(),
+  RAZORPAY_WEBHOOK_SECRET: (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim(),
 };

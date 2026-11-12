@@ -17,22 +17,28 @@ class SubscriptionService {
   /**
    * Create Razorpay order for purchasing a plan
    */
-  async createSubscriptionOrder(userId, { planCode, durationMonths, includesJewellery = false }) {
-    if (!planCode || !durationMonths) {
-      throw new ApiError(400, 'Plan code and duration (in months) are required');
+  async createSubscriptionOrder(userId, { planCode, planId, durationMonths, includesJewellery = false }) {
+    if ((!planCode && !planId) || !durationMonths) {
+      throw new ApiError(400, 'Plan code (or planId) and duration (in months) are required');
     }
 
     const duration = parseInt(durationMonths, 10);
-    if (![1, 3, 6, 12].includes(duration)) {
+    if (isNaN(duration) || ![1, 3, 6, 12].includes(duration)) {
       throw new ApiError(400, 'Duration must be 1, 3, 6, or 12 months');
     }
 
-    const plan = await SubscriptionPlan.findOne({
-      code: planCode.toLowerCase().trim(),
-      isActive: true,
-    });
+    let plan = null;
+    if (planId) {
+      plan = await SubscriptionPlan.findOne({ _id: planId, isActive: true });
+    }
+    if (!plan && planCode) {
+      plan = await SubscriptionPlan.findOne({
+        code: String(planCode).toLowerCase().trim(),
+        isActive: true,
+      });
+    }
     if (!plan) {
-      throw new ApiError(404, `Active plan with code '${planCode}' not found`);
+      throw new ApiError(404, `Active plan '${planCode || planId}' not found`);
     }
 
     // Find price matching duration
@@ -66,8 +72,14 @@ class SubscriptionService {
         },
       });
     } catch (rzpErr) {
-      console.error('[Razorpay Order Creation Failed]:', rzpErr);
-      throw new ApiError(500, `Payment gateway error: ${rzpErr.message || 'Unable to create order'}`);
+      console.error('[Razorpay Order Creation Failed]:', JSON.stringify(rzpErr, null, 2));
+      const rzpDescription =
+        rzpErr?.error?.description ||
+        rzpErr?.error?.reason ||
+        rzpErr?.error?.message ||
+        rzpErr?.message ||
+        'Unable to create order';
+      throw new ApiError(500, `Payment gateway error: ${rzpDescription}`);
     }
 
     // Create or update pending subscription record
