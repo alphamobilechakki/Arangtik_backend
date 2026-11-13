@@ -4354,3 +4354,249 @@ Authorization: Bearer <ADMIN_JWT_TOKEN>
   }
 }
 ```
+
+---
+
+### 15.3 Admin Coin Logs & Purchases (`/api/admin/subscription/coins`)
+*Administrative endpoints powered by MongoDB aggregation pipelines to monitor coin transactions and purchases. Features lightweight table listings (3-4 essential fields) and complete detailed inspection by ID when clicking "Show More".*
+
+---
+
+#### 15.3.1 Get All Coin Transactions (Light Listing)
+*Returns a lightweight paginated ledger of coin transactions containing only the essential table fields: User Name & Phone, Transaction Type, Amount, Reason, Status, and Date.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/subscription/coins/transactions`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token or `x-api-key`)
+
+##### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `page` | `number` | No | Page number (default: `1`). |
+| `limit` | `number` | No | Items per page (default: `20`, max: `100`). |
+| `type` | `string` | No | `"credit"` or `"debit"`. |
+| `status` | `string` | No | `"success"`, `"pending"`, or `"failed"`. |
+| `userId` | `string` | No | Filter by user ObjectId. |
+| `search` | `string` | No | Case-insensitive search on user name, phone, reason, or reference ID. |
+| `startDate` | `string` | No | Filter by creation start date (ISO string). |
+| `endDate` | `string` | No | Filter by creation end date (ISO string). |
+
+##### Request Example
+```http
+GET /api/admin/subscription/coins/transactions?page=1&limit=10&type=credit HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin transactions retrieved successfully",
+  "data": {
+    "transactions": [
+      {
+        "_id": "6af6bbe4d7731f37ce36cc4d",
+        "user": {
+          "_id": "6ae31cca0c00fa1dfe7e3c99",
+          "name": "Monika",
+          "phone": "918949056321"
+        },
+        "type": "credit",
+        "amount": 5000,
+        "reason": "Coin package purchase (Starter 100)",
+        "status": "success",
+        "createdAt": "2026-11-13T07:27:32.178Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 15.3.2 Get Coin Transaction Details by ID (Show More)
+*Retrieves complete, un-truncated transaction audit details when an admin clicks "Show More" on a transaction row.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/subscription/coins/transactions/:id`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token or `x-api-key`)
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin transaction details retrieved successfully",
+  "data": {
+    "_id": "6af6bbe4d7731f37ce36cc4d",
+    "userId": "6ae31cca0c00fa1dfe7e3c99",
+    "type": "credit",
+    "amount": 5000,
+    "reason": "Coin package purchase (Starter 100)",
+    "referenceId": "6af6bbe3d7731f37ce36cc3b",
+    "status": "success",
+    "metadata": {},
+    "createdAt": "2026-11-13T07:27:32.178Z",
+    "updatedAt": "2026-11-13T07:27:32.178Z",
+    "user": {
+      "_id": "6ae31cca0c00fa1dfe7e3c99",
+      "name": "Monika",
+      "phone": "918949056321",
+      "wallet": 250,
+      "profileImage": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg",
+      "status": "active",
+      "accountType": "INDIVIDUAL"
+    },
+    "userPlans": [
+      {
+        "_id": "6ac0952c80239788e764c0aa",
+        "planCode": "plus",
+        "planName": "Plus Plan",
+        "durationMonths": 1,
+        "status": "active",
+        "expiresAt": "2026-12-13T07:14:00.000Z",
+        "amountPaid": 199
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 15.3.3 Get All Coin Purchases (Light Listing)
+*Returns a lightweight paginated list of coin purchases containing only the essential table fields: User Name & Phone, Package Name, Purchase Amount, Coins Received, Payment Status, and Date.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/subscription/coins/purchases`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token or `x-api-key`)
+
+##### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `page` | `number` | No | Page number (default: `1`). |
+| `limit` | `number` | No | Items per page (default: `20`, max: `100`). |
+| `status` / `paymentStatus` | `string` | No | `"completed"`, `"pending"`, or `"failed"`. |
+| `userId` | `string` | No | Filter by user ObjectId. |
+| `search` | `string` | No | Case-insensitive search on user name, phone, order ID, or package name. |
+| `startDate` | `string` | No | Filter by creation start date (ISO string). |
+| `endDate` | `string` | No | Filter by creation end date (ISO string). |
+
+##### Request Example
+```http
+GET /api/admin/subscription/coins/purchases?page=1&limit=10&status=completed HTTP/1.1
+Host: api.arangtik.com
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin purchases retrieved successfully",
+  "data": {
+    "purchases": [
+      {
+        "_id": "6af6bbe3d7731f37ce36cc3b",
+        "user": {
+          "_id": "6ae31cca0c00fa1dfe7e3c99",
+          "name": "Monika",
+          "phone": "918949056321"
+        },
+        "packageName": "Starter Pack",
+        "amount": 10,
+        "totalCoins": 5000,
+        "paymentStatus": "completed",
+        "createdAt": "2026-11-13T07:27:31.997Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 15.3.4 Get Coin Purchase Details by ID (Show More)
+*Retrieves complete package breakdown, payment identifiers, gateway verification tokens, and user subscription history when clicking "Show More" on a purchase row.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/subscription/coins/purchases/:id`
+- **Access**: `Protected Admin` (Requires Admin Bearer Token or `x-api-key`)
+
+##### Response Cycle
+
+###### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Coin purchase details retrieved successfully",
+  "data": {
+    "_id": "6af6bbe3d7731f37ce36cc3b",
+    "userId": "6ae31cca0c00fa1dfe7e3c99",
+    "packageId": "6af59b7f3f8833ba63d6fe18",
+    "packageSnapshot": {
+      "name": "Starter Pack",
+      "coins": 5000,
+      "bonusCoins": 0,
+      "price": 10,
+      "currency": "INR",
+      "description": ""
+    },
+    "amount": 10,
+    "currency": "INR",
+    "purchasedCoins": 5000,
+    "bonusCoins": 0,
+    "totalCoins": 5000,
+    "paymentOrderId": "order_coin_comp_1794554851",
+    "paymentId": "pay_coin_comp_1794554851",
+    "paymentSignature": "sample_signature_hmac_hex",
+    "paymentStatus": "completed",
+    "completedAt": "2026-11-13T07:27:32.000Z",
+    "createdAt": "2026-11-13T07:27:31.997Z",
+    "updatedAt": "2026-11-13T07:27:32.000Z",
+    "user": {
+      "_id": "6ae31cca0c00fa1dfe7e3c99",
+      "name": "Monika",
+      "phone": "918949056321",
+      "wallet": 250,
+      "profileImage": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg",
+      "status": "active",
+      "accountType": "INDIVIDUAL"
+    },
+    "userPlans": [
+      {
+        "_id": "6ac0952c80239788e764c0aa",
+        "planCode": "plus",
+        "planName": "Plus Plan",
+        "durationMonths": 1,
+        "status": "active",
+        "expiresAt": "2026-12-13T07:14:00.000Z",
+        "amountPaid": 199
+      }
+    ]
+  }
+}
+```
+

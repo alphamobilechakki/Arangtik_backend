@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const SubscriptionPlan = require('../../subscription/plan.model');
 const UserSubscription = require('../../subscription/userSubscription.model');
 const ApiError = require('../../../utils/apiError');
@@ -102,39 +103,121 @@ class AdminSubscriptionService {
   }
 
   /**
-   * Get all user subscriptions (with user info and filter)
+   * 1. Get all user subscriptions (light table view with essential fields, filtering & pagination)
    */
   async getUserSubscriptions(query = {}) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(query.limit, 10) || 20));
     const skip = (page - 1) * limit;
 
-    const filter = {};
-    if (query.status) {
-      filter.status = query.status;
+    const match = {};
+    if (query.userId && mongoose.Types.ObjectId.isValid(query.userId)) {
+      match.userId = new mongoose.Types.ObjectId(query.userId);
     }
-    if (query.planCode) {
-      filter.planCode = query.planCode;
+    if (query.status && query.status !== 'all') {
+      match.status = query.status;
+    }
+    if (query.planCode && query.planCode !== 'all') {
+      match.planCode = query.planCode.toLowerCase();
+    }
+    if (query.startDate || query.endDate) {
+      match.createdAt = {};
+      if (query.startDate) match.createdAt.$gte = new Date(query.startDate);
+      if (query.endDate) match.createdAt.$lte = new Date(query.endDate);
     }
 
-    const [subscriptions, total] = await Promise.all([
-      UserSubscription.find(filter)
-        .populate('userId', 'name phone profileImage')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      UserSubscription.countDocuments(filter),
-    ]);
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user',
+          pipeline: [{ $project: { _id: 1, name: 1, phone: 1 } }],
+        },
+      },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    ];
+
+    if (query.search && query.search.trim()) {
+      const regex = new RegExp(query.search.trim(), 'i');
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'user.name': regex },
+            { 'user.phone': regex },
+            { planName: regex },
+            { planCode: regex },
+            { razorpayOrderId: regex },
+            { razorpayPaymentId: regex },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+          // Project only the required lightweight table fields
+          {
+            $project: {
+              _id: 1,
+              user: {
+                _id: '$user._id',
+                name: '$user.name',
+                phone: '$user.phone',
+              },
+              planName: 1,
+              planCode: 1,
+              durationMonths: 1,
+              includesJewellery: 1,
+              amountPaid: 1,
+              status: 1,
+              expiresAt: 1,
+              createdAt: 1,
+            },
+          },
+        ],
+        totalCount: [{ $count: 'count' }],
+      },
+    });
+
+    const [result] = await UserSubscription.aggregate(pipeline);
+    const total = result?.totalCount?.[0]?.count || 0;
 
     return {
-      subscriptions,
+      subscriptions: result?.data || [],
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 1,
       },
     };
+  }
+
+  /**
+   * 2. Get single user subscription full details by ID (for "Show More")
+   */
+  async getUserSubscriptionById(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, 'Invalid user subscription ID format');
+    }
+
+    const subscription = await UserSubscription.findById(id).populate(
+      'userId',
+      'name phone wallet profileImage status gender accountType country currency preferredLanguage createdAt'
+    );
+
+    if (!subscription) {
+      throw new ApiError(404, 'User subscription record not found');
+    }
+
+    return subscription;
   }
 
   /**

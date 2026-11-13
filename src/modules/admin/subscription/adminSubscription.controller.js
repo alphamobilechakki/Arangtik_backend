@@ -37,6 +37,11 @@ class AdminSubscriptionController {
     return ApiResponse.success(res, data, 'User subscriptions retrieved successfully');
   });
 
+  getUserSubscriptionById = asyncHandler(async (req, res) => {
+    const data = await adminSubscriptionService.getUserSubscriptionById(req.params.id);
+    return ApiResponse.success(res, data, 'User subscription details retrieved successfully');
+  });
+
   getSubscriptionStats = asyncHandler(async (req, res) => {
     const stats = await adminSubscriptionService.getSubscriptionStats();
     return ApiResponse.success(res, stats, 'Subscription stats retrieved successfully');
