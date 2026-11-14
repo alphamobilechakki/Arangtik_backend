@@ -4600,3 +4600,763 @@ Authorization: Bearer <ADMIN_JWT_TOKEN>
 }
 ```
 
+
+
+---
+
+## 16. Frequent Connect Module (`/api/fc`)
+
+Frequent Connect is an instant communication and priority grouping feature that allows Arangtik users to stay connected with frequently contacted people through custom, priority-ordered **Clusters** (e.g., Family, Friends, Office). It offers one-tap access, real-time text chat, voice messaging, live push-to-talk (walkie-talkie) streaming, automated 15-minute message self-destruction, message bookmarking, and home-screen widget synchronization.
+
+---
+
+### 16.1 Architecture & Flow Design
+
+#### High-Level System Architecture
+
+```
+                       ┌────────────────────────────────────────┐
+                       │          Client (Mobile / Web)         │
+                       └──────────┬──────────────────┬──────────┘
+                                  │                  │
+                         REST API │ (HTTP / JSON)    │ WebSockets (Socket.IO)
+                         Auth: Bearer JWT            │ Auth: Handshake JWT
+                                  ▼                  ▼
+                       ┌────────────────────────────────────────┐
+                       │        Express.js & Socket.IO          │
+                       │     (Namespace: /fc on Port 8083)      │
+                       └──────────┬──────────────────┬──────────┘
+                                  │                  │
+        ┌─────────────────────────┼──────────────────┼────────────────────────┐
+        ▼                         ▼                  ▼                        ▼
+ ┌──────────────┐          ┌──────────────┐   ┌──────────────┐         ┌──────────────┐
+ │   Clusters   │          │ Conversations│   │ WalkieTalkie │         │ Push Notifs  │
+ │  & Priority  │          │  & Messages  │   │ Floor Control│         │  (Firebase)  │
+ └──────┬───────┘          └──────┬───────┘   └──────┬───────┘         └──────┬───────┘
+        │                         │                  │                        │
+        │ MongoDB Atlas           │ 15-min Auto-Del  │ Half-Duplex Binary     │ FCM v1 Multicast
+        ▼                         ▼                  ▼                        ▼
+ ┌──────────────┐          ┌──────────────┐   ┌──────────────┐         ┌──────────────┐
+ │  FCClusters  │          │  FCMessages  │   │ Audio Buffer │         │ Mobile Device│
+ │  FCMembers   │          │  (Auto-Scrub)│   │  Streaming   │         │ Notifications│
+ └──────────────┘          └──────────────┘   └──────────────┘         └──────────────┘
+```
+
+#### Request-Response & Lifecycle Flows
+
+##### 1. One-Tap Communication & Cluster Priority Flow
+```
+User Reorders/Views Clusters ────► [GET/PATCH /api/fc/clusters] ────► Returns Clusters Sorted by Priority
+                                                                           │
+                                                                           ▼
+User Taps Cluster or Contact ────► [GET /api/fc/conversations/:id] ────► Loads Room & Active Participants
+```
+
+##### 2. 15-Minute Auto-Delete & Bookmarking Lifecycle
+```
+Sender Posts Message ──► Recipient Views (Status: SEEN) ──► Sets seenAt Timestamp & autoDeleteAt = seenAt + 15m
+                               │
+               ┌───────────────┴───────────────┐
+               ▼                               ▼
+       User Saves Message?             User Does NOT Save?
+               │                               │
+       [POST /messages/:id/save]               ▼
+               │                       Background Cron (every 60s)
+               ▼                               │
+     isSaved = true;                   autoDeleteAt <= Now?
+     Exempt from deletion                      │
+                                               ▼
+                                      isAutoDeleted = true;
+                                      Text scrubbed & audio file unlinked from disk
+```
+
+##### 3. Walkie-Talkie Push-to-Talk (PTT) Half-Duplex Flow
+```
+Client A (Presses PTT) ─────────► [Socket: walkie-start] ─────────► Floor Available?
+                                                                         │
+                            ┌────────────────────────────────────────────┴──────────────────────────┐
+                            ▼ YES                                                                   ▼ NO (Occupied)
+                     Grants Floor                                                           Emits 'walkie-busy'
+             Broadcasts 'walkie-incoming'                                                   Rejects Client
+                            │
+Client A (Streams Audio) ───┼───► [Socket: walkie-audio (Binary Chunk)] ───► Broadcasts 'walkie-audio-stream' to Listeners
+                            │
+Client A (Releases PTT) ────┴───► [Socket: walkie-stop] ───────────────► Broadcasts 'walkie-ended'
+```
+
+---
+
+### 16.2 Endpoints Summary Table
+
+| Method | Endpoint | Description | Protected |
+|---|---|---|:---:|
+| `GET` | `/api/fc/health` | Frequent Connect subsystem health probe | No |
+| `POST` | `/api/fc/clusters` | Create a new priority cluster | Yes |
+| `GET` | `/api/fc/clusters` | List all clusters for authenticated user (sorted by priority) | Yes |
+| `GET` | `/api/fc/clusters/:id` | Get single cluster details | Yes |
+| `PUT` | `/api/fc/clusters/:id` | Update cluster name, icon, color, or type | Yes |
+| `DELETE` | `/api/fc/clusters/:id` | Delete cluster and remove all members (creator only) | Yes |
+| `PATCH` | `/api/fc/clusters/reorder` | Reorder cluster priorities | Yes |
+| `POST` | `/api/fc/clusters/:id/members` | Add member(s) by phone number | Yes |
+| `GET` | `/api/fc/clusters/:id/members` | List members of a cluster | Yes |
+| `DELETE` | `/api/fc/clusters/:id/members/:memberId` | Remove a member from cluster | Yes |
+| `POST` | `/api/fc/clusters/:id/members/leave` | Leave a cluster (self-removal) | Yes |
+| `POST` | `/api/fc/invites` | Create/dispatch an invite link or SMS | Yes |
+| `GET` | `/api/fc/invites` | List pending invites sent by user | Yes |
+| `POST` | `/api/fc/invites/:code/accept` | Accept an invite via invite code | Yes |
+| `POST` | `/api/fc/conversations` | Get or create a 1:1 direct conversation | Yes |
+| `GET` | `/api/fc/conversations` | List user conversations (direct & cluster) | Yes |
+| `GET` | `/api/fc/conversations/:id` | Get details of a single conversation | Yes |
+| `GET` | `/api/fc/conversations/:id/history` | Retrieve full paginated chat history | Yes |
+| `POST` | `/api/fc/conversations/:id/messages` | Send a text message | Yes |
+| `GET` | `/api/fc/conversations/:id/messages` | Retrieve conversation message stream | Yes |
+| `POST` | `/api/fc/conversations/:id/voice` | Upload and send an instant voice audio message | Yes |
+| `PATCH` | `/api/fc/messages/:id/status` | Update message delivery/seen/played status | Yes |
+| `POST` | `/api/fc/messages/:id/save` | Bookmark a message to exempt from 15-min auto-delete | Yes |
+| `DELETE` | `/api/fc/messages/:id/save` | Unsave a bookmarked message | Yes |
+| `GET` | `/api/fc/saved-messages` | List user's saved/bookmarked messages | Yes |
+| `GET` | `/api/fc/widget/clusters` | Lightweight cluster list with unread badges for mobile widget | Yes |
+| `GET` | `/api/fc/widget/recent` | Recent conversations tile data for widget | Yes |
+| `GET` | `/api/fc/search/messages` | Full-text search across authorized messages | Yes |
+| `GET` | `/api/fc/search/conversations` | Contact and cluster discovery search | Yes |
+
+---
+
+### 16.3 Endpoint Specifications & Request-Response Cycles
+
+#### 16.3.1 Subsystem Health Check
+Checks operational status of the Frequent Connect routing module.
+
+- **Method / Path:** `GET /api/fc/health`
+- **Authentication:** Public
+- **Success Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "feature": "Frequent Connect",
+  "timestamp": "2026-11-14T06:10:00.000Z"
+}
+```
+
+---
+
+#### 16.3.2 Create Cluster
+Creates a new priority grouping (e.g. Family, Office, Close Friends). The creator is automatically added as an active `ADMIN` member.
+
+- **Method / Path:** `POST /api/fc/clusters`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Headers:**
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <TOKEN>`
+- **Request Body:**
+```json
+{
+  "name": "Family Circle",
+  "icon": "👨‍👩‍👧",
+  "color": "#FF5733",
+  "type": "FAMILY"
+}
+```
+*Note: `type` must be one of `FAMILY`, `FRIENDS`, `OFFICE`, or `CUSTOM`. Color must be a valid hex code.*
+
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Cluster created successfully",
+  "data": {
+    "_id": "6735fa016ba477c7d42cfb80",
+    "name": "Family Circle",
+    "icon": "👨‍👩‍👧",
+    "color": "#FF5733",
+    "type": "FAMILY",
+    "creatorId": "6ae31cca0c00fa1dfe7e3c99",
+    "priority": 0,
+    "memberCount": 1,
+    "conversationId": "6735fa026ba477c7d42cfb82",
+    "createdAt": "2026-11-14T06:12:00.000Z",
+    "updatedAt": "2026-11-14T06:12:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.3 List Clusters (Sorted by Priority)
+Retrieves all clusters created by or joined by the user, ordered according to the user's priority sequence (`priority: 0` is highest).
+
+- **Method / Path:** `GET /api/fc/clusters`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Clusters retrieved successfully",
+  "data": [
+    {
+      "_id": "6735fa016ba477c7d42cfb80",
+      "name": "Family Circle",
+      "icon": "👨‍👩‍👧",
+      "color": "#FF5733",
+      "type": "FAMILY",
+      "creatorId": "6ae31cca0c00fa1dfe7e3c99",
+      "priority": 0,
+      "memberCount": 3,
+      "conversationId": "6735fa026ba477c7d42cfb82"
+    },
+    {
+      "_id": "6735fa056ba477c7d42cfb85",
+      "name": "Office Tech Lead",
+      "icon": "💼",
+      "color": "#33A1FF",
+      "type": "OFFICE",
+      "creatorId": "6ae31cca0c00fa1dfe7e3c99",
+      "priority": 1,
+      "memberCount": 5,
+      "conversationId": "6735fa056ba477c7d42cfb88"
+    }
+  ]
+}
+```
+
+---
+
+#### 16.3.4 Reorder Cluster Priorities
+Re-arranges user cluster priority sequence in a single bulk transaction.
+
+- **Method / Path:** `PATCH /api/fc/clusters/reorder`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "order": [
+    { "clusterId": "6735fa056ba477c7d42cfb85", "priority": 0 },
+    { "clusterId": "6735fa016ba477c7d42cfb80", "priority": 1 }
+  ]
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Clusters reordered successfully",
+  "data": {
+    "modifiedCount": 2,
+    "order": [
+      { "clusterId": "6735fa056ba477c7d42cfb85", "priority": 0 },
+      { "clusterId": "6735fa016ba477c7d42cfb80", "priority": 1 }
+    ]
+  }
+}
+```
+
+---
+
+#### 16.3.5 Add Members to Cluster
+Adds contacts by phone number. If the phone number is already registered on Arangtik, they become an `ACTIVE` member immediately and receive a push notification. If not, an `INVITED` record is created along with an SMS invite code.
+
+- **Method / Path:** `POST /api/fc/clusters/:id/members`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "members": [
+    { "phone": "918949056321", "displayName": "Rahul S" },
+    { "phone": "919876543210", "displayName": "Uncle Sharma" }
+  ]
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Members processed successfully",
+  "data": {
+    "added": [
+      {
+        "memberId": "6735fa106ba477c7d42cfb90",
+        "userId": "6ae31cca0c00fa1dfe7e3c99",
+        "phone": "918949056321",
+        "displayName": "Rahul S",
+        "status": "ACTIVE"
+      }
+    ],
+    "invited": [
+      {
+        "memberId": "6735fa106ba477c7d42cfb91",
+        "phone": "919876543210",
+        "displayName": "Uncle Sharma",
+        "status": "INVITED",
+        "inviteCode": "4b9e28f10a72"
+      }
+    ],
+    "alreadyExists": [],
+    "errors": []
+  }
+}
+```
+
+---
+
+#### 16.3.6 Accept Cluster Invitation
+Redeems a deep-link invite code to join a cluster upon account registration or link click.
+
+- **Method / Path:** `POST /api/fc/invites/:code/accept`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Invite accepted successfully",
+  "data": {
+    "accepted": true,
+    "clusterId": "6735fa016ba477c7d42cfb80",
+    "inviteCode": "4b9e28f10a72"
+  }
+}
+```
+
+---
+
+#### 16.3.7 Direct 1:1 Conversation
+Finds or initializes a direct 1:1 conversation between two users without duplication.
+
+- **Method / Path:** `POST /api/fc/conversations`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "participantId": "6ae31cca0c00fa1dfe7e3c99"
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Conversation retrieved successfully",
+  "data": {
+    "_id": "6735fa156ba477c7d42cfba0",
+    "type": "DIRECT",
+    "participants": [
+      {
+        "_id": "6ae31cca0c00fa1dfe7e3c88",
+        "name": "Dev User",
+        "phone": "919000123456",
+        "profileImage": "https://api.arangtik.com/uploads/user.png"
+      },
+      {
+        "_id": "6ae31cca0c00fa1dfe7e3c99",
+        "name": "Monika",
+        "phone": "918949056321",
+        "profileImage": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg"
+      }
+    ],
+    "lastMessage": null,
+    "createdAt": "2026-11-14T06:15:00.000Z",
+    "updatedAt": "2026-11-14T06:15:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.8 Send Text Message
+Sends a text message in a direct or cluster conversation. Broadcasts via Socket.IO and sends FCM notifications to offline members.
+
+- **Method / Path:** `POST /api/fc/conversations/:id/messages`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Rate Limit:** 40 messages / minute per user
+- **Request Body:**
+```json
+{
+  "content": "Hey team, are we ready for the standup?",
+  "type": "TEXT"
+}
+```
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Message sent successfully",
+  "data": {
+    "_id": "6735fa206ba477c7d42cfbb0",
+    "conversationId": "6735fa156ba477c7d42cfba0",
+    "senderId": {
+      "_id": "6ae31cca0c00fa1dfe7e3c88",
+      "name": "Dev User",
+      "phone": "919000123456",
+      "profileImage": ""
+    },
+    "type": "TEXT",
+    "content": "Hey team, are we ready for the standup?",
+    "status": "SENT",
+    "recipientStatuses": [
+      {
+        "userId": "6ae31cca0c00fa1dfe7e3c99",
+        "status": "SENT",
+        "statusAt": "2026-11-14T06:16:00.000Z",
+        "seenAt": null,
+        "isAutoDeleted": false,
+        "isSaved": false
+      }
+    ],
+    "createdAt": "2026-11-14T06:16:00.000Z",
+    "updatedAt": "2026-11-14T06:16:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.9 Send Voice Message (Audio Upload)
+Uploads recorded audio (AAC, MP4, M4A, OGG, WEBM) and creates a voice message.
+
+- **Method / Path:** `POST /api/fc/conversations/:id/voice`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Rate Limit:** 20 voice uploads / minute per user
+- **Request Format:** `multipart/form-data`
+  - `audio`: File (binary audio data, max 10MB)
+  - `duration`: Float (seconds, e.g. `12.4`)
+  - `caption`: Optional String
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Voice message sent successfully",
+  "data": {
+    "_id": "6735fa256ba477c7d42cfbc0",
+    "conversationId": "6735fa156ba477c7d42cfba0",
+    "type": "VOICE",
+    "content": "",
+    "voiceUrl": "https://api.arangtik.com/uploads/voice/voice-1794636256-abc89f.m4a",
+    "voiceDuration": 12.4,
+    "status": "SENT",
+    "createdAt": "2026-11-14T06:17:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.10 Update Message Status (Receipts & Auto-Delete Trigger)
+Updates delivery or seen status. Updating to `SEEN` starts the 15-minute auto-delete countdown for the user. Updating to `PLAYED` indicates voice listening.
+
+- **Method / Path:** `PATCH /api/fc/messages/:id/status`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "status": "SEEN"
+}
+```
+*Allowed values: `DELIVERED`, `SEEN`, `PLAYED`.*
+
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Message status updated successfully",
+  "data": {
+    "messageId": "6735fa206ba477c7d42cfbb0",
+    "status": "SEEN",
+    "recipientStatuses": [
+      {
+        "userId": "6ae31cca0c00fa1dfe7e3c99",
+        "status": "SEEN",
+        "statusAt": "2026-11-14T06:17:30.000Z",
+        "seenAt": "2026-11-14T06:17:30.000Z",
+        "isAutoDeleted": false,
+        "isSaved": false
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 16.3.11 Save / Bookmark Message
+Exempts a message from the 15-minute auto-delete countdown for the user.
+
+- **Method / Path:** `POST /api/fc/messages/:id/save`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "note": "Important address details"
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Message saved successfully",
+  "data": {
+    "_id": "6735fa306ba477c7d42cfbd0",
+    "userId": "6ae31cca0c00fa1dfe7e3c99",
+    "messageId": "6735fa206ba477c7d42cfbb0",
+    "conversationId": "6735fa156ba477c7d42cfba0",
+    "note": "Important address details",
+    "savedAt": "2026-11-14T06:18:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.12 List Saved Messages
+Retrieves all bookmarked messages for the user with pagination and populated sender information.
+
+- **Method / Path:** `GET /api/fc/saved-messages?page=1&limit=20`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Saved messages retrieved successfully",
+  "data": {
+    "savedMessages": [
+      {
+        "_id": "6735fa306ba477c7d42cfbd0",
+        "messageId": {
+          "_id": "6735fa206ba477c7d42cfbb0",
+          "content": "Meeting at Cafe Blue, 4 PM",
+          "type": "TEXT",
+          "senderId": {
+            "_id": "6ae31cca0c00fa1dfe7e3c88",
+            "name": "Dev User",
+            "phone": "919000123456"
+          }
+        },
+        "note": "Important address details",
+        "savedAt": "2026-11-14T06:18:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 16.3.13 Home Screen Widget: Clusters
+Optimized, lightweight cluster endpoint for home screen widgets with live unread message badges.
+
+- **Method / Path:** `GET /api/fc/widget/clusters`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Widget clusters retrieved successfully",
+  "data": {
+    "clusters": [
+      {
+        "id": "6735fa016ba477c7d42cfb80",
+        "name": "Family Circle",
+        "icon": "👨‍👩‍👧",
+        "color": "#FF5733",
+        "type": "FAMILY",
+        "priority": 0,
+        "memberCount": 4,
+        "unreadCount": 3,
+        "conversationId": "6735fa026ba477c7d42cfb82"
+      },
+      {
+        "id": "6735fa056ba477c7d42cfb85",
+        "name": "Office Tech Lead",
+        "icon": "💼",
+        "color": "#33A1FF",
+        "type": "OFFICE",
+        "priority": 1,
+        "memberCount": 5,
+        "unreadCount": 0,
+        "conversationId": "6735fa056ba477c7d42cfb88"
+      }
+    ],
+    "totalClusters": 2,
+    "timestamp": "2026-11-14T06:19:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.14 Home Screen Widget: Recent Interactions
+Lightweight list of top recent contacts and clusters for quick one-tap app launch from home screen widgets.
+
+- **Method / Path:** `GET /api/fc/widget/recent?limit=5`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Widget recent conversations retrieved successfully",
+  "data": {
+    "recent": [
+      {
+        "id": "6735fa156ba477c7d42cfba0",
+        "type": "DIRECT",
+        "title": "Monika",
+        "icon": "",
+        "avatar": "https://api.arangtik.com/uploads/img_mv6gxfw5_31f57b.jpg",
+        "lastMessage": "Hey team, are we ready for the standup?",
+        "lastMessageTime": "2026-11-14T06:16:00.000Z",
+        "unreadCount": 1
+      }
+    ],
+    "timestamp": "2026-11-14T06:19:00.000Z"
+  }
+}
+```
+
+---
+
+#### 16.3.15 Full-Text Message Search
+Searches message content across authorized conversations. Excludes auto-deleted messages unless saved by the searching user.
+
+- **Method / Path:** `GET /api/fc/search/messages?q=standup&limit=20&page=1`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Message search results retrieved successfully",
+  "data": {
+    "results": [
+      {
+        "messageId": "6735fa206ba477c7d42cfbb0",
+        "conversationId": "6735fa156ba477c7d42cfba0",
+        "conversationType": "DIRECT",
+        "conversationTitle": "Direct Conversation",
+        "content": "Hey team, are we ready for the standup?",
+        "type": "TEXT",
+        "sender": {
+          "_id": "6ae31cca0c00fa1dfe7e3c88",
+          "name": "Dev User",
+          "phone": "919000123456"
+        },
+        "isSender": true,
+        "createdAt": "2026-11-14T06:16:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+---
+
+#### 16.3.16 Contact & Cluster Search
+Quick lookup for clusters or contacts by name or phone number.
+
+- **Method / Path:** `GET /api/fc/search/conversations?q=family`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Conversation search results retrieved successfully",
+  "data": {
+    "results": [
+      {
+        "id": "6735fa026ba477c7d42cfb82",
+        "type": "CLUSTER",
+        "title": "Family Circle",
+        "icon": "👨‍👩‍👧",
+        "avatar": "",
+        "lastMessage": "",
+        "lastMessageTime": "2026-11-14T06:12:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+---
+
+### 16.4 Real-Time WebSockets & Walkie-Talkie Protocol (`/fc` namespace)
+
+Frequent Connect runs a real-time gateway on the `/fc` WebSocket namespace.
+
+#### Connection & Handshake
+Clients authenticate via standard query param, auth payload, or authorization headers:
+```javascript
+const socket = io('https://api.arangtik.com/fc', {
+  auth: { token: 'YOUR_JWT_ACCESS_TOKEN' },
+  transports: ['websocket'],
+});
+```
+
+#### Event Catalog
+
+```
+┌──────────────────────────┬───────────┬────────────────────────────────────────────────────────┐
+│ Event Name               │ Direction │ Payload Description                                    │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ join-conversation        │ Client-to-│ { conversationId: string }                             │
+│                          │ Server    │ Subscribes socket to conversation message room         │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ leave-conversation       │ Client-to-│ { conversationId: string }                             │
+│                          │ Server    │ Unsubscribes from conversation room                    │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ send-message             │ Client-to-│ { conversationId: string, content: string, type: text}│
+│                          │ Server    │ Real-time message dispatch (rate-limited at 40/min)    │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ new-message              │ Server-to-│ Message document                                       │
+│                          │ Client    │ Broadcasts message to room and dispatches FCM to offline│
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ typing / stop-typing     │ Client-to-│ { conversationId: string }                             │
+│                          │ Server    │ Broadcasts 'user-typing' or 'user-stop-typing' to room │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ message-status           │ Client-to-│ { messageId: string, conversationId, status: string }  │
+│                          │ Server    │ Emits 'message-status-update' to listeners             │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ check-presence           │ Client-to-│ { userIds: string[] }                                  │
+│                          │ Server    │ Returns online/offline status map of queried contacts   │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-start             │ Client-to-│ { conversationId: string }                             │
+│                          │ Server    │ Floor acquire request (half-duplex lock)               │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-busy              │ Server-to-│ { conversationId: string, currentSpeaker: object }     │
+│                          │ Client    │ Rejection if floor is already held                     │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-incoming          │ Server-to-│ { conversationId: string, speakerId, speakerName }     │
+│                          │ Client    │ Alerts listeners of incoming live talk audio           │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-audio             │ Client-to-│ { conversationId: string, chunk: Buffer }              │
+│                          │ Server    │ Raw audio binary chunk stream                          │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-audio-stream      │ Server-to-│ { conversationId: string, speakerId, chunk: Buffer }   │
+│                          │ Client    │ Broadcasts audio chunk stream to listeners             │
+├──────────────────────────┼───────────┼────────────────────────────────────────────────────────┤
+│ walkie-stop              │ Client-to-│ { conversationId: string }                             │
+│                          │ Server    │ Releases floor & broadcasts 'walkie-ended'             │
+└──────────────────────────┴───────────┴────────────────────────────────────────────────────────┘
+```

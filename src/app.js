@@ -52,12 +52,14 @@ const fs = require('fs');
 const uploadsDir = path.resolve(__dirname, '../uploads');
 const cwdUploadsDir = path.resolve(process.cwd(), 'uploads');
 
-// Ensure upload and models folders exist
+// Ensure upload, models, and voice folders exist
 [
   uploadsDir,
   cwdUploadsDir,
   path.join(uploadsDir, 'models'),
   path.join(cwdUploadsDir, 'models'),
+  path.join(uploadsDir, 'voice'),
+  path.join(cwdUploadsDir, 'voice'),
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

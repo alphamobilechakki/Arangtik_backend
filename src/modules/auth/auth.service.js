@@ -270,6 +270,19 @@ class AuthService {
         console.error('[Vendor Sync on Login Error]:', syncErr.message);
       }
 
+      // Auto-accept any pending Frequent Connect cluster invitations for this phone
+      if (isNewUser) {
+        try {
+          const inviteService = require('../frequentConnect/invite/invite.service');
+          const inviteResult = await inviteService.autoAcceptPendingInvites(user._id, formattedPhone);
+          if (inviteResult.accepted > 0) {
+            console.log(`[FC Invite Auto-Accept]: Accepted ${inviteResult.accepted} pending invites for ${formattedPhone}`);
+          }
+        } catch (inviteErr) {
+          console.error('[FC Invite Auto-Accept Error]:', inviteErr.message);
+        }
+      }
+
       // Register FCM device token on login if provided
       let registeredDevice = null;
       const rawDeviceToken = devicePayload?.token || devicePayload?.fcmToken || devicePayload?.deviceToken;

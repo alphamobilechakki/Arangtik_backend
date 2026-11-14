@@ -17,6 +17,7 @@ const categoryRoutes = require('../modules/category/category.routes');
 const categoryServiceRoutes = require('../modules/categoryService/categoryService.routes');
 const adminRoutes = require('../modules/admin/admin.routes');
 const subscriptionRoutes = require('../modules/subscription/subscription.routes');
+const frequentConnectRoutes = require('../modules/frequentConnect/frequentConnect.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -77,10 +78,14 @@ router.use('/hardware/hubs', hubRoutes);
 router.use('/hardware/boxes', kitchenBoxRoutes);
 const kitchenBoxCaptureRoutes = require('../modules/hardware/kitchenBoxCaptures/kitchenBoxCapture.routes');
 router.use('/hardware/captures', kitchenBoxCaptureRoutes);
+
 // Admin Module Routes
 const coinRoutes = require('../modules/subscription/coins/coin.routes');
 router.use('/coins', coinRoutes);
 router.use('/subscription', subscriptionRoutes);
 router.use('/admin', adminRoutes);
+
+// Frequent Connect – Communication Clusters & Messaging
+router.use('/fc', frequentConnectRoutes);
 
 module.exports = router;
