@@ -1,15 +1,14 @@
-const ClusterMember = require('./member.model');
+const crypto = require('crypto');
 const Cluster = require('../cluster/cluster.model');
 const User = require('../../auth/user.model');
-const Invite = require('../invite/invite.model');
 const ApiError = require('../../../utils/apiError');
 const { formatPhoneNumber } = require('../../../utils/sms.service');
 
 class MemberService {
   /**
-   * Add members to a cluster by phone number
-   * - If the phone belongs to an existing Arangtik user → add as ACTIVE member
-   * - If the phone is not registered → add as INVITED member + create invite
+   * Add members to a cluster by phone number directly within cluster.members
+   * - If the phone belongs to an existing Arangtik user -> add as ACTIVE member
+   * - If the phone is not registered -> add as INVITED member with inviteCode
    */
   async addMembers(clusterId, userId, members) {
     const cluster = await Cluster.findById(clusterId);
@@ -21,14 +20,19 @@ class MemberService {
     const clusterService = require('../cluster/cluster.service');
     await clusterService._requireAdminAccess(clusterId, userId, cluster);
 
-    // Check member limit (max 50 per cluster)
-    const currentCount = await ClusterMember.countDocuments({
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    });
+    if (!Array.isArray(cluster.members)) {
+      cluster.members = [];
+    }
 
-    if (currentCount + members.length > 50) {
-      throw new ApiError(400, `Cannot exceed 50 members per cluster. Current: ${currentCount}, adding: ${members.length}`);
+    // Check member limit (max 50 per cluster)
+    const currentActiveMembers = cluster.members.filter((m) =>
+      ['ACTIVE', 'INVITED'].includes(m.status)
+    );
+    if (currentActiveMembers.length + members.length > 50) {
+      throw new ApiError(
+        400,
+        `Cannot exceed 50 members per cluster. Current: ${currentActiveMembers.length}, adding: ${members.length}`
+      );
     }
 
     const results = {
@@ -43,12 +47,10 @@ class MemberService {
         const phone = formatPhoneNumber(memberData.phone);
         const displayName = memberData.displayName || memberData.name || '';
 
-        // Check if already a member
-        const existingMember = await ClusterMember.findOne({
-          clusterId,
-          phone,
-          status: { $in: ['ACTIVE', 'INVITED'] },
-        });
+        // Check if already a member in embedded array
+        const existingMember = cluster.members.find(
+          (m) => m.phone === phone && ['ACTIVE', 'INVITED'].includes(m.status)
+        );
 
         if (existingMember) {
           results.alreadyExists.push({ phone, displayName });
@@ -60,21 +62,23 @@ class MemberService {
 
         if (existingUser) {
           // Add as active member directly
-          const member = await ClusterMember.create({
-            clusterId,
+          const newMemberObj = {
             userId: existingUser._id,
             phone,
             displayName: displayName || existingUser.name || '',
             role: 'MEMBER',
             status: 'ACTIVE',
             joinedAt: new Date(),
-          });
+          };
+
+          cluster.members.push(newMemberObj);
+          const savedMember = cluster.members[cluster.members.length - 1];
 
           results.added.push({
-            memberId: member._id,
+            memberId: savedMember._id,
             userId: existingUser._id,
             phone,
-            displayName: member.displayName,
+            displayName: savedMember.displayName,
             status: 'ACTIVE',
           });
 
@@ -92,44 +96,31 @@ class MemberService {
             console.warn('[FC Member Add Notification Error]:', notifErr.message);
           }
         } else {
-          // Phone not registered – add as INVITED and create invite
-          const member = await ClusterMember.create({
-            clusterId,
+          // Phone not registered – add as INVITED with inviteCode
+          const inviteCode = crypto.randomBytes(6).toString('hex');
+          const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+          const newMemberObj = {
             userId: null,
             phone,
             displayName: displayName,
             role: 'MEMBER',
             status: 'INVITED',
+            inviteCode,
+            inviteExpiresAt: expiresAt,
             invitedAt: new Date(),
-          });
+          };
 
-          // Create invite record
-          const invite = await Invite.create({
-            inviterId: userId,
-            inviteePhone: phone,
-            clusterId,
-          });
+          cluster.members.push(newMemberObj);
+          const savedMember = cluster.members[cluster.members.length - 1];
 
           results.invited.push({
-            memberId: member._id,
+            memberId: savedMember._id,
             phone,
             displayName,
             status: 'INVITED',
-            inviteCode: invite.inviteCode,
+            inviteCode,
           });
-
-          // Send SMS invitation
-          try {
-            const inviter = await User.findById(userId).select('name').lean();
-            const { sendSmsOtp } = require('../../../utils/sms.service');
-            // Use a custom message for invitation (not OTP)
-            console.log(
-              `[FC Invite SMS]: Would send invite SMS to ${phone} from ${inviter?.name || 'A user'}. Invite code: ${invite.inviteCode}`
-            );
-            // TODO: Implement dedicated invite SMS template via SMS gateway
-          } catch (smsErr) {
-            console.warn('[FC Invite SMS Error]:', smsErr.message);
-          }
         }
       } catch (err) {
         if (err instanceof ApiError) throw err;
@@ -141,11 +132,11 @@ class MemberService {
     }
 
     // Update denormalized member count
-    const activeCount = await ClusterMember.countDocuments({
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    });
-    await Cluster.findByIdAndUpdate(clusterId, { memberCount: activeCount });
+    cluster.memberCount = cluster.members.filter((m) =>
+      ['ACTIVE', 'INVITED'].includes(m.status)
+    ).length;
+
+    await cluster.save();
 
     // Sync conversation participants
     try {
@@ -162,29 +153,35 @@ class MemberService {
    * List all members of a cluster
    */
   async getClusterMembers(clusterId, userId) {
-    const cluster = await Cluster.findById(clusterId).lean();
+    const cluster = await Cluster.findById(clusterId)
+      .populate('members.userId', 'name phone profileImage status')
+      .lean();
+
     if (!cluster) {
       throw new ApiError(404, 'Cluster not found');
     }
 
     // Verify access
-    const isMember = await ClusterMember.findOne({
-      clusterId,
-      userId,
-      status: 'ACTIVE',
-    }).lean();
+    const isMember =
+      cluster.creatorId.toString() === userId.toString() ||
+      (cluster.members || []).some(
+        (m) => m.userId && (m.userId._id || m.userId).toString() === userId.toString() && m.status === 'ACTIVE'
+      );
 
-    if (cluster.creatorId.toString() !== userId.toString() && !isMember) {
+    if (!isMember) {
       throw new ApiError(403, 'You do not have access to this cluster');
     }
 
-    const members = await ClusterMember.find({
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    })
-      .populate('userId', 'name phone profileImage status')
-      .sort({ role: 1, joinedAt: 1 }) // ADMINs first, then by join date
-      .lean();
+    // Return active and invited members
+    const members = (cluster.members || []).filter((m) =>
+      ['ACTIVE', 'INVITED'].includes(m.status)
+    );
+
+    members.sort((a, b) => {
+      if (a.role === 'ADMIN' && b.role !== 'ADMIN') return -1;
+      if (a.role !== 'ADMIN' && b.role === 'ADMIN') return 1;
+      return new Date(a.joinedAt || a.createdAt || 0) - new Date(b.joinedAt || b.createdAt || 0);
+    });
 
     return members;
   }
@@ -198,17 +195,14 @@ class MemberService {
       throw new ApiError(404, 'Cluster not found');
     }
 
-    const member = await ClusterMember.findOne({
-      _id: memberId,
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    });
+    const member = (cluster.members || []).find(
+      (m) => m._id.toString() === memberId.toString() && ['ACTIVE', 'INVITED'].includes(m.status)
+    );
 
     if (!member) {
       throw new ApiError(404, 'Member not found in this cluster');
     }
 
-    // A member can remove themselves, or an admin can remove anyone
     const isSelfRemoval =
       member.userId && member.userId.toString() === userId.toString();
 
@@ -226,14 +220,11 @@ class MemberService {
     }
 
     member.status = 'REMOVED';
-    await member.save();
+    cluster.memberCount = cluster.members.filter((m) =>
+      ['ACTIVE', 'INVITED'].includes(m.status)
+    ).length;
 
-    // Update denormalized count
-    const activeCount = await ClusterMember.countDocuments({
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    });
-    await Cluster.findByIdAndUpdate(clusterId, { memberCount: activeCount });
+    await cluster.save();
 
     try {
       const conversationService = require('../conversation/conversation.service');
@@ -242,38 +233,36 @@ class MemberService {
       console.warn('[Sync Cluster Participants Error]:', syncErr.message);
     }
 
-    return { removed: true, memberId: member._id };
+    return { removed: true, memberId };
   }
 
   /**
    * Leave a cluster (self-removal)
    */
   async leaveCluster(clusterId, userId) {
-    const member = await ClusterMember.findOne({
-      clusterId,
-      userId,
-      status: 'ACTIVE',
-    });
+    const cluster = await Cluster.findById(clusterId);
+    if (!cluster) {
+      throw new ApiError(404, 'Cluster not found');
+    }
+
+    if (cluster.creatorId.toString() === userId.toString()) {
+      throw new ApiError(400, 'Cluster creator cannot leave. Transfer ownership or delete the cluster.');
+    }
+
+    const member = (cluster.members || []).find(
+      (m) => m.userId && m.userId.toString() === userId.toString() && m.status === 'ACTIVE'
+    );
 
     if (!member) {
       throw new ApiError(404, 'You are not an active member of this cluster');
     }
 
-    // Creator cannot leave their own cluster
-    const cluster = await Cluster.findById(clusterId).lean();
-    if (cluster && cluster.creatorId.toString() === userId.toString()) {
-      throw new ApiError(400, 'Cluster creator cannot leave. Transfer ownership or delete the cluster.');
-    }
-
     member.status = 'LEFT';
-    await member.save();
+    cluster.memberCount = cluster.members.filter((m) =>
+      ['ACTIVE', 'INVITED'].includes(m.status)
+    ).length;
 
-    // Update count
-    const activeCount = await ClusterMember.countDocuments({
-      clusterId,
-      status: { $in: ['ACTIVE', 'INVITED'] },
-    });
-    await Cluster.findByIdAndUpdate(clusterId, { memberCount: activeCount });
+    await cluster.save();
 
     try {
       const conversationService = require('../conversation/conversation.service');

@@ -52,6 +52,12 @@ const initFrequentConnectSocket = (io) => {
     // Broadcast user online event
     socket.broadcast.emit('user-online', { userId });
 
+    // Join Admin Monitoring Room if socket user is an admin
+    socket.on('admin:join-monitor', () => {
+      socket.join('admin-fc-monitor');
+      console.log(`[FC Socket Admin]: Socket ${socket.id} joined admin-fc-monitor room`);
+    });
+
     /**
      * Join conversation room
      * Client emits: 'join-conversation', { conversationId }

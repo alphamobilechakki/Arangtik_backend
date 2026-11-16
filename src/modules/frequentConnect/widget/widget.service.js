@@ -1,5 +1,4 @@
 const Cluster = require('../cluster/cluster.model');
-const ClusterMember = require('../member/member.model');
 const Conversation = require('../conversation/conversation.model');
 const Message = require('../message/message.model');
 const clusterService = require('../cluster/cluster.service');

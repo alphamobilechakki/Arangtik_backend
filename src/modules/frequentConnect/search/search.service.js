@@ -1,6 +1,5 @@
 const Message = require('../message/message.model');
 const Conversation = require('../conversation/conversation.model');
-const SavedMessage = require('../savedMessage/savedMessage.model');
 const Cluster = require('../cluster/cluster.model');
 const User = require('../../auth/user.model');
 const ApiError = require('../../../utils/apiError');

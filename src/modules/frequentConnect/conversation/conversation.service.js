@@ -103,16 +103,12 @@ class ConversationService {
    * Synchronize cluster participants with its cluster conversation
    */
   async syncClusterParticipants(clusterId) {
-    const ClusterMember = require('../member/member.model');
-    const members = await ClusterMember.find({
-      clusterId,
-      status: 'ACTIVE',
-      userId: { $ne: null },
-    })
-      .select('userId')
-      .lean();
+    const cluster = await Cluster.findById(clusterId).select('members').lean();
+    if (!cluster) return null;
 
-    const participantIds = members.map((m) => m.userId);
+    const participantIds = (cluster.members || [])
+      .filter((m) => m.status === 'ACTIVE' && m.userId)
+      .map((m) => m.userId);
 
     let conversation = await Conversation.findOne({ type: 'CLUSTER', clusterId });
     if (conversation) {

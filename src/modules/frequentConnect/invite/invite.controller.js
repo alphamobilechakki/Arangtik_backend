@@ -18,7 +18,11 @@ const createInvite = asyncHandler(async (req, res) => {
  * POST /api/fc/invites/:code/accept – Accept an invite by code
  */
 const acceptInvite = asyncHandler(async (req, res) => {
-  const result = await inviteService.acceptInviteByCode(req.params.code, req.user.id);
+  const code = req.params.code || req.body.code || req.body.inviteCode;
+  if (!code) {
+    return res.status(400).json({ success: false, message: 'Invite code is required' });
+  }
+  const result = await inviteService.acceptInviteByCode(code, req.user.id);
   return ApiResponse.success(res, result, 'Invite accepted successfully');
 });
 

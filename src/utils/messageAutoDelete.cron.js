@@ -48,10 +48,11 @@ const runAutoDeleteCycle = async () => {
         }
       });
 
-      // Check if ALL recipient statuses are now marked as auto-deleted
+      // Check if ALL recipient statuses are now marked as auto-deleted and no active bookmarks exist
       const allRecipientsDeleted = msg.recipientStatuses.every((rs) => rs.isAutoDeleted);
+      const hasActiveBookmark = Array.isArray(msg.savedBy) && msg.savedBy.length > 0;
 
-      if (allRecipientsDeleted) {
+      if (allRecipientsDeleted && !hasActiveBookmark) {
         msg.isAutoDeleted = true;
 
         // If message was a voice message, delete physical audio file from disk

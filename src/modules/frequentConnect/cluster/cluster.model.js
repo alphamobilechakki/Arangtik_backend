@@ -1,5 +1,55 @@
 const mongoose = require('mongoose');
 
+const clusterMemberSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null, // null until non-registered user joins
+    },
+    phone: {
+      type: String,
+      required: [true, 'Phone number is required'],
+      trim: true,
+    },
+    displayName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    role: {
+      type: String,
+      enum: ['ADMIN', 'MEMBER'],
+      default: 'MEMBER',
+      uppercase: true,
+    },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'INVITED', 'LEFT', 'REMOVED'],
+      default: 'ACTIVE',
+      uppercase: true,
+    },
+    inviteCode: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    inviteExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    invitedAt: {
+      type: Date,
+      default: null,
+    },
+    joinedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { timestamps: true }
+);
+
 const clusterSchema = new mongoose.Schema(
   {
     name: {
@@ -51,11 +101,16 @@ const clusterSchema = new mongoose.Schema(
       ref: 'FCConversation',
       default: null,
     },
+    // Embedded members & pending invites (Consolidates members & invites collections)
+    members: [clusterMemberSchema],
   },
   { timestamps: true }
 );
 
-// Compound index for fast sorted cluster listing per user
+// Compound indexes for fast, single-query lookups
 clusterSchema.index({ creatorId: 1, priority: 1 });
+clusterSchema.index({ 'members.userId': 1, 'members.status': 1 });
+clusterSchema.index({ 'members.phone': 1, 'members.status': 1 });
+clusterSchema.index({ 'members.inviteCode': 1 });
 
 module.exports = mongoose.model('FCCluster', clusterSchema);

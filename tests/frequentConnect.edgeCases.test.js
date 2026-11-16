@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const request = require('supertest');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
@@ -6,7 +8,6 @@ const { JWT_SECRET, MONGODB_URI } = require('../src/config/env.config');
 
 const User = require('../src/modules/auth/user.model');
 const Cluster = require('../src/modules/frequentConnect/cluster/cluster.model');
-const ClusterMember = require('../src/modules/frequentConnect/member/member.model');
 const Conversation = require('../src/modules/frequentConnect/conversation/conversation.model');
 const Message = require('../src/modules/frequentConnect/message/message.model');
 
@@ -78,8 +79,8 @@ async function testEdgeCases() {
   check(memberDelete.status === 403, 'Non-creator member attempting to delete cluster rejected with 403');
 
   // 6. Cluster creator cannot be removed from their own cluster
-  const members = await ClusterMember.find({ clusterId: testCluster._id });
-  const creatorMember = members.find((m) => m.userId.toString() === userA._id.toString());
+  const currentCluster = await Cluster.findById(testCluster._id);
+  const creatorMember = currentCluster.members.find((m) => m.userId.toString() === userA._id.toString());
   const removeCreatorRes = await request(app)
     .delete(`/api/fc/clusters/${testCluster._id}/members/${creatorMember._id}`)
     .set('Authorization', `Bearer ${tokenA}`);
@@ -162,7 +163,6 @@ async function testEdgeCases() {
   // Cleanup
   await User.deleteMany({ _id: { $in: [userA._id, userB._id, userUnauthorized._id] } });
   await Cluster.deleteMany({ _id: testCluster._id });
-  await ClusterMember.deleteMany({ clusterId: testCluster._id });
   await Conversation.deleteMany({ _id: convId });
   await Message.deleteMany({ conversationId: convId });
 

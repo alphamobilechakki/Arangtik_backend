@@ -39,8 +39,13 @@ router.use('/vendors', adminVendorRoutes);
 router.use('/orders', adminOrderRoutes);
 
 // ── Hardware Management Routes ─────────────────────────────
+const adminFCRoutes = require('./frequentConnect/routes/adminFC.routes');
+
 router.use('/hardware/hubs', hubRoutes);
 router.use('/hardware/kitchenBox', kitchenBoxRoutes);
 router.use('/hardware/captures', kitchenBoxCaptureRoutes);
+
+// ── Frequent Connect Administrative Monitoring Routes ───────
+router.use('/fc', adminFCRoutes);
 
 module.exports = router;

@@ -1,11 +1,11 @@
 const Cluster = require('./cluster.model');
-const ClusterMember = require('../member/member.model');
 const ApiError = require('../../../utils/apiError');
+const User = require('../../auth/user.model');
 
 class ClusterService {
   /**
    * Create a new cluster
-   * The creator is automatically added as ADMIN member
+   * The creator is automatically added as ADMIN member inside the embedded members array
    */
   async createCluster(userId, data) {
     const { name, icon, color, type } = data;
@@ -17,6 +17,19 @@ class ClusterService {
       .lean();
     const nextPriority = maxPriorityCluster ? maxPriorityCluster.priority + 1 : 0;
 
+    const creator = await User.findById(userId).select('phone name').lean();
+    const creatorPhone = creator ? creator.phone : '';
+    const creatorName = creator ? creator.name || '' : '';
+
+    const creatorMember = {
+      userId: userId,
+      phone: creatorPhone,
+      displayName: creatorName,
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      joinedAt: new Date(),
+    };
+
     const cluster = await Cluster.create({
       name: name.trim(),
       icon: icon || '👥',
@@ -25,20 +38,7 @@ class ClusterService {
       creatorId: userId,
       priority: nextPriority,
       memberCount: 1, // creator is the first member
-    });
-
-    // Add creator as ADMIN member
-    const User = require('../../auth/user.model');
-    const creator = await User.findById(userId).select('phone name').lean();
-
-    await ClusterMember.create({
-      clusterId: cluster._id,
-      userId: userId,
-      phone: creator.phone,
-      displayName: creator.name || '',
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      joinedAt: new Date(),
+      members: [creatorMember],
     });
 
     // Automatically create associated Cluster Conversation
@@ -56,34 +56,19 @@ class ClusterService {
 
   /**
    * Get all clusters for a user (both owned and member-of), sorted by priority
+   * Executed as a single atomic query on the consolidated fc_clusters collection
    */
   async getUserClusters(userId) {
-    // Find clusters the user created
-    const ownedClusters = await Cluster.find({ creatorId: userId })
+    const clusters = await Cluster.find({
+      $or: [
+        { creatorId: userId },
+        { members: { $elemMatch: { userId: userId, status: 'ACTIVE' } } },
+      ],
+    })
       .sort({ priority: 1 })
       .lean();
 
-    // Find clusters the user is a member of (but didn't create)
-    const memberships = await ClusterMember.find({
-      userId: userId,
-      status: 'ACTIVE',
-    })
-      .select('clusterId')
-      .lean();
-
-    const memberClusterIds = memberships
-      .map((m) => m.clusterId.toString())
-      .filter((id) => !ownedClusters.some((c) => c._id.toString() === id));
-
-    let memberClusters = [];
-    if (memberClusterIds.length > 0) {
-      memberClusters = await Cluster.find({ _id: { $in: memberClusterIds } })
-        .sort({ priority: 1 })
-        .lean();
-    }
-
-    // Combine: owned first (sorted by priority), then member clusters
-    return [...ownedClusters, ...memberClusters];
+    return clusters;
   }
 
   /**
@@ -96,7 +81,7 @@ class ClusterService {
     }
 
     // Check if user is creator or active member
-    const isMember = await this._isUserClusterMember(clusterId, userId);
+    const isMember = await this._isUserClusterMember(clusterId, userId, cluster);
     if (cluster.creatorId.toString() !== userId.toString() && !isMember) {
       throw new ApiError(403, 'You do not have access to this cluster');
     }
@@ -146,14 +131,7 @@ class ClusterService {
       throw new ApiError(403, 'Only the cluster creator can delete it');
     }
 
-    // Delete all members
-    await ClusterMember.deleteMany({ clusterId });
-
-    // Delete pending invites for this cluster
-    const Invite = require('../invite/invite.model');
-    await Invite.deleteMany({ clusterId });
-
-    // Delete the cluster
+    // Delete the cluster (embedded members are cleaned automatically)
     await Cluster.findByIdAndDelete(clusterId);
 
     return { deleted: true, clusterId };
@@ -181,38 +159,48 @@ class ClusterService {
   /**
    * Check if a user is an active member of a cluster
    */
-  async _isUserClusterMember(clusterId, userId) {
-    const member = await ClusterMember.findOne({
-      clusterId,
-      userId,
-      status: 'ACTIVE',
-    }).lean();
-    return !!member;
+  async _isUserClusterMember(clusterId, userId, cluster = null) {
+    const doc = cluster || (await Cluster.findById(clusterId).lean());
+    if (!doc) return false;
+
+    if (doc.creatorId && doc.creatorId.toString() === userId.toString()) {
+      return true;
+    }
+
+    if (Array.isArray(doc.members)) {
+      return doc.members.some(
+        (m) => m.userId && (m.userId._id || m.userId).toString() === userId.toString() && m.status === 'ACTIVE'
+      );
+    }
+
+    return false;
   }
 
   /**
    * Require admin/creator access to a cluster
    */
   async _requireAdminAccess(clusterId, userId, cluster = null) {
-    if (!cluster) {
-      cluster = await Cluster.findById(clusterId).lean();
+    const doc = cluster || (await Cluster.findById(clusterId).lean());
+    if (!doc) {
+      throw new ApiError(404, 'Cluster not found');
     }
 
-    if (cluster.creatorId.toString() === userId.toString()) {
+    if (doc.creatorId && doc.creatorId.toString() === userId.toString()) {
       return true;
     }
 
-    const member = await ClusterMember.findOne({
-      clusterId,
-      userId,
-      status: 'ACTIVE',
-      role: 'ADMIN',
-    }).lean();
-
-    if (!member) {
-      throw new ApiError(403, 'Admin access required for this action');
+    if (Array.isArray(doc.members)) {
+      const isAdmin = doc.members.some(
+        (m) =>
+          m.userId &&
+          (m.userId._id || m.userId).toString() === userId.toString() &&
+          m.status === 'ACTIVE' &&
+          m.role === 'ADMIN'
+      );
+      if (isAdmin) return true;
     }
-    return true;
+
+    throw new ApiError(403, 'Admin access required for this action');
   }
 }
 

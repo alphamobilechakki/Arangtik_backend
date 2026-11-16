@@ -40,6 +40,27 @@ const recipientStatusSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const savedBySchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    note: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: [500, 'Note cannot exceed 500 characters'],
+    },
+    savedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const messageSchema = new mongoose.Schema(
   {
     conversationId: {
@@ -81,6 +102,8 @@ const messageSchema = new mongoose.Schema(
       uppercase: true,
     },
     recipientStatuses: [recipientStatusSchema],
+    // Embedded bookmarks (Consolidates savedmessages collection)
+    savedBy: [savedBySchema],
     isAutoDeleted: {
       type: Boolean,
       default: false,
@@ -98,6 +121,7 @@ const messageSchema = new mongoose.Schema(
 // Indexes
 messageSchema.index({ conversationId: 1, createdAt: -1 });
 messageSchema.index({ 'recipientStatuses.userId': 1, 'recipientStatuses.isAutoDeleted': 1 });
+messageSchema.index({ 'savedBy.userId': 1, 'savedBy.savedAt': -1 });
 messageSchema.index({ content: 'text' });
 
 module.exports = mongoose.model('FCMessage', messageSchema);

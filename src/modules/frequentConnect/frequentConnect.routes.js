@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../../middlewares/auth.middleware');
 
 const clusterRoutes = require('./cluster/cluster.routes');
 const memberRoutes = require('./member/member.routes');
 const inviteRoutes = require('./invite/invite.routes');
 const conversationRoutes = require('./conversation/conversation.routes');
 const messageRoutes = require('./message/message.routes');
-const savedMessageRoutes = require('./savedMessage/savedMessage.routes');
+const messageController = require('./message/message.controller');
 const widgetRoutes = require('./widget/widget.routes');
 const searchRoutes = require('./search/search.routes');
 
@@ -23,8 +24,8 @@ router.use('/invites', inviteRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/messages', messageRoutes);
 
-// Saved / bookmarked messages
-router.use('/saved-messages', savedMessageRoutes);
+// Saved / bookmarked messages (served directly by message controller)
+router.get('/saved-messages', protect, messageController.getSavedMessages);
 
 // Quick-Action Home Screen Widget Data APIs
 router.use('/widget', widgetRoutes);

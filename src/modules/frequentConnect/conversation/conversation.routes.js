@@ -8,6 +8,7 @@ const messageController = require('../message/message.controller');
 router.use(protect);
 
 router.post('/', conversationController.createOrGetDirectConversation);
+router.post('/direct', conversationController.createOrGetDirectConversation);
 router.get('/', conversationController.getUserConversations);
 router.get('/:id', conversationController.getConversationById);
 

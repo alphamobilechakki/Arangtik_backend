@@ -7,6 +7,7 @@ const inviteController = require('./invite.controller');
 router.use(protect);
 
 router.post('/', inviteController.createInvite);
+router.post('/respond', inviteController.acceptInvite);
 router.get('/', inviteController.getSentInvites);
 router.post('/:code/accept', inviteController.acceptInvite);
 

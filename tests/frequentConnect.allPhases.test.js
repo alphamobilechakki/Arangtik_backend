@@ -12,13 +12,13 @@
  * - Phase 9: Rate-Limiting, Sanitization, Health Checks
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const http = require('http');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const request = require('supertest');
 const { io: ClientIO } = require('socket.io-client');
-const path = require('path');
 const fs = require('fs');
 
 const connectDB = require('../src/config/db.config');
@@ -30,11 +30,8 @@ const { JWT_SECRET, MONGODB_URI } = require('../src/config/env.config');
 
 const User = require('../src/modules/auth/user.model');
 const Cluster = require('../src/modules/frequentConnect/cluster/cluster.model');
-const ClusterMember = require('../src/modules/frequentConnect/member/member.model');
 const Conversation = require('../src/modules/frequentConnect/conversation/conversation.model');
 const Message = require('../src/modules/frequentConnect/message/message.model');
-const SavedMessage = require('../src/modules/frequentConnect/savedMessage/savedMessage.model');
-const Invite = require('../src/modules/frequentConnect/invite/invite.model');
 const WalkieTalkieSession = require('../src/modules/frequentConnect/walkieTalkie/walkieTalkie.model');
 
 let server;
@@ -527,10 +524,8 @@ async function runTests() {
     // Cleanup test data
     await User.deleteMany({ _id: { $in: [userA._id, userB._id, userC._id, inviteUser._id] } });
     await Cluster.deleteMany({ creatorId: userA._id });
-    await ClusterMember.deleteMany({ clusterId });
     await Conversation.deleteMany({ _id: { $in: [directConvId] } });
     await Message.deleteMany({ conversationId: directConvId });
-    await SavedMessage.deleteMany({ userId: userB._id });
     await WalkieTalkieSession.deleteMany({ conversationId: directConvId });
 
     server.close();
