@@ -21,7 +21,12 @@ class AdminFCConversationService {
       filter.clusterId = query.clusterId;
     }
 
-    if (query.userId) {
+    if (query.participants) {
+      const parts = String(query.participants).split(',').map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        filter.participants = { $all: parts };
+      }
+    } else if (query.userId) {
       filter.participants = query.userId;
     }
 
@@ -136,6 +141,8 @@ class AdminFCConversationService {
         .skip(skip)
         .limit(limit)
         .populate('senderId', 'name phone profileImage')
+        .populate('savedBy.userId', 'name phone profileImage')
+        .populate('recipientStatuses.userId', 'name phone profileImage')
         .populate({
           path: 'conversationId',
           select: 'type clusterId',

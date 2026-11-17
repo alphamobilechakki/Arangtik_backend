@@ -37,6 +37,7 @@ class AdminFCClusterService {
         .skip(skip)
         .limit(limit)
         .populate('creatorId', 'name phone profileImage status')
+        .populate('features', 'name code icon description isActive')
         .lean(),
       Cluster.countDocuments(filter),
     ]);
@@ -58,11 +59,21 @@ class AdminFCClusterService {
   async getClusterDetails(clusterId) {
     const cluster = await Cluster.findById(clusterId)
       .populate('creatorId', 'name phone profileImage status')
+      .populate('features', 'name code icon description isActive')
       .populate('members.userId', 'name phone profileImage status')
       .lean();
 
     if (!cluster) {
       throw new ApiError(404, 'Cluster not found');
+    }
+
+    const Conversation = require('../../../frequentConnect/conversation/conversation.model');
+    let groupConversationId = cluster.conversationId;
+    if (!groupConversationId) {
+      const groupConv = await Conversation.findOne({ clusterId: cluster._id, type: 'CLUSTER' }).lean();
+      if (groupConv) {
+        groupConversationId = groupConv._id;
+      }
     }
 
     const members = (cluster.members || []).map((m) => ({
@@ -72,6 +83,9 @@ class AdminFCClusterService {
       displayName: m.displayName || m.userId?.name || '',
       role: m.role,
       status: m.status,
+      inviteCode: m.inviteCode || null,
+      inviteExpiresAt: m.inviteExpiresAt || null,
+      invitedAt: m.invitedAt || null,
       joinedAt: m.joinedAt,
       createdAt: m.createdAt,
     }));
@@ -79,6 +93,7 @@ class AdminFCClusterService {
     return {
       cluster,
       members,
+      groupConversationId: groupConversationId ? groupConversationId.toString() : null,
     };
   }
 

@@ -7,7 +7,7 @@ const ApiResponse = require('../../../../utils/apiResponse');
  */
 const getOverview = asyncHandler(async (req, res) => {
   const result = await adminFCOverviewService.getOverviewMetrics();
-  return ApiResponse.success(res, result, 'Frequent Connect overview metrics retrieved successfully');
+  return ApiResponse.success(res, { overview: result, ...result }, 'Frequent Connect overview metrics retrieved successfully');
 });
 
 module.exports = {

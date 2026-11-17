@@ -27,6 +27,10 @@ router.use('/messages', messageRoutes);
 // Saved / bookmarked messages (served directly by message controller)
 router.get('/saved-messages', protect, messageController.getSavedMessages);
 
+// Active cluster features (for group creation checkboxes/toggles)
+const clusterController = require('./cluster/cluster.controller');
+router.get('/features', protect, clusterController.getAvailableFeatures);
+
 // Quick-Action Home Screen Widget Data APIs
 router.use('/widget', widgetRoutes);
 

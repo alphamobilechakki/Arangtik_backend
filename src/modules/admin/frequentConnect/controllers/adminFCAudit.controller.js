@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Message = require('../../../frequentConnect/message/message.model');
 const Cluster = require('../../../frequentConnect/cluster/cluster.model');
 const fcAuditLogService = require('../../../frequentConnect/audit/fcAuditLog.service');

@@ -12,6 +12,7 @@ const densityCategoryRoutes = require('./densityCategory/densityCategory.routes'
 const productRoutes = require('./product/product.routes');
 const coinPackageRoutes = require('./subscription/coins/coinPackage.routes');
 const adminSubscriptionRoutes = require('./subscription/adminSubscription.routes');
+const clusterFeatureRoutes = require('./clusterFeature/clusterFeature.routes');
 
 // ── Vendor & Order Management ──────────────────────────────
 const adminVendorRoutes = require('./vendor/adminVendor.routes');
@@ -33,6 +34,7 @@ router.use('/density-categories', densityCategoryRoutes);
 router.use('/products', productRoutes);
 router.use('/coin-packages', coinPackageRoutes);
 router.use('/subscription', adminSubscriptionRoutes);
+router.use('/cluster-features', clusterFeatureRoutes);
 
 // ── Business Management Routes ──────────────────────────────
 router.use('/vendors', adminVendorRoutes);

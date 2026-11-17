@@ -101,6 +101,13 @@ const clusterSchema = new mongoose.Schema(
       ref: 'FCConversation',
       default: null,
     },
+    // Dynamic feature modules enabled for this cluster (e.g. Wardrobe, Laundry, Walkie-Talkie)
+    features: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ClusterFeature',
+      },
+    ],
     // Embedded members & pending invites (Consolidates members & invites collections)
     members: [clusterMemberSchema],
   },
@@ -109,6 +116,7 @@ const clusterSchema = new mongoose.Schema(
 
 // Compound indexes for fast, single-query lookups
 clusterSchema.index({ creatorId: 1, priority: 1 });
+clusterSchema.index({ features: 1 });
 clusterSchema.index({ 'members.userId': 1, 'members.status': 1 });
 clusterSchema.index({ 'members.phone': 1, 'members.status': 1 });
 clusterSchema.index({ 'members.inviteCode': 1 });

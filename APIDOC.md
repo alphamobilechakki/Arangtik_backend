@@ -4700,10 +4700,12 @@ Client A (Releases PTT) ────┴───► [Socket: walkie-release-floo
 | Method | Endpoint | Description | Protected |
 |---|---|---|:---:|
 | `GET` | `/api/fc/health` | Frequent Connect subsystem health probe | No |
-| `POST` | `/api/fc/clusters` | Create a new priority cluster with embedded creator | Yes |
-| `GET` | `/api/fc/clusters` | List all clusters for user (sorted by priority) | Yes |
-| `GET` | `/api/fc/clusters/:id` | Get single cluster details with embedded members | Yes |
-| `PUT` | `/api/fc/clusters/:id` | Update cluster name, icon, color, or type | Yes |
+| `POST` | `/api/fc/clusters` | Create a new priority cluster with enabled features | Yes |
+| `GET` | `/api/fc/clusters` | List all clusters for user with populated features | Yes |
+| `GET` | `/api/fc/clusters/:id` | Get single cluster details with embedded members & features | Yes |
+| `PUT` | `/api/fc/clusters/:id` | Update cluster name, icon, color, type, or features | Yes |
+| `PATCH` | `/api/fc/clusters/:id/features` | Toggle or update enabled features for a cluster | Yes |
+| `GET` | `/api/fc/features` *(or `/clusters/features`)* | List active cluster features for group creation UI | Yes |
 | `DELETE` | `/api/fc/clusters/:id` | Delete cluster and its embedded members (creator only) | Yes |
 | `PUT` | `/api/fc/clusters/order` | Reorder cluster priorities | Yes |
 | `POST` | `/api/fc/clusters/:id/members` | Add registered users or invite non-registered contacts | Yes |
@@ -4780,10 +4782,11 @@ Creates a new priority grouping (e.g. Family, Office, Close Friends). The creato
   "name": "Family Circle",
   "icon": "👨‍👩‍👧",
   "color": "#FF5733",
-  "type": "FAMILY"
+  "type": "FAMILY",
+  "features": ["6739f4a123...", "6739f4b456..."]
 }
 ```
-*Constraints: `name` is required (max 50 chars). `type` must be one of `FAMILY`, `FRIENDS`, `OFFICE`, or `CUSTOM`. `color` must be a valid hex code.*
+*Constraints: `name` is required (max 50 chars). `type` must be one of `FAMILY`, `FRIENDS`, `OFFICE`, or `CUSTOM`. `color` must be a valid hex code. `features` is optional array of feature ObjectIds or codes (e.g. `["WARDROBE", "LAUNDRY"]`).*
 
 - **Success Response (201 Created):**
 ```json
@@ -4801,6 +4804,24 @@ Creates a new priority grouping (e.g. Family, Office, Close Friends). The creato
     "priority": 0,
     "memberCount": 1,
     "conversationId": "6735fa026ba477c7d42cfb82",
+    "features": [
+      {
+        "_id": "6739f4a123...",
+        "name": "Wardrobe",
+        "code": "WARDROBE",
+        "icon": "👗",
+        "description": "Wardrobe and clothes sharing",
+        "isActive": true
+      },
+      {
+        "_id": "6739f4b456...",
+        "name": "Laundry",
+        "code": "LAUNDRY",
+        "icon": "🧺",
+        "description": "Laundry work orders",
+        "isActive": true
+      }
+    ],
     "members": [
       {
         "_id": "6735fa016ba477c7d42cfb81",
@@ -4825,7 +4846,7 @@ Creates a new priority grouping (e.g. Family, Office, Close Friends). The creato
 ---
 
 #### 16.3.3 List Clusters (Sorted by Priority)
-Retrieves all clusters created by or joined by the user in a single atomic database query on `fc_clusters`, ordered by priority (`priority: 0` is highest).
+Retrieves all clusters created by or joined by the user in a single atomic database query on `fc_clusters`, ordered by priority (`priority: 0` is highest), with populated `features`.
 
 - **Method / Path:** `GET /api/fc/clusters`
 - **Authentication:** Protected (`Bearer <JWT>`)
@@ -4844,17 +4865,110 @@ Retrieves all clusters created by or joined by the user in a single atomic datab
       "type": "FAMILY",
       "priority": 0,
       "memberCount": 4,
-      "conversationId": "6735fa026ba477c7d42cfb82"
+      "conversationId": "6735fa026ba477c7d42cfb82",
+      "features": [
+        {
+          "_id": "6739f4a123...",
+          "name": "Wardrobe",
+          "code": "WARDROBE",
+          "icon": "👗",
+          "isActive": true
+        },
+        {
+          "_id": "6739f4b456...",
+          "name": "Laundry",
+          "code": "LAUNDRY",
+          "icon": "🧺",
+          "isActive": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+#### 16.3.3A Update / Toggle Cluster Features
+Updates the enabled features for a cluster. Supports clicking a single feature to toggle it on/off, or replacing the full array of feature IDs.
+
+- **Method / Path:** `PATCH /api/fc/clusters/:id/features`
+- **Authentication:** Protected (`Bearer <JWT>`, Cluster Admin only)
+- **Request Body (Option 1: Single Feature Click-to-Toggle):**
+```json
+{
+  "featureId": "6739f4a123...",
+  "action": "toggle"
+}
+```
+*Parameters: `featureId` can be ObjectId or Code (e.g. `"WARDROBE"`). `action` can be `"toggle"` (default), `"add"`, or `"remove"`.*
+
+- **Request Body (Option 2: Batch Array Replace):**
+```json
+{
+  "features": ["6739f4a123...", "6739f4b456..."]
+}
+```
+
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Cluster features updated successfully",
+  "data": {
+    "_id": "6735fa016ba477c7d42cfb80",
+    "name": "Family Circle",
+    "features": [
+      {
+        "_id": "6739f4a123...",
+        "name": "Wardrobe",
+        "code": "WARDROBE",
+        "icon": "👗",
+        "isActive": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 16.3.3B Get Available Cluster Features Catalog
+Retrieves the list of active, non-deleted cluster features so the mobile app or web client can render checkboxes/toggles when creating a group.
+
+- **Method / Path:** `GET /api/fc/features` *(or `/api/fc/clusters/features`)*
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Available cluster features retrieved successfully",
+  "data": [
+    {
+      "_id": "6739f4a123...",
+      "name": "Wardrobe",
+      "code": "WARDROBE",
+      "icon": "👗",
+      "description": "Wardrobe and clothes sharing",
+      "isActive": true
     },
     {
-      "_id": "6735fa506ba477c7d42cfb85",
-      "name": "Work Team",
-      "icon": "💼",
-      "color": "#2E86DE",
-      "type": "OFFICE",
-      "priority": 1,
-      "memberCount": 8,
-      "conversationId": "6735fa516ba477c7d42cfb87"
+      "_id": "6739f4b456...",
+      "name": "Laundry",
+      "code": "LAUNDRY",
+      "icon": "🧺",
+      "description": "Laundry work orders",
+      "isActive": true
+    },
+    {
+      "_id": "6739f4c789...",
+      "name": "Walkie-Talkie",
+      "code": "WALKIE_TALKIE",
+      "icon": "📻",
+      "description": "Voice walkie-talkie communication",
+      "isActive": true
     }
   ]
 }
@@ -5400,4 +5514,254 @@ const socket = io('https://api.arangtik.com/fc', {
 | `walkie-audio-stream` | Client $\rightarrow$ Server $\rightarrow$ Room | `{ conversationId, chunk: Buffer }` — Relays raw binary audio chunks live to room listeners. |
 | `walkie-release-floor` | Client $\rightarrow$ Server | `{ conversationId }` — Speaker releases microphone; broadcasts `walkie-ended`. |
 | `walkie-ended` | Server $\rightarrow$ Room | `{ conversationId }` — Closes incoming audio playback stream for listeners. |
+
+---
+
+## 17. Cluster Features Master Module (`/api/admin/cluster-features`)
+
+This module manages the dynamic functional capabilities (e.g. Wardrobe, Laundry, Walkie-Talkie) available to Arangtik groups/clusters. Admins can create, list, update, soft-delete, restore, and seed default features.
+
+### 17.1 Quick Reference Table
+
+| Method | Endpoint | Description | Protected |
+|---|---|---|:---:|
+| `POST` | `/api/admin/cluster-features` | Create a new cluster feature module | Admin |
+| `GET` | `/api/admin/cluster-features` | List all features (`?includeInactive=true`, `?includeDeleted=true`) | Public / Admin |
+| `GET` | `/api/admin/cluster-features/:id` | Get single feature details by ObjectId or Code | Public / Admin |
+| `PATCH` | `/api/admin/cluster-features/:id` | Update feature name, code, icon, description, or status | Admin |
+| `DELETE` | `/api/admin/cluster-features/:id` | Soft-delete feature (`?hard=true` for permanent delete) | Admin |
+| `PATCH` | `/api/admin/cluster-features/:id/restore` | Restore a previously soft-deleted feature | Admin |
+| `POST` | `/api/admin/cluster-features/seed` | Seed standard initial features (Wardrobe, Laundry, Walkie-Talkie) | Admin |
+
+---
+
+### 17.2 Endpoint Specifications
+
+#### 17.2.1 Create Cluster Feature
+Creates a new functional module for clusters. If a soft-deleted record with the same code or name exists, it is automatically restored and updated.
+
+- **Method / Path:** `POST /api/admin/cluster-features`
+- **Authentication:** Protected (`Bearer <ADMIN_JWT>`)
+- **Request Body:**
+```json
+{
+  "name": "Wardrobe",
+  "code": "WARDROBE",
+  "icon": "👗",
+  "description": "Wardrobe and clothes sharing among cluster members",
+  "isActive": true
+}
+```
+*Constraints: `name` is required. `code` is auto-normalized to uppercase alphanumeric with underscores if omitted.*
+
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Feature created successfully",
+  "data": {
+    "_id": "6739f4a123...",
+    "name": "Wardrobe",
+    "code": "WARDROBE",
+    "icon": "👗",
+    "description": "Wardrobe and clothes sharing among cluster members",
+    "isActive": true,
+    "isDeleted": false,
+    "deletedAt": null,
+    "createdAt": "2026-11-17T10:00:00.000Z",
+    "updatedAt": "2026-11-17T10:00:00.000Z"
+  }
+}
+```
+
+---
+
+#### 17.2.2 List Cluster Features
+Retrieves all features. By default, soft-deleted features are excluded and only active features are returned.
+
+- **Method / Path:** `GET /api/admin/cluster-features`
+- **Query Parameters:**
+  - `includeInactive` (`boolean`, optional): When `true`, includes inactive features.
+  - `includeDeleted` (`boolean`, optional): When `true`, includes soft-deleted features.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Features retrieved successfully",
+  "data": [
+    {
+      "_id": "6739f4a123...",
+      "name": "Wardrobe",
+      "code": "WARDROBE",
+      "icon": "👗",
+      "description": "Wardrobe and clothes sharing",
+      "isActive": true,
+      "isDeleted": false
+    },
+    {
+      "_id": "6739f4b456...",
+      "name": "Laundry",
+      "code": "LAUNDRY",
+      "icon": "🧺",
+      "description": "Laundry work orders",
+      "isActive": true,
+      "isDeleted": false
+    },
+    {
+      "_id": "6739f4c789...",
+      "name": "Walkie-Talkie",
+      "code": "WALKIE_TALKIE",
+      "icon": "📻",
+      "description": "Voice walkie-talkie communication",
+      "isActive": true,
+      "isDeleted": false
+    }
+  ]
+}
+```
+
+---
+
+#### 17.2.3 Get Feature Details
+Retrieves single feature details by ObjectId or uppercase Code (e.g., `WARDROBE`).
+
+- **Method / Path:** `GET /api/admin/cluster-features/:id`
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Feature retrieved successfully",
+  "data": {
+    "_id": "6739f4a123...",
+    "name": "Wardrobe",
+    "code": "WARDROBE",
+    "icon": "👗",
+    "description": "Wardrobe and clothes sharing",
+    "isActive": true,
+    "isDeleted": false
+  }
+}
+```
+
+---
+
+#### 17.2.4 Update Cluster Feature
+Updates feature attributes strictly using `PATCH` per Arangtik Rule 4.
+
+- **Method / Path:** `PATCH /api/admin/cluster-features/:id`
+- **Authentication:** Protected (`Bearer <ADMIN_JWT>`)
+- **Request Body:**
+```json
+{
+  "name": "Wardrobe & Styling",
+  "description": "Full shared wardrobe and virtual styling",
+  "icon": "👗"
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Feature updated successfully",
+  "data": {
+    "_id": "6739f4a123...",
+    "name": "Wardrobe & Styling",
+    "code": "WARDROBE",
+    "icon": "👗",
+    "description": "Full shared wardrobe and virtual styling",
+    "isActive": true,
+    "isDeleted": false
+  }
+}
+```
+
+---
+
+#### 17.2.5 Delete Feature (Soft / Hard Delete)
+Performs safe soft deletion by setting `isDeleted: true`, `deletedAt: Date.now()`, and `isActive: false`. Pass `?hard=true` for permanent database deletion.
+
+- **Method / Path:** `DELETE /api/admin/cluster-features/:id`
+- **Authentication:** Protected (`Bearer <ADMIN_JWT>`)
+- **Query Parameters:** `hard` (`boolean`, optional): Set to `true` to permanently purge from database.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Feature soft-deleted successfully",
+  "data": {
+    "deleted": true,
+    "hard": false,
+    "id": "6739f4a123..."
+  }
+}
+```
+
+---
+
+#### 17.2.6 Restore Soft-Deleted Feature
+Restores a previously soft-deleted feature back to active status (`isDeleted: false`, `deletedAt: null`, `isActive: true`).
+
+- **Method / Path:** `PATCH /api/admin/cluster-features/:id/restore`
+- **Authentication:** Protected (`Bearer <ADMIN_JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Feature restored successfully",
+  "data": {
+    "_id": "6739f4a123...",
+    "name": "Wardrobe",
+    "code": "WARDROBE",
+    "icon": "👗",
+    "isActive": true,
+    "isDeleted": false
+  }
+}
+```
+
+---
+
+#### 17.2.7 Seed Default Features
+Idempotently seeds the 3 standard cluster features (`WARDROBE`, `LAUNDRY`, `WALKIE_TALKIE`) into the database if not present, or restores them if deleted.
+
+- **Method / Path:** `POST /api/admin/cluster-features/seed`
+- **Authentication:** Protected (`Bearer <ADMIN_JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Default features seeded successfully",
+  "data": [
+    {
+      "_id": "6739f4a123...",
+      "name": "Wardrobe",
+      "code": "WARDROBE",
+      "icon": "👗",
+      "isActive": true
+    },
+    {
+      "_id": "6739f4b456...",
+      "name": "Laundry",
+      "code": "LAUNDRY",
+      "icon": "🧺",
+      "isActive": true
+    },
+    {
+      "_id": "6739f4c789...",
+      "name": "Walkie-Talkie",
+      "code": "WALKIE_TALKIE",
+      "icon": "📻",
+      "isActive": true
+    }
+  ]
+}
+```
+
 

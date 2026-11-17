@@ -22,6 +22,11 @@ const validateCreateCluster = (body) => {
   if (body.color && !/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(body.color)) {
     throw new ApiError(400, 'Invalid hex color format (e.g. #FF5733)');
   }
+
+  const rawFeatures = body.features || body.featureIds;
+  if (rawFeatures !== undefined && !Array.isArray(rawFeatures)) {
+    throw new ApiError(400, 'Features must be an array of feature IDs or codes');
+  }
 };
 
 /**
@@ -39,6 +44,11 @@ const validateUpdateCluster = (body) => {
 
   if (body.color && !/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(body.color)) {
     throw new ApiError(400, 'Invalid hex color format');
+  }
+
+  const rawFeatures = body.features || body.featureIds;
+  if (rawFeatures !== undefined && !Array.isArray(rawFeatures)) {
+    throw new ApiError(400, 'Features must be an array of feature IDs or codes');
   }
 };
 

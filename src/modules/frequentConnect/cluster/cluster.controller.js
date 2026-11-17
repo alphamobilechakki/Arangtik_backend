@@ -62,11 +62,42 @@ const reorderClusters = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Clusters reordered successfully');
 });
 
+/**
+ * PATCH /api/fc/clusters/:id/features – Add, remove, or toggle features in cluster
+ */
+const updateClusterFeatures = asyncHandler(async (req, res) => {
+  const cluster = await clusterService.updateClusterFeatures(
+    req.params.id,
+    req.user.id,
+    req.body
+  );
+  return ApiResponse.success(res, cluster, 'Cluster features updated successfully');
+});
+
+/**
+ * GET /api/fc/clusters/features – Get active cluster features for group creation UI
+ */
+const getAvailableFeatures = asyncHandler(async (req, res) => {
+  const ClusterFeature = require('../../admin/clusterFeature/clusterFeature.model');
+  const features = await ClusterFeature.find({
+    isActive: true,
+    isDeleted: false,
+  }).sort({ displayOrder: 1, createdAt: 1 });
+
+  return ApiResponse.success(
+    res,
+    features,
+    'Available cluster features retrieved successfully'
+  );
+});
+
 module.exports = {
   createCluster,
   getClusters,
   getClusterById,
   updateCluster,
+  updateClusterFeatures,
   deleteCluster,
   reorderClusters,
+  getAvailableFeatures,
 };
