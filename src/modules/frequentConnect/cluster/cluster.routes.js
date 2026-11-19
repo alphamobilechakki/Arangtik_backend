@@ -11,6 +11,7 @@ router.post('/', clusterController.createCluster);
 router.get('/', clusterController.getClusters);
 router.patch('/reorder', clusterController.reorderClusters);
 router.get('/:id', clusterController.getClusterById);
+router.get('/:id/wardrobes', clusterController.getClusterWardrobes);
 router.put('/:id', clusterController.updateCluster);
 router.patch('/:id/features', clusterController.updateClusterFeatures);
 router.delete('/:id', clusterController.deleteCluster);

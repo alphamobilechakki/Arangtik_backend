@@ -675,6 +675,8 @@ Authorization: Bearer <JWT_ACCESS_TOKEN>
 | :--- | :--- | :--- | :--- |
 | `storeTypeId` | `string` (ObjectId) | No | Filter wardrobes by specific store type ObjectId. |
 | `storeType` | `string` | No | Filter by store type code or name (e.g., `"WARDROBE"`). Pass `"ALL"` to list all. |
+| `clusterId` | `string` (ObjectId) | No | Discover wardrobes belonging to all active members of the specified cluster (requires `WARDROBE` feature enabled). |
+| `ownerId` | `string` (ObjectId) | No | Target specific cluster member's wardrobes (requires shared cluster with `WARDROBE` feature). |
 | `includeDeleted` | `boolean` | No | Pass `true` to include soft-deleted containers in the response. |
 
 #### Response Cycle
@@ -4976,6 +4978,69 @@ Retrieves the list of active, non-deleted cluster features so the mobile app or 
 
 ---
 
+#### 16.3.3C Get Cluster Member Wardrobes Overview
+Retrieves all wardrobes across every active member of the cluster if the `WARDROBE` feature is enabled. Grouped by member with member profile, wardrobe containers, and live item counts.
+
+- **Method / Path:** `GET /api/fc/clusters/:id/wardrobes`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Cluster wardrobes retrieved successfully",
+  "data": {
+    "cluster": {
+      "id": "6735fa016ba477c7d42cfb80",
+      "name": "Family Circle",
+      "color": "#6366F1",
+      "features": ["WARDROBE", "LAUNDRY"]
+    },
+    "featureEnabled": true,
+    "members": [
+      {
+        "userId": "6735fa016ba477c7d42cfb81",
+        "name": "Priya Sharma",
+        "phone": "+919876543210",
+        "profileImage": "https://api.arangtik.com/uploads/priya.jpg",
+        "isCreator": true,
+        "isSelf": true,
+        "wardrobes": [
+          {
+            "id": "6736ab0123...",
+            "name": "Ethnic & Festive",
+            "type": "PERSONAL",
+            "isDefault": true,
+            "itemCount": 24,
+            "coverImage": "https://api.arangtik.com/uploads/cover1.jpg"
+          }
+        ]
+      },
+      {
+        "userId": "6735fa016ba477c7d42cfb82",
+        "name": "Rahul Sharma",
+        "phone": "+919876543211",
+        "profileImage": "",
+        "isCreator": false,
+        "isSelf": false,
+        "wardrobes": [
+          {
+            "id": "6736ab0456...",
+            "name": "Casual & Gym",
+            "type": "PERSONAL",
+            "isDefault": true,
+            "itemCount": 18,
+            "coverImage": ""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
 #### 16.3.4 Reorder Cluster Priorities
 Reorders user clusters by updating the `priority` values in bulk.
 
@@ -5763,5 +5828,235 @@ Idempotently seeds the 3 standard cluster features (`WARDROBE`, `LAUNDRY`, `WALK
   ]
 }
 ```
+
+---
+
+## 18. Smart & Collaborative Outfit Styling Module (`/api/outfit`)
+
+The Outfit module provides AI-driven and collaborative outfit generation, bookmarking, and cross-member styling across Frequent Connect clusters. When a cluster has the `WARDROBE` feature enabled, members can style looks for one another with dual-identity attribution (`createdBy` vs. `targetUserId`), track wear counts, accept/decline suggestions, and receive FCM push notifications.
+
+All routes require:
+```http
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+```
+
+---
+
+### 18.1. Smart Outfit Suggestions
+Generates occasion-tailored, color-harmonious outfit combinations strictly using available, active clothes from the user's or selected wardrobes.
+
+- **Method / Path:** `POST /api/outfit/suggest` *(or `/api/outfit/generate`)*
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Quota Check:** `aiOutfitSuggestions`
+- **Request Body:**
+```json
+{
+  "wardrobeId": "6ae0551433480f1d0fb8d9e2",
+  "occasion": "CASUAL",
+  "season": "SUMMER",
+  "limit": 5
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Outfit recommendations generated successfully",
+  "data": [
+    {
+      "title": "Breezy Casual Look",
+      "occasion": "CASUAL",
+      "season": "SUMMER",
+      "items": [
+        {
+          "itemId": "6ae0601433480f1d0fb8d9f1",
+          "slot": "UPPER_WEAR",
+          "name": "Linen White Shirt",
+          "category": "Shirts",
+          "color": "White",
+          "imageUrl": "https://api.arangtik.com/uploads/shirt.jpg"
+        },
+        {
+          "itemId": "6ae0601433480f1d0fb8d9f2",
+          "slot": "LOWER_WEAR",
+          "name": "Slim Navy Chinos",
+          "category": "Pants",
+          "color": "Navy Blue",
+          "imageUrl": "https://api.arangtik.com/uploads/chinos.jpg"
+        }
+      ],
+      "stylingNotes": "Crisp linen paired with contrast navy chinos for an effortless daytime look.",
+      "matchScore": 95,
+      "colorHarmony": {
+        "palette": ["#FFFFFF", "#000080"],
+        "harmonyType": "HARMONIOUS",
+        "contrast": "HIGH",
+        "score": 96
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 18.2. Save / Style Outfit (Personal or Collaborative)
+Saves an outfit into a user's closet collection. If `targetUserId` is specified and differs from the authenticated user, this acts as **Collaborative Styling** (`createdBy !== targetUserId`). The system asserts that both users share an active cluster with `WARDROBE` enabled, tags individual items with `ownerId` and `ownerName`, marks the status as `SUGGESTED`, and dispatches an instant FCM push notification to the target user.
+
+- **Method / Path:** `POST /api/outfit/save`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Quota Check:** `favouriteOutfits`
+- **Request Body:**
+```json
+{
+  "targetUserId": "6735fa016ba477c7d42cfb82",
+  "clusterId": "6735fa016ba477c7d42cfb80",
+  "title": "Date Night Elegance 👗",
+  "occasion": "PARTY",
+  "season": "ALL_SEASON",
+  "stylingNotes": "Pair with minimalist silver jewelry and heels.",
+  "items": [
+    {
+      "itemId": "6ae0601433480f1d0fb8d9f5",
+      "slot": "ONE_PIECE",
+      "name": "Black Velvet Dress"
+    },
+    {
+      "itemId": "6ae0601433480f1d0fb8d9f6",
+      "slot": "FOOTWEAR",
+      "name": "Silver Stilettos"
+    }
+  ]
+}
+```
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Outfit saved to your closet collection",
+  "data": {
+    "_id": "673b01234ba477c7d42cfa11",
+    "userId": "6735fa016ba477c7d42cfb82",
+    "targetUserId": "6735fa016ba477c7d42cfb82",
+    "createdBy": "6735fa016ba477c7d42cfb81",
+    "clusterId": "6735fa016ba477c7d42cfb80",
+    "title": "Date Night Elegance 👗",
+    "occasion": "PARTY",
+    "status": "SUGGESTED",
+    "isFavorite": false,
+    "items": [
+      {
+        "itemId": "6ae0601433480f1d0fb8d9f5",
+        "slot": "ONE_PIECE",
+        "name": "Black Velvet Dress",
+        "ownerId": "6735fa016ba477c7d42cfb82",
+        "ownerName": "Priya Sharma"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 18.3. Get Saved Outfits with Scopes
+Lists saved and styled outfits. Supports flexible filtering by scope:
+- `scope=mine`: Personal looks styled by the user for themselves.
+- `scope=styled_for_me`: Looks styled by family/cluster members for the user.
+- `scope=styled_by_me`: Looks the user created and recommended to other members.
+- `scope=cluster`: Looks created in the context of a specific cluster (pass `clusterId`).
+
+- **Method / Path:** `GET /api/outfit/saved`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Query Parameters:**
+  - `scope`: `'mine' | 'styled_for_me' | 'styled_by_me' | 'cluster' | 'all'`
+  - `clusterId`: Filter by cluster ObjectId
+  - `occasion`: Filter by occasion (e.g., `PARTY`, `CASUAL`)
+  - `status`: Filter by status (`SUGGESTED`, `ACCEPTED`, `DECLINED`, `WORN`, `PERSONAL`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Saved outfits retrieved successfully",
+  "data": [
+    {
+      "_id": "673b01234ba477c7d42cfa11",
+      "title": "Date Night Elegance 👗",
+      "occasion": "PARTY",
+      "status": "SUGGESTED",
+      "createdBy": {
+        "_id": "6735fa016ba477c7d42cfb81",
+        "name": "Rahul Sharma",
+        "phone": "+919876543211",
+        "profilePicture": ""
+      },
+      "targetUserId": {
+        "_id": "6735fa016ba477c7d42cfb82",
+        "name": "Priya Sharma",
+        "phone": "+919876543210"
+      },
+      "clusterId": {
+        "_id": "6735fa016ba477c7d42cfb80",
+        "name": "Family Circle",
+        "color": "#6366F1"
+      },
+      "items": [...]
+    }
+  ]
+}
+```
+
+---
+
+### 18.4. Update Outfit Status (Accept, Decline, Mark Worn)
+Allows the recipient or creator of an outfit to update its status. When marked as `WORN`, the outfit's `wearCount` and `lastWornAt` are updated, and the wear count on each constituent wardrobe item is automatically incremented.
+
+- **Method / Path:** `PATCH /api/outfit/saved/:id/status`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Request Body:**
+```json
+{
+  "status": "WORN"
+}
+```
+*(Allowed statuses: `PERSONAL`, `SUGGESTED`, `ACCEPTED`, `DECLINED`, `WORN`)*
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Outfit status updated successfully",
+  "data": {
+    "_id": "673b01234ba477c7d42cfa11",
+    "status": "WORN",
+    "wearCount": 1,
+    "lastWornAt": "2026-11-18T16:50:00.000Z"
+  }
+}
+```
+
+---
+
+### 18.5. Delete Saved Outfit
+Removes an outfit from the collection. Permitted for either the outfit's creator or the target recipient.
+
+- **Method / Path:** `DELETE /api/outfit/saved/:id`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Outfit removed successfully",
+  "data": {
+    "success": true,
+    "message": "Outfit removed successfully"
+  }
+}
+```
+
 
 

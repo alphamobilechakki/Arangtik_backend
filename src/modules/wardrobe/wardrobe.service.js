@@ -5,6 +5,7 @@ const WardrobeItem = require('./wardrobeItem.model');
 const ApiError = require('../../utils/apiError');
 const clothAnalysisService = require('../clothAnalysis/clothAnalysis.service');
 const { formatUploadUrl } = require('../../utils/url.util');
+const clusterAccessService = require('../frequentConnect/cluster/clusterAccess.service');
 
 /**
  * Create a new Wardrobe (Closet container, e.g., "Mummy Wardrobe", "My Wardrobe")
@@ -104,10 +105,27 @@ const createWardrobe = async (userId, data, files = null) => {
  *  - query.storeTypeId: filters by StoreType ObjectId
  *  - query.storeType: filters by code or name
  *  - query.includeDeleted: optional flag to include soft-deleted records
+ *  - query.clusterId: optional cluster filter (allows cross-member access if WARDROBE enabled)
+ *  - query.ownerId: optional specific member owner filter
  * Automatically populates storeTypeId reference, computed itemCount, and formats asset URLs.
  */
 const getWardrobes = async (userId, query = {}) => {
-  const filter = { userId, isActive: true };
+  let targetUserIds = [new mongoose.Types.ObjectId(userId)];
+
+  if (query.clusterId || query.ownerId) {
+    if (query.ownerId && String(query.ownerId) !== String(userId)) {
+      await clusterAccessService.assertAccess(userId, query.ownerId, 'WARDROBE', query.clusterId);
+      targetUserIds = [new mongoose.Types.ObjectId(query.ownerId)];
+    } else if (query.clusterId) {
+      const allowedOwnerIds = await clusterAccessService.getAccessibleOwnerIds(userId, 'WARDROBE', query.clusterId);
+      targetUserIds = allowedOwnerIds.map((id) => new mongoose.Types.ObjectId(id));
+    }
+  }
+
+  const filter = {
+    userId: targetUserIds.length === 1 ? targetUserIds[0] : { $in: targetUserIds },
+    isActive: true,
+  };
   const rawStore = query.storeTypeId || query.storeType || 'WARDROBE';
 
   if (rawStore && rawStore !== 'ALL') {
@@ -149,7 +167,7 @@ const getWardrobes = async (userId, query = {}) => {
   let itemCounts = [];
   try {
     itemCounts = await WardrobeItem.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $match: { userId: targetUserIds.length === 1 ? targetUserIds[0] : { $in: targetUserIds } } },
       { $group: { _id: '$wardrobeId', count: { $sum: 1 } } },
     ]);
   } catch (aggErr) {
@@ -180,14 +198,14 @@ const getWardrobes = async (userId, query = {}) => {
 };
 
 /**
- * Get single Wardrobe by ID
+ * Get single Wardrobe by ID (supports cluster members sharing WARDROBE feature)
  */
 const getWardrobeById = async (userId, wardrobeId, options = {}) => {
   if (!mongoose.Types.ObjectId.isValid(wardrobeId)) {
     throw new ApiError(400, 'Invalid wardrobe container ID');
   }
 
-  let q = Wardrobe.findOne({ _id: wardrobeId, userId }).populate('storeTypeId', 'name code image');
+  let q = Wardrobe.findById(wardrobeId).populate('storeTypeId', 'name code image');
   if (options.includeDeleted) {
     q = q.withDeleted();
   }
@@ -197,8 +215,13 @@ const getWardrobeById = async (userId, wardrobeId, options = {}) => {
     throw new ApiError(404, 'Wardrobe container not found');
   }
 
+  // Cross-member cluster access check
+  if (String(wardrobe.userId) !== String(userId)) {
+    await clusterAccessService.assertWardrobeAccess(userId, wardrobeId);
+  }
+
   const obj = wardrobe.toObject ? wardrobe.toObject() : { ...wardrobe };
-  obj.itemCount = await WardrobeItem.countDocuments({ wardrobeId: wardrobe._id, userId });
+  obj.itemCount = await WardrobeItem.countDocuments({ wardrobeId: wardrobe._id, userId: wardrobe.userId });
   obj.coverImage = obj.coverImage ? formatUploadUrl(obj.coverImage) : '';
   obj.ownerFaceImage = obj.ownerFaceImage ? formatUploadUrl(obj.ownerFaceImage) : '';
   return obj;
@@ -670,6 +693,9 @@ const addItem = async (userId, itemData, file = null) => {
 
 /**
  * Get all items from wardrobe store with search, filters, and pagination
+ * Supports cluster-level sharing:
+ *  - queryParams.clusterId: return items across all members of that cluster
+ *  - queryParams.ownerId: return items belonging to a specific cluster member
  */
 const getAllItems = async (userId, queryParams = {}) => {
   const {
@@ -683,12 +709,23 @@ const getAllItems = async (userId, queryParams = {}) => {
     favorite,
     search,
     status,
+    clusterId,
+    ownerId,
     page = 1,
     limit = 20,
     sort = '-createdAt',
   } = queryParams;
 
-  const andClauses = [{ userId }];
+  let targetUserFilter = userId;
+  if (ownerId && String(ownerId) !== String(userId)) {
+    await clusterAccessService.assertAccess(userId, ownerId, 'WARDROBE', clusterId);
+    targetUserFilter = ownerId;
+  } else if (clusterId) {
+    const accessibleOwnerIds = await clusterAccessService.getAccessibleOwnerIds(userId, 'WARDROBE', clusterId);
+    targetUserFilter = { $in: accessibleOwnerIds };
+  }
+
+  const andClauses = [{ userId: targetUserFilter }];
 
   if (status) {
     const normStatus = String(status).toUpperCase();
@@ -718,7 +755,7 @@ const getAllItems = async (userId, queryParams = {}) => {
 
     if (resolvedStoreTypeId) {
       const matchingStores = await Wardrobe.find({
-        userId,
+        userId: targetUserFilter,
         storeTypeId: resolvedStoreTypeId,
         isActive: true,
       }).select('_id isDefault');
@@ -739,7 +776,14 @@ const getAllItems = async (userId, queryParams = {}) => {
   }
 
   if (wardrobeId) {
-    const targetWardrobe = await Wardrobe.findOne({ _id: wardrobeId, userId });
+    const targetWardrobe = await Wardrobe.findById(wardrobeId);
+    if (!targetWardrobe) {
+      throw new ApiError(404, 'Wardrobe container not found');
+    }
+    if (String(targetWardrobe.userId) !== String(userId)) {
+      await clusterAccessService.assertWardrobeAccess(userId, wardrobeId);
+      andClauses[0] = { userId: targetWardrobe.userId };
+    }
     if (targetWardrobe?.isDefault) {
       andClauses.push({
         $or: [
@@ -830,10 +874,18 @@ const getAllItems = async (userId, queryParams = {}) => {
  * Get item details by ID
  */
 const getItemById = async (userId, itemId) => {
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
+  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+    throw new ApiError(400, 'Invalid wardrobe item ID');
+  }
+
+  const item = await WardrobeItem.findById(itemId);
 
   if (!item) {
     throw new ApiError(404, 'Wardrobe item not found');
+  }
+
+  if (String(item.userId) !== String(userId)) {
+    await clusterAccessService.assertAccess(userId, item.userId, 'WARDROBE');
   }
 
   return item;
@@ -843,7 +895,38 @@ const getItemById = async (userId, itemId) => {
  * Update an existing wardrobe item (PATCH)
  */
 const updateItem = async (userId, itemId, updateData) => {
-  const item = await WardrobeItem.findOne({ _id: itemId, userId });
+  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+    throw new ApiError(400, 'Invalid wardrobe item ID');
+  }
+
+  const item = await WardrobeItem.findById(itemId);
+
+  if (!item) {
+    throw new ApiError(404, 'Wardrobe item not found');
+  }
+
+  const isOwner = String(item.userId) === String(userId);
+  if (!isOwner) {
+    const accessResult = await clusterAccessService.assertAccess(userId, item.userId, 'WARDROBE');
+    item.lastModifiedBy = userId;
+
+    // Phase 5: Log to FCAuditLog for cluster activity tracking
+    try {
+      const fcAuditLogService = require('../frequentConnect/audit/fcAuditLog.service');
+      fcAuditLogService.logEvent({
+        eventCategory: 'WARDROBE',
+        action: 'WARDROBE_ITEM_UPDATED',
+        actorId: userId,
+        targetType: 'WARDROBE_ITEM',
+        targetId: item._id,
+        clusterId: accessResult?.cluster?._id || null,
+        metadata: {
+          garmentName: item.name,
+          ownerId: item.userId,
+        },
+      });
+    } catch (_) {}
+  }
 
   if (!item) {
     throw new ApiError(404, 'Wardrobe item not found');

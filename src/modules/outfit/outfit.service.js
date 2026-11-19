@@ -3,6 +3,8 @@ const WardrobeItem = require('../wardrobe/wardrobeItem.model');
 const Wardrobe = require('../wardrobe/wardrobe.model');
 const Outfit = require('./outfit.model');
 const User = require('../auth/user.model');
+const clusterAccessService = require('../frequentConnect/cluster/clusterAccess.service');
+const notificationService = require('../notification/notification.service');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { GEMINI_API_KEY } = require('../../config/env.config');
 const ApiError = require('../../utils/apiError');
@@ -864,10 +866,13 @@ const suggestOutfits = async (userId, options = {}) => {
 
 /**
  * Save an outfit to user's saved/bookmarked outfits
+ * Supports collaborative styling across cluster members (with attribution & FCM notifications)
  */
 const saveOutfit = async (userId, outfitData) => {
   const {
     wardrobeId = null,
+    targetUserId: rawTargetUserId,
+    clusterId: rawClusterId,
     title,
     occasion,
     season = 'ALL_SEASON',
@@ -882,48 +887,172 @@ const saveOutfit = async (userId, outfitData) => {
     throw new ApiError(400, 'Title, occasion, and clothing items are required to save an outfit');
   }
 
+  const targetUserId = rawTargetUserId ? String(rawTargetUserId) : String(userId);
+  const isCollaborative = targetUserId !== String(userId);
+  let resolvedClusterId = rawClusterId || null;
+
+  if (isCollaborative) {
+    const accessResult = await clusterAccessService.assertAccess(userId, targetUserId, 'WARDROBE', rawClusterId);
+    resolvedClusterId = accessResult.cluster ? accessResult.cluster._id : (rawClusterId || null);
+  }
+
   const itemIds = items.map((i) => i.itemId);
   const foundItems = await WardrobeItem.find({
     _id: { $in: itemIds },
-    userId,
-  }).lean();
+  }).populate('userId', 'name').lean();
 
   if (foundItems.length === 0) {
-    throw new ApiError(400, 'Invalid items: None of the items belong to this user wardrobe');
+    throw new ApiError(400, 'Invalid items: None of the specified clothing items could be found');
   }
 
+  // Verify that all items belong either to the target user or creator, or accessible cluster member
+  for (const found of foundItems) {
+    const ownerStr = String(found.userId?._id || found.userId);
+    if (ownerStr !== String(userId) && ownerStr !== targetUserId) {
+      await clusterAccessService.assertAccess(userId, ownerStr, 'WARDROBE', resolvedClusterId);
+    }
+  }
+
+  const enrichedItems = items.map((item) => {
+    const dbItem = foundItems.find((f) => String(f._id) === String(item.itemId));
+    return {
+      itemId: item.itemId,
+      slot: item.slot,
+      name: item.name || dbItem?.name || '',
+      category: item.category || dbItem?.category || '',
+      subCategory: item.subCategory || dbItem?.subCategory || '',
+      color: item.color || dbItem?.color || '',
+      imageUrl: item.imageUrl || (dbItem ? getItemImageUrl(dbItem) : ''),
+      ownerId: dbItem ? (dbItem.userId?._id || dbItem.userId) : null,
+      ownerName: dbItem?.userId?.name || '',
+    };
+  });
+
   const saved = await Outfit.create({
-    userId,
+    userId: targetUserId,
+    targetUserId,
+    createdBy: userId,
+    clusterId: resolvedClusterId,
     wardrobeId: wardrobeId || null,
     title,
     occasion: occasion.toUpperCase(),
     season,
-    items,
+    items: enrichedItems,
     stylingNotes,
     colorHarmony,
     matchScore,
     missingSlots,
-    isFavorite: true,
+    status: isCollaborative ? 'SUGGESTED' : 'PERSONAL',
+    isFavorite: !isCollaborative,
   });
+
+  // If collaborative, send push notification to target user asynchronously
+  if (isCollaborative) {
+    User.findById(userId).select('name').lean().then(async (creator) => {
+      const creatorName = creator?.name || 'A cluster member';
+      await notificationService.sendToUser(targetUserId, {
+        title: 'New Outfit Styled for You! 👗',
+        body: `${creatorName} just styled an outfit for you: "${title}". Check it out in your wardrobe!`,
+        data: {
+          type: 'OUTFIT_SUGGESTION',
+          outfitId: String(saved._id),
+          clusterId: resolvedClusterId ? String(resolvedClusterId) : '',
+        },
+        type: 'OUTFIT_SUGGESTION',
+      });
+
+      // Phase 5: Log to FCAuditLog
+      try {
+        const fcAuditLogService = require('../frequentConnect/audit/fcAuditLog.service');
+        await fcAuditLogService.logEvent({
+          eventCategory: 'OUTFIT',
+          action: 'OUTFIT_STYLED',
+          actorId: userId,
+          targetType: 'OUTFIT',
+          targetId: saved._id,
+          clusterId: resolvedClusterId,
+          metadata: {
+            title,
+            targetUserId: String(targetUserId),
+            itemCount: enrichedItems.length,
+          },
+        });
+      } catch (_) {}
+
+      // Phase 5: Post activity card into Cluster Chat if conversation exists
+      if (resolvedClusterId) {
+        try {
+          const Cluster = require('../frequentConnect/cluster/cluster.model');
+          const clusterDoc = await Cluster.findById(resolvedClusterId).select('conversationId');
+          if (clusterDoc && clusterDoc.conversationId) {
+            const messageService = require('../frequentConnect/message/message.service');
+            const targetUserDoc = await User.findById(targetUserId).select('name').lean();
+            const targetName = targetUserDoc?.name || 'Member';
+            await messageService.sendMessage(clusterDoc.conversationId, userId, {
+              content: `👗 ${creatorName} styled a new look for ${targetName}: "${title}"!`,
+              messageType: 'TEXT',
+              metadata: {
+                type: 'OUTFIT_STYLED',
+                outfitId: String(saved._id),
+                targetUserId: String(targetUserId),
+              },
+            });
+          }
+        } catch (msgErr) {
+          console.warn('[saveOutfit Cluster Chat]:', msgErr.message);
+        }
+      }
+    }).catch((notifErr) => console.warn('[saveOutfit] push notification warning:', notifErr.message));
+  }
 
   return saved;
 };
 
 /**
  * Get all saved outfits for user
+ * Supports scopes: 'mine' | 'styled_for_me' | 'styled_by_me' | 'cluster' | 'all'
  */
 const getSavedOutfits = async (userId, queryParams = {}) => {
-  const { wardrobeId, occasion } = queryParams;
-  const filter = { userId };
+  const { wardrobeId, occasion, scope, clusterId, status } = queryParams;
+  const andClauses = [];
+
+  if (scope === 'mine') {
+    andClauses.push({ targetUserId: userId, createdBy: userId });
+  } else if (scope === 'styled_for_me') {
+    andClauses.push({ targetUserId: userId, createdBy: { $ne: userId } });
+  } else if (scope === 'styled_by_me') {
+    andClauses.push({ createdBy: userId, targetUserId: { $ne: userId } });
+  } else if (scope === 'cluster' && clusterId) {
+    await clusterAccessService.getAccessibleOwnerIds(userId, 'WARDROBE', clusterId);
+    const cIdObj = mongoose.Types.ObjectId.isValid(clusterId) ? new mongoose.Types.ObjectId(clusterId) : clusterId;
+    andClauses.push({ clusterId: cIdObj });
+  } else {
+    // Default: Return all outfits relevant to the user (either target user or creator)
+    andClauses.push({
+      $or: [
+        { targetUserId: userId },
+        { createdBy: userId },
+        { userId },
+      ],
+    });
+  }
 
   if (wardrobeId && wardrobeId !== 'all') {
-    filter.wardrobeId = wardrobeId;
+    andClauses.push({ wardrobeId });
   }
   if (occasion) {
-    filter.occasion = occasion.toUpperCase();
+    andClauses.push({ occasion: occasion.toUpperCase() });
+  }
+  if (status) {
+    andClauses.push({ status: String(status).toUpperCase() });
   }
 
+  const filter = andClauses.length === 1 ? andClauses[0] : { $and: andClauses };
+
   const outfits = await Outfit.find(filter)
+    .populate('createdBy', 'name phone profilePicture')
+    .populate('targetUserId', 'name phone profilePicture')
+    .populate('clusterId', 'name color code')
     .populate('items.itemId', 'name category subCategory images color pattern isFavorite')
     .sort({ createdAt: -1 })
     .lean();
@@ -932,13 +1061,112 @@ const getSavedOutfits = async (userId, queryParams = {}) => {
 };
 
 /**
+ * Update outfit status (target user can accept/decline or mark worn)
+ */
+const updateOutfitStatus = async (userId, outfitId, status) => {
+  if (!mongoose.Types.ObjectId.isValid(outfitId)) {
+    throw new ApiError(400, 'Invalid outfit ID');
+  }
+  const normStatus = String(status).toUpperCase();
+  const allowed = ['PERSONAL', 'SUGGESTED', 'ACCEPTED', 'DECLINED', 'WORN'];
+  if (!allowed.includes(normStatus)) {
+    throw new ApiError(400, `Invalid status. Must be one of: ${allowed.join(', ')}`);
+  }
+
+  const outfit = await Outfit.findById(outfitId);
+  if (!outfit) {
+    throw new ApiError(404, 'Saved outfit not found');
+  }
+
+  const isTarget = String(outfit.targetUserId || outfit.userId) === String(userId);
+  const isCreator = String(outfit.createdBy) === String(userId);
+
+  if (!isTarget && !isCreator) {
+    throw new ApiError(403, 'You do not have permission to update this outfit status');
+  }
+
+  outfit.status = normStatus;
+  if (normStatus === 'WORN') {
+    outfit.wearCount = (outfit.wearCount || 0) + 1;
+    outfit.lastWornAt = new Date();
+
+    const itemIds = (outfit.items || []).map((i) => i.itemId).filter(Boolean);
+    if (itemIds.length > 0) {
+      await WardrobeItem.updateMany(
+        { _id: { $in: itemIds } },
+        {
+          $inc: { wearCount: 1 },
+          $set: { lastWornAt: new Date() },
+        }
+      );
+    }
+  }
+
+  await outfit.save();
+
+  // Phase 5: Log to FCAuditLog & Broadcast to Cluster Group Chat on ACCEPTED or WORN
+  if (outfit.clusterId && (normStatus === 'ACCEPTED' || normStatus === 'WORN')) {
+    try {
+      const fcAuditLogService = require('../frequentConnect/audit/fcAuditLog.service');
+      fcAuditLogService.logEvent({
+        eventCategory: 'OUTFIT',
+        action: 'OUTFIT_STATUS_UPDATED',
+        actorId: userId,
+        targetType: 'OUTFIT',
+        targetId: outfit._id,
+        clusterId: outfit.clusterId,
+        metadata: {
+          status: normStatus,
+          title: outfit.title,
+        },
+      });
+
+      const Cluster = require('../frequentConnect/cluster/cluster.model');
+      const clusterDoc = await Cluster.findById(outfit.clusterId).select('conversationId');
+      if (clusterDoc && clusterDoc.conversationId) {
+        const messageService = require('../frequentConnect/message/message.service');
+        const actor = await User.findById(userId).select('name').lean();
+        const actorName = actor?.name || 'A member';
+        const actionText = normStatus === 'WORN' ? 'is wearing' : 'accepted';
+        await messageService.sendMessage(clusterDoc.conversationId, userId, {
+          content: `✨ ${actorName} ${actionText} the outfit: "${outfit.title}"!`,
+          messageType: 'TEXT',
+          metadata: {
+            type: 'OUTFIT_STATUS_UPDATED',
+            outfitId: String(outfit._id),
+            status: normStatus,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('[updateOutfitStatus Group Chat]:', e.message);
+    }
+  }
+
+  return outfit;
+};
+
+/**
  * Delete a saved outfit
  */
 const deleteSavedOutfit = async (userId, outfitId) => {
-  const deleted = await Outfit.findOneAndDelete({ _id: outfitId, userId });
-  if (!deleted) {
+  if (!mongoose.Types.ObjectId.isValid(outfitId)) {
+    throw new ApiError(400, 'Invalid outfit ID');
+  }
+
+  const outfit = await Outfit.findById(outfitId);
+  if (!outfit) {
     throw new ApiError(404, 'Saved outfit not found');
   }
+
+  const isTarget = String(outfit.targetUserId || outfit.userId) === String(userId);
+  const isCreator = String(outfit.createdBy) === String(userId);
+
+  if (!isTarget && !isCreator) {
+    throw new ApiError(403, 'You do not have permission to delete this outfit');
+  }
+
+  await Outfit.deleteOne({ _id: outfitId });
   return { success: true, message: 'Outfit removed successfully' };
 };
 
@@ -946,6 +1174,7 @@ module.exports = {
   suggestOutfits,
   saveOutfit,
   getSavedOutfits,
+  updateOutfitStatus,
   deleteSavedOutfit,
   classifySlot,
   evaluateColorHarmony,

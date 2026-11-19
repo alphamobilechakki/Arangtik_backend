@@ -91,6 +91,16 @@ class ClusterService {
       console.warn('[Cluster Creation]: Error auto-creating cluster conversation:', convErr.message);
     }
 
+    // Automatically add initial members if provided
+    if (Array.isArray(data.members) && data.members.length > 0) {
+      try {
+        const memberService = require('../member/member.service');
+        await memberService.addMembers(cluster._id, userId, data.members);
+      } catch (memErr) {
+        console.warn('[Cluster Creation]: Error adding initial members:', memErr.message);
+      }
+    }
+
     await cluster.populate('features', 'name code icon description isActive');
     return cluster;
   }

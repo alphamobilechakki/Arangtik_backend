@@ -17,6 +17,16 @@ const OutfitItemSlotSchema = new mongoose.Schema(
     subCategory: { type: String, trim: true },
     color: { type: String, trim: true },
     imageUrl: { type: String, trim: true },
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    ownerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   { _id: false }
 );
@@ -27,6 +37,30 @@ const OutfitSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User ID is required'],
+      index: true,
+    },
+    targetUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    clusterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FCCluster',
+      default: null,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ['PERSONAL', 'SUGGESTED', 'ACCEPTED', 'DECLINED', 'WORN'],
+      default: 'PERSONAL',
       index: true,
     },
     wardrobeId: {
@@ -101,8 +135,29 @@ const OutfitSchema = new mongoose.Schema(
   }
 );
 
+OutfitSchema.pre('validate', function (next) {
+  // Sync dual identities for 100% backward compatibility
+  if (!this.targetUserId && this.userId) {
+    this.targetUserId = this.userId;
+  }
+  if (!this.createdBy && this.userId) {
+    this.createdBy = this.userId;
+  }
+  if (!this.userId && this.targetUserId) {
+    this.userId = this.targetUserId;
+  }
+  if (this.createdBy && this.targetUserId && String(this.createdBy) !== String(this.targetUserId)) {
+    if (this.status === 'PERSONAL') {
+      this.status = 'SUGGESTED';
+    }
+  }
+  next();
+});
+
 OutfitSchema.index({ userId: 1, occasion: 1 });
 OutfitSchema.index({ userId: 1, isFavorite: 1 });
 OutfitSchema.index({ userId: 1, createdAt: -1 });
+OutfitSchema.index({ targetUserId: 1, createdBy: 1 });
+OutfitSchema.index({ clusterId: 1, createdAt: -1 });
 
 module.exports = mongoose.models.Outfit || mongoose.model('Outfit', OutfitSchema);

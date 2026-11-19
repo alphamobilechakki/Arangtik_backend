@@ -47,6 +47,18 @@ const getSavedOutfits = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Update outfit status (accept, decline, mark worn)
+ * @route   PATCH /api/outfit/saved/:id/status
+ * @access  Private
+ */
+const updateOutfitStatus = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const result = await outfitService.updateOutfitStatus(userId, req.params.id, req.body.status);
+
+  return ApiResponse.success(res, result, 'Outfit status updated successfully');
+});
+
+/**
  * @desc    Delete a saved outfit
  * @route   DELETE /api/outfit/saved/:id
  * @access  Private
@@ -62,5 +74,6 @@ module.exports = {
   suggestOutfits,
   saveOutfit,
   getSavedOutfits,
+  updateOutfitStatus,
   deleteSavedOutfit,
 };

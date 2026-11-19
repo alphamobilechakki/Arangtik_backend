@@ -1,4 +1,5 @@
 const clusterService = require('./cluster.service');
+const clusterAccessService = require('./clusterAccess.service');
 const asyncHandler = require('../../../utils/asyncHandler');
 const ApiResponse = require('../../../utils/apiResponse');
 const {
@@ -75,6 +76,17 @@ const updateClusterFeatures = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/fc/clusters/:id/wardrobes – Get overview of all member wardrobes in cluster
+ */
+const getClusterWardrobes = asyncHandler(async (req, res) => {
+  const data = await clusterAccessService.getClusterWardrobesOverview(
+    req.params.id,
+    req.user.id
+  );
+  return ApiResponse.success(res, data, 'Cluster wardrobes retrieved successfully');
+});
+
+/**
  * GET /api/fc/clusters/features – Get active cluster features for group creation UI
  */
 const getAvailableFeatures = asyncHandler(async (req, res) => {
@@ -97,6 +109,7 @@ module.exports = {
   getClusterById,
   updateCluster,
   updateClusterFeatures,
+  getClusterWardrobes,
   deleteCluster,
   reorderClusters,
   getAvailableFeatures,

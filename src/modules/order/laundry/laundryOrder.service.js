@@ -8,6 +8,7 @@ const User = require('../../auth/user.model');
 const ApiError = require('../../../utils/apiError');
 const { formatPhoneNumber } = require('../../../utils/whatsapp.service');
 const Category = require('../../category/category.model');
+const clusterAccessService = require('../../frequentConnect/cluster/clusterAccess.service');
 
 class LaundryOrderService {
   /**
@@ -22,6 +23,7 @@ class LaundryOrderService {
       items,
       itemIds,
       specialInstructions,
+      clusterId,
     } = payload;
 
     // 1. Validate User
@@ -58,7 +60,7 @@ class LaundryOrderService {
       throw new ApiError(400, 'Expected delivery date cannot be before pickup date');
     }
 
-    // 4. Validate and Snapshot Garments
+    // 4. Validate and Snapshot Garments (Supports Multi-Owner Cluster Laundry Dispatch)
     let itemsToProcess = [];
     if (Array.isArray(items) && items.length > 0) {
       itemsToProcess = items;
@@ -68,23 +70,24 @@ class LaundryOrderService {
       throw new ApiError(400, 'At least one dress must be selected for laundry');
     }
 
+    const requestedItemIds = itemsToProcess.map((r) => r.wardrobeItemId || r.id || r._id);
+    const batchResult = await clusterAccessService.verifyGarmentBatch(
+      userId,
+      requestedItemIds,
+      'LAUNDRY',
+      clusterId || null
+    );
+    const { items: verifiedWardrobeItems, userMap, isMultiOwner } = batchResult;
+
     const processedItems = [];
     for (const rawItem of itemsToProcess) {
-      const wId = rawItem.wardrobeItemId || rawItem.id || rawItem._id;
-      if (!wId || !mongoose.Types.ObjectId.isValid(wId)) {
-        throw new ApiError(400, `Invalid wardrobe item ID: ${wId}`);
-      }
-
-      // Fetch wardrobe item to ensure ownership and get verified metadata
-      const wardrobeItem = await WardrobeItem.findOne({
-        _id: wId,
-        userId: user._id,
-      });
+      const wId = String(rawItem.wardrobeItemId || rawItem.id || rawItem._id);
+      const wardrobeItem = verifiedWardrobeItems.find((it) => it._id.toString() === wId);
 
       if (!wardrobeItem) {
         throw new ApiError(
           404,
-          `Wardrobe garment not found or does not belong to user (ID: ${wId})`
+          `Wardrobe garment not found or does not belong to user or cluster (ID: ${wId})`
         );
       }
 
@@ -132,8 +135,12 @@ class LaundryOrderService {
           ? parseFloat(rawItem.price)
           : 0;
 
+      const garmentOwner = userMap.get(wardrobeItem.userId.toString());
+
       processedItems.push({
         wardrobeItemId: wardrobeItem._id,
+        garmentOwnerId: wardrobeItem.userId,
+        garmentOwnerName: garmentOwner?.name || user.name || '',
         serviceId: rawItem.serviceId || null,
         serviceName: resolvedServiceName,
         serviceType: rawItem.serviceType || resolvedServiceName,
@@ -232,6 +239,7 @@ class LaundryOrderService {
       userId: user._id,
       userName: user.name || 'Arangtik User',
       userPhone: user.phone,
+      clusterId: clusterId || null,
       orderCategory,
       orderType: 'LAUNDRY_WORK_ORDER',
       vendorId: vendorRecord.isRegistered ? vendorRecord.vendor._id : null,
@@ -259,13 +267,69 @@ class LaundryOrderService {
 
     await order.save();
 
-    // 6.1. Mark wardrobe garments as INACTIVE (sent to laundry)
+    // 6.1. Mark wardrobe garments as INACTIVE across all participating owners
     const wardrobeItemIds = processedItems.map((it) => it.wardrobeItemId);
     if (wardrobeItemIds.length > 0) {
       await WardrobeItem.updateMany(
-        { _id: { $in: wardrobeItemIds }, userId: user._id },
+        { _id: { $in: wardrobeItemIds } },
         { $set: { status: 'INACTIVE' } }
       );
+    }
+
+    // 6.2. If multi-owner cluster laundry, notify foreign owners asynchronously
+    if (isMultiOwner) {
+      try {
+        const notificationService = require('../../notification/notification.service');
+        for (const [ownerIdStr] of batchResult.itemsByOwner.entries()) {
+          if (ownerIdStr !== userId.toString()) {
+            const ownerItemCount = batchResult.itemsByOwner.get(ownerIdStr).length;
+            notificationService.sendToUser(ownerIdStr, {
+              title: 'Garments Sent to Laundry 🧺',
+              body: `${user.name || 'A cluster member'} included ${ownerItemCount} of your clothes in a laundry work order with ${resolvedVendorName}.`,
+              data: {
+                type: 'LAUNDRY_ORDER',
+                orderId: String(order._id),
+              },
+              type: 'LAUNDRY_ORDER',
+            }).catch((e) => console.warn('[Laundry Notification Warning]:', e.message));
+          }
+        }
+      } catch (_) {}
+
+      // Phase 5: Log to FCAuditLog & broadcast activity card to cluster group chat
+      if (clusterId) {
+        try {
+          const fcAuditLogService = require('../../frequentConnect/audit/fcAuditLog.service');
+          fcAuditLogService.logEvent({
+            eventCategory: 'LAUNDRY',
+            action: 'LAUNDRY_ORDER_DISPATCHED',
+            actorId: userId,
+            targetType: 'ORDER',
+            targetId: order._id,
+            clusterId,
+            metadata: {
+              orderNumber: order.orderNumber,
+              totalItems: processedItems.length,
+              vendorName: resolvedVendorName,
+            },
+          });
+
+          const Cluster = require('../../frequentConnect/cluster/cluster.model');
+          const clusterDoc = await Cluster.findById(clusterId).select('conversationId');
+          if (clusterDoc && clusterDoc.conversationId) {
+            const messageService = require('../../frequentConnect/message/message.service');
+            messageService.sendMessage(clusterDoc.conversationId, userId, {
+              content: `🧺 ${user.name || 'A member'} booked laundry with ${resolvedVendorName} (#${order.orderNumber}) for ${processedItems.length} family garments!`,
+              messageType: 'TEXT',
+              metadata: {
+                type: 'LAUNDRY_ORDER_DISPATCHED',
+                orderId: String(order._id),
+                orderNumber: order.orderNumber,
+              },
+            }).catch((chatErr) => console.warn('[Laundry Group Chat Broadcast Warning]:', chatErr.message));
+          }
+        } catch (_) {}
+      }
     }
 
     // 6.2. Initialize universal order transaction
@@ -695,6 +759,30 @@ class LaundryOrderService {
           type: 'LAUNDRY_ORDER_STATUS',
         })
         .catch((err) => console.warn('[FCM Status Notification Warning]:', err.message));
+
+      // Also notify any foreign garment owners in the cluster order
+      const foreignOwnerIds = [
+        ...new Set(
+          (order.items || [])
+            .map((it) => it.garmentOwnerId?.toString())
+            .filter((id) => id && id !== order.userId.toString())
+        ),
+      ];
+      for (const fOwnerId of foreignOwnerIds) {
+        notificationService
+          .sendToUser(fOwnerId, {
+            title: `Shared Laundry Update #${order.orderNumber}`,
+            body: `Your garments in the shared laundry order are now: ${label}.`,
+            data: {
+              type: 'LAUNDRY_ORDER_STATUS',
+              orderId: order._id.toString(),
+              orderNumber: order.orderNumber,
+              status,
+            },
+            type: 'LAUNDRY_ORDER_STATUS',
+          })
+          .catch((err) => console.warn('[FCM Foreign Owner Notification Warning]:', err.message));
+      }
 
       // If user cancelled, notify vendor if vendor has an active account
       if (status === 'CANCELLED') {

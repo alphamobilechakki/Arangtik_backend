@@ -46,6 +46,16 @@ const orderItemSchema = new mongoose.Schema(
       ref: 'WardrobeItem',
       default: null,
     },
+    garmentOwnerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    garmentOwnerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     category: {
       type: String,
       trim: true,
@@ -108,6 +118,12 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ['SERVICE', 'PRODUCT', 'LAUNDRY_WORK_ORDER', 'OTHER'],
       default: 'SERVICE',
+      index: true,
+    },
+    clusterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FCCluster',
+      default: null,
       index: true,
     },
     userId: {

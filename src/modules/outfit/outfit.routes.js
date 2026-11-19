@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const outfitController = require('./outfit.controller');
-const { validateSuggestRequest, validateSaveOutfit } = require('./outfit.validation');
+const {
+  validateSuggestRequest,
+  validateSaveOutfit,
+  validateUpdateOutfitStatus,
+} = require('./outfit.validation');
 const { protect } = require('../../middlewares/auth.middleware');
 const { checkQuota } = require('../../middlewares/quota.middleware');
 
@@ -21,6 +25,7 @@ router.post('/generate', checkQuota('aiOutfitSuggestions'), validateSuggestReque
  */
 router.post('/save', checkQuota('favouriteOutfits'), validateSaveOutfit, outfitController.saveOutfit);
 router.get('/saved', outfitController.getSavedOutfits);
+router.patch('/saved/:id/status', validateUpdateOutfitStatus, outfitController.updateOutfitStatus);
 router.delete('/saved/:id', outfitController.deleteSavedOutfit);
 
 module.exports = router;

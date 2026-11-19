@@ -192,6 +192,11 @@ const WardrobeItemSchema = new mongoose.Schema(
       generatedAt: { type: Date, default: null },
       error: { type: String, default: null },
     },
+    lastModifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true,

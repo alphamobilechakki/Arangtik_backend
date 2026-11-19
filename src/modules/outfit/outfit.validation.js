@@ -68,8 +68,21 @@ const validateSaveOutfit = (req, res, next) => {
   next();
 };
 
+/**
+ * Validate update outfit status request payload
+ */
+const validateUpdateOutfitStatus = (req, res, next) => {
+  const { status } = req.body;
+  const allowed = ['PERSONAL', 'SUGGESTED', 'ACCEPTED', 'DECLINED', 'WORN'];
+  if (!status || !allowed.includes(String(status).toUpperCase())) {
+    throw new ApiError(400, `Status must be one of: ${allowed.join(', ')}`);
+  }
+  next();
+};
+
 module.exports = {
   validateSuggestRequest,
   validateSaveOutfit,
+  validateUpdateOutfitStatus,
   VALID_OCCASIONS,
 };
