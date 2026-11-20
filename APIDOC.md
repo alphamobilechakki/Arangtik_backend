@@ -6058,5 +6058,104 @@ Removes an outfit from the collection. Permitted for either the outfit's creator
 }
 ```
 
+---
+
+## 19. Arangtik Garment AI Studio & Testing APIs
+Dedicated enterprise testing and GPU worker telemetry endpoints for Arangtik Garment AI's Unified 3D Ghost-Mannequin Studio Pipeline.
+
+### 19.1. Garment AI Microservice Health & GPU Telemetry
+Probes `https://bg.arangtik.com/health` to verify GPU cluster status, NVIDIA RTX 3090 worker connectivity, and loaded neural models (BiRefNet Lite, ChatGPT Vision, Qwen 2.1).
+
+- **Method / Path:** `GET /api/admin/garment-ai/health`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Garment AI service health checked successfully",
+  "data": {
+    "online": true,
+    "statusCode": 200,
+    "latencyMs": 850,
+    "data": {
+      "status": "ok",
+      "service": "arangtik-garment-ai",
+      "flow": "Flow A (BiRefNet Lite) + Flow B (ChatGPT Vision + Remote GPU Qwen)",
+      "version": "2.0.0",
+      "model": "birefnet-general-lite",
+      "models_loaded": {
+        "flow_a_birefnet": true,
+        "openai_vision_configured": true,
+        "qwen_gpu_worker_online": true
+      },
+      "hardware": {
+        "cpu_cores": 6,
+        "device": "remote_cuda",
+        "cuda_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3090",
+        "gpu_worker_url": "http://127.0.0.1:8001",
+        "gpu_worker_detail": "Connected"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 19.2. Test Garment Image 3D Studio Pipeline
+Uploads an e-commerce model photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024×1024 transparent 3D ghost-mannequin cutouts, category classifications, and high-accuracy titles.
+
+- **Method / Path:** `POST /api/admin/garment-ai/test`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Content-Type:** `multipart/form-data`
+- **Request Parameters:**
+  - `file` (or `image`): Binary image file (JPEG, PNG, WebP up to 15MB)
+  - `target_garment`: Optional filter (`"all"`, `"upper_clothes"`, `"pants"`, `"dress"`, `"skirt"`)
+  - `response_format`: `"json"`
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Garment processed cleanly through 3D Ghost-Mannequin Pipeline",
+  "data": {
+    "success": true,
+    "status": "success",
+    "jobId": "73ed5a1135",
+    "executionTimeMs": 48580,
+    "processingTimeSec": 48.58,
+    "totalGarments": 1,
+    "garments": [
+      {
+        "garmentId": "garment_001",
+        "category": "upper_clothes",
+        "mappedDbCategory": "UPPER_WEAR",
+        "title": "White Real Madrid Football Jersey",
+        "url": "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png",
+        "outputPngUrl": "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png",
+        "resolution": "1024x1024",
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "originalImage": {
+      "fileName": "jersey.jpg",
+      "size": 140715,
+      "mimetype": "image/jpeg",
+      "localUrl": "/uploads/jersey.jpg"
+    },
+    "rawResponse": {
+      "status": "success",
+      "total_garments": 1,
+      "garments": [ ... ],
+      "processing_time_sec": 48.58
+    }
+  }
+}
+```
+
+
 
 

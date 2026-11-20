@@ -1,0 +1,4791 @@
+openapi: "3.0.3"
+info:
+  title: Arangtik Backend API Documentation
+  version: "1.0.0"
+  description: "Comprehensive OpenAPI 3.0.3 specification for Arangtik — AI-Powered Wardrobe, Laundry, Frequent Connect Collaborative Ecosystem, Hardware IoT Hubs, and Household Management platform."
+  contact:
+    name: Arangtik Core API Team
+    url: "https://api.arangtik.com"
+    email: "api@arangtik.com"
+servers:
+  - url: "http://localhost:8083/api"
+    description: Local Development Server
+  - url: "https://api.arangtik.com/api"
+    description: Production API Server
+tags:
+  - name: "Health & System"
+    description: System health probes and telemetry
+  - name: "Authentication & Profile"
+    description: "User OTP login, registration, JWT tokens, profile & biometric face photo registration"
+  - name: Wardrobe Management
+    description: "Closet containers, photo garment ingestion, classification, visual duplicate detection, and clothing items"
+  - name: Vendor Management
+    description: "Vendor onboarding, verification, service offerings, 2dsphere geolocation discovery, and assigned work orders"
+  - name: Hardware IoT Hubs
+    description: Smart IoT Hub hardware activation and binding
+  - name: Hardware KitchenBoxes
+    description: Smart IoT KitchenBox hardware activation and remote sensor triggers
+  - name: "Orders & Laundry"
+    description: "Universal service work orders, multi-owner cluster laundry dispatch, WhatsApp dispatch, and status lifecycle"
+  - name: "Smart & Collaborative Outfit Styling"
+    description: "AI occasion outfit suggestion, dual-identity attributed collaborative styling (Styled by Priya), wear-tracking, and status workflow"
+  - name: "Subscription & Razorpay Payments"
+    description: "Subscription tiers, recurring auto-pay, Razorpay payment orders, and admin subscription management"
+  - name: "Coins & Virtual Currency"
+    description: "Coin balances, package purchasing, virtual wallet deductions, and admin virtual package management"
+  - name: "Frequent Connect (Clusters & Messaging)"
+    description: "One-tap communication clusters, member management, text & voice chat, 15-min auto-delete, and cluster wardrobe discovery hub"
+  - name: Admin Cluster Features Master
+    description: "Catalog management for dynamic cluster capabilities (WARDROBE, LAUNDRY, WALKIE_TALKIE)"
+  - name: Admin Frequent Connect Telemetry
+    description: "Admin monitoring, cluster analytics, and immutable audit logs"
+  - name: "Admin Density Categories & Products"
+    description: Density categories and consumable household products
+  - name: Notifications
+    description: User FCM push notifications and read status updates
+  - name: "Store Types & Public Taxonomies"
+    description: "Store types, level-1 service categories, and public service catalogues"
+paths:
+  "/health":
+    get:
+      tags:
+        - "Health & System"
+      summary: Global API Health Probe
+      description: Checks operational status of the core Express application.
+      responses:
+        200:
+          description: API is healthy
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+  "/fc/health":
+    get:
+      tags:
+        - "Health & System"
+      summary: Frequent Connect Subsystem Health Probe
+      description: Checks operational status of the Frequent Connect routing engine.
+      responses:
+        200:
+          description: Frequent Connect is healthy
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                      feature:
+                        type: string
+                        example: Frequent Connect
+  "/auth/send-otp":
+    post:
+      tags:
+        - "Authentication & Profile"
+      summary: "Send 6-Digit OTP"
+      description: Dispatches OTP to registered or new mobile phone number via SMS gateway.
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  example: "9876543210"
+      responses:
+        200:
+          description: OTP dispatched
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: OTP sent successfully
+        400:
+          description: "Valid 10-digit phone number is required"
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Valid 10-digit phone number is required"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/auth/verify-otp":
+    post:
+      tags:
+        - "Authentication & Profile"
+      summary: "Verify OTP & Login / Register"
+      description: "Validates 6-digit OTP code, provisions new account if first-time user, and returns signed JWT access token."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - phone
+                - otp
+              properties:
+                phone:
+                  type: string
+                  example: "9876543210"
+                otp:
+                  type: string
+                  example: "123456"
+                name:
+                  type: string
+                  example: Priya Sharma
+      responses:
+        200:
+          description: OTP verified successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/AuthResponse"
+        400:
+          description: Invalid or expired OTP
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Invalid or expired OTP
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/auth/profile":
+    get:
+      tags:
+        - "Authentication & Profile"
+      summary: Get Current Authenticated User Profile
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: User profile retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/UserProfile"
+        401:
+          description: "Unauthorized access, token missing or invalid"
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 401
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Unauthorized access, token missing or invalid"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+    patch:
+      tags:
+        - "Authentication & Profile"
+      summary: Update Profile Attributes
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Priya Sharma
+                email:
+                  type: string
+                  example: "priya@example.com"
+                gender:
+                  type: string
+                  enum:
+                    - MALE
+                    - FEMALE
+                    - OTHER
+                  example: FEMALE
+                profileImage:
+                  type: string
+                  example: "https://api.arangtik.com/uploads/priya.jpg"
+      responses:
+        200:
+          description: Profile updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/UserProfile"
+        400:
+          description: Validation error
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Validation error
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/auth/profile-image":
+    post:
+      tags:
+        - "Authentication & Profile"
+      summary: "Upload Profile Image & Biometric Reference Face"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        200:
+          description: Profile image uploaded and face analyzed
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/UserProfile"
+  "/auth/fcm-token":
+    post:
+      tags:
+        - "Authentication & Profile"
+      summary: Register FCM Device Push Token
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  example: dKz7...fcm_token_here
+                platform:
+                  type: string
+                  enum:
+                    - ANDROID
+                    - IOS
+                    - WEB
+                    - OTHER
+                  example: ANDROID
+                deviceId:
+                  type: string
+                  example: samsung_sm_g998b
+      responses:
+        200:
+          description: Device token registered successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+    delete:
+      tags:
+        - "Authentication & Profile"
+      summary: Remove FCM Device Push Token
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  example: dKz7...fcm_token_here
+      responses:
+        200:
+          description: Device token removed successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/auth/logout":
+    post:
+      tags:
+        - "Authentication & Profile"
+      summary: Logout User
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Logged out successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/wardrobe/create-wardrobe":
+    post:
+      tags:
+        - Wardrobe Management
+      summary: Create Wardrobe Closet Container
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Daily Casuals
+                storeTypeId:
+                  type: string
+                  example: 6ae03a499b2993a9455fc54f
+                type:
+                  type: string
+                  enum:
+                    - PERSONAL
+                    - SHARED
+                    - FAMILY
+                  example: PERSONAL
+                ownerName:
+                  type: string
+                  example: Monika
+                isDefault:
+                  type: boolean
+                  example: true
+                coverImage:
+                  type: string
+                  format: binary
+                ownerFaceImage:
+                  type: string
+                  format: binary
+          "application/json":
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Daily Casuals
+                storeTypeId:
+                  type: string
+                  example: 6ae03a499b2993a9455fc54f
+                type:
+                  type: string
+                  example: PERSONAL
+                ownerName:
+                  type: string
+                  example: Monika
+                isDefault:
+                  type: boolean
+                  example: false
+      responses:
+        201:
+          description: Wardrobe closet created successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeContainer"
+        400:
+          description: Wardrobe name is required
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Wardrobe name is required
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/wardrobe/get-wardrobes":
+    get:
+      tags:
+        - Wardrobe Management
+      summary: "Get All Wardrobes / Stores"
+      description: Lists all active wardrobe containers for user or across a shared cluster when clusterId is specified.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: storeTypeId
+          in: query
+          schema:
+            type: string
+          description: Filter by store type ObjectId
+        - name: storeType
+          in: query
+          schema:
+            type: string
+          description: Filter by code (e.g. WARDROBE) or ALL
+        - name: clusterId
+          in: query
+          schema:
+            type: string
+          description: Discover wardrobes across all active members of the specified cluster
+        - name: ownerId
+          in: query
+          schema:
+            type: string
+          description: Target specific cluster member wardrobe
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+          description: "Include soft-deleted containers"
+      responses:
+        200:
+          description: Wardrobes fetched successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WardrobeContainer"
+  "/wardrobe/get-wardrobe/{id}":
+    get:
+      tags:
+        - Wardrobe Management
+      summary: Get Single Wardrobe Container
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Wardrobe container retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeContainer"
+        403:
+          description: "Permission denied: No shared cluster with WARDROBE feature"
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Permission denied: No shared cluster with WARDROBE feature"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        404:
+          description: Wardrobe container not found
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Wardrobe container not found
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/wardrobe/update-wardrobe/{id}":
+    patch:
+      tags:
+        - Wardrobe Management
+      summary: Update Wardrobe Container Attributes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Office & Work Wear"
+                type:
+                  type: string
+                  example: PERSONAL
+                isDefault:
+                  type: boolean
+                  example: false
+      responses:
+        200:
+          description: Wardrobe container updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeContainer"
+  "/wardrobe/delete-wardrobe/{id}":
+    delete:
+      tags:
+        - Wardrobe Management
+      summary: Delete Wardrobe Container (Soft Delete by default)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: hard
+          in: query
+          schema:
+            type: boolean
+          description: Pass true for hard deletion
+      responses:
+        200:
+          description: Wardrobe container deleted successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/wardrobe/restore-wardrobe/{id}":
+    patch:
+      tags:
+        - Wardrobe Management
+      summary: "Restore Soft-Deleted Wardrobe Container"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Wardrobe container restored
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeContainer"
+  "/wardrobe/add-item":
+    post:
+      tags:
+        - Wardrobe Management
+      summary: "Upload Clothing Item Photo & Process with AI"
+      description: "Single or batch photo upload. Performs AI image segmentation, perceptual duplicate detection, and visual taxonomy classification."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - photo
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                wardrobeId:
+                  type: string
+                  example: 6ae0551433480f1d0fb8d9e2
+                name:
+                  type: string
+                  example: Navy Blue Silk Kurta
+                category:
+                  type: string
+                  example: Kurtas
+                color:
+                  type: string
+                  example: Navy Blue
+                forceAdd:
+                  type: boolean
+                  example: false
+      responses:
+        200:
+          description: Exact or visual duplicate detected and matched
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeItem"
+        201:
+          description: Wardrobe item added successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeItem"
+  "/wardrobe/get-items":
+    get:
+      tags:
+        - Wardrobe Management
+      summary: "Get Clothes / Garments with Filters & Pagination"
+      description: "Fetches clothes filtered by category, color, season, wardrobe, or shared cluster."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: clusterId
+          in: query
+          schema:
+            type: string
+          description: Query items across all members of that cluster
+        - name: ownerId
+          in: query
+          schema:
+            type: string
+          description: Query items belonging to specific cluster member
+        - name: wardrobeId
+          in: query
+          schema:
+            type: string
+          description: Filter by specific wardrobe container ID
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: subCategory
+          in: query
+          schema:
+            type: string
+        - name: color
+          in: query
+          schema:
+            type: string
+        - name: occasion
+          in: query
+          schema:
+            type: string
+        - name: season
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - ACTIVE
+              - INACTIVE
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: "-createdAt"
+      responses:
+        200:
+          description: Items retrieved successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WardrobeItem"
+                      pagination:
+                        $ref: "#/components/schemas/Pagination"
+  "/wardrobe/get-item/{id}":
+    get:
+      tags:
+        - Wardrobe Management
+      summary: Get Item Details by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Item retrieved successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeItem"
+        404:
+          description: Wardrobe item not found
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Wardrobe item not found
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/wardrobe/edit-item/{id}":
+    patch:
+      tags:
+        - Wardrobe Management
+      summary: "Update Garment Details & Organizing Location"
+      description: "Allows owner or cluster member (with WARDROBE enabled) to update item details, storage location, or move to another closet. Sets lastModifiedBy."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Slim Fit Navy Chinos
+                wardrobeId:
+                  type: string
+                  example: 6ae0551433480f1d0fb8d9e2
+                category:
+                  type: string
+                  example: Pants
+                status:
+                  type: string
+                  enum:
+                    - ACTIVE
+                    - INACTIVE
+                  example: ACTIVE
+      responses:
+        200:
+          description: Garment updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/WardrobeItem"
+  "/wardrobe/delete-item/{id}":
+    delete:
+      tags:
+        - Wardrobe Management
+      summary: Delete Clothing Item
+      description: Permanently deletes a clothing item. Strictly restricted to garment owner.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Garment deleted
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                        example: true
+        404:
+          description: Wardrobe item not found or unauthorized
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Wardrobe item not found or unauthorized
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/outfit/suggest":
+    post:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: Generate Smart AI Outfit Combinations
+      description: "Generates color-harmonious, occasion-specific looks strictly from available, active clothes."
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                wardrobeId:
+                  type: string
+                  example: 6ae0551433480f1d0fb8d9e2
+                occasion:
+                  type: string
+                  example: CASUAL
+                season:
+                  type: string
+                  example: SUMMER
+                limit:
+                  type: integer
+                  default: 5
+      responses:
+        200:
+          description: Outfits generated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SuggestedOutfit"
+  "/outfit/generate":
+    post:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: Generate Smart AI Outfit Combinations (Alias)
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SuggestedOutfit"
+  "/outfit/save":
+    post:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: "Save Outfit / Collaborative Styling"
+      description: "Saves outfit to closet collection. If targetUserId is another member, validates shared cluster access with WARDROBE enabled, attributes createdBy vs targetUserId, sets status=SUGGESTED, and sends FCM push notification."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - title
+                - occasion
+                - items
+              properties:
+                targetUserId:
+                  type: string
+                  example: 6735fa016ba477c7d42cfb82
+                  description: Recipient user ID (if styling for another member)
+                clusterId:
+                  type: string
+                  example: 6735fa016ba477c7d42cfb80
+                  description: Cluster context ID
+                title:
+                  type: string
+                  example: Friday Office Casual
+                occasion:
+                  type: string
+                  example: CASUAL
+                season:
+                  type: string
+                  default: ALL_SEASON
+                  example: ALL_SEASON
+                stylingNotes:
+                  type: string
+                  example: Wear with white sneakers
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - itemId
+                      - slot
+                    properties:
+                      itemId:
+                        type: string
+                        example: 6ae0601433480f1d0fb8d9f1
+                      slot:
+                        type: string
+                        enum:
+                          - UPPER_WEAR
+                          - LOWER_WEAR
+                          - ONE_PIECE
+                          - OUTERWEAR
+                          - FOOTWEAR
+                          - ACCESSORIES
+                        example: UPPER_WEAR
+                      name:
+                        type: string
+                        example: Linen White Shirt
+      responses:
+        201:
+          description: Outfit saved to closet collection
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Outfit"
+        403:
+          description: "Permission denied: Users do not share active cluster with WARDROBE enabled"
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Permission denied: Users do not share active cluster with WARDROBE enabled"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/outfit/saved":
+    get:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: Get Saved Outfits with Scopes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum:
+              - mine
+              - styled_for_me
+              - styled_by_me
+              - cluster
+              - all
+          description: Scope filter
+        - name: clusterId
+          in: query
+          schema:
+            type: string
+          description: "Cluster filter for scope=cluster"
+        - name: occasion
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - PERSONAL
+              - SUGGESTED
+              - ACCEPTED
+              - DECLINED
+              - WORN
+        - name: wardrobeId
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Saved outfits retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Outfit"
+  "/outfit/saved/{id}/status":
+    patch:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: "Update Outfit Status (Accept, Decline, Mark Worn)"
+      description: Allows recipient or creator to update outfit status. Marking WORN increments wearCount on outfit and all constituent garments.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - PERSONAL
+                    - SUGGESTED
+                    - ACCEPTED
+                    - DECLINED
+                    - WORN
+                  example: WORN
+      responses:
+        200:
+          description: Outfit status updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Outfit"
+  "/outfit/saved/{id}":
+    delete:
+      tags:
+        - "Smart & Collaborative Outfit Styling"
+      summary: Delete Saved Outfit
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Outfit removed successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/laundry/orders":
+    post:
+      tags:
+        - "Orders & Laundry"
+      summary: "Create Laundry Work Order (Supports Multi-Owner Clusters)"
+      description: Creates work order for clothes across multiple cluster members. Snapshots garmentOwnerId and flips all garments to INACTIVE during laundry.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - vendorPhone
+                - pickupDate
+                - expectedDeliveryDate
+              properties:
+                vendorPhone:
+                  type: string
+                  example: "9876543210"
+                vendorName:
+                  type: string
+                  example: Super Clean Dhobi
+                pickupDate:
+                  type: string
+                  format: "date-time"
+                expectedDeliveryDate:
+                  type: string
+                  format: "date-time"
+                clusterId:
+                  type: string
+                  example: 6735fa016ba477c7d42cfb80
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - wardrobeItemId
+                    properties:
+                      wardrobeItemId:
+                        type: string
+                        example: 6ae0601433480f1d0fb8d9f1
+                      serviceName:
+                        type: string
+                        example: DRY_CLEAN
+                      price:
+                        type: number
+                        example: 150
+      responses:
+        201:
+          description: Laundry work order created
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/LaundryOrder"
+        403:
+          description: "Permission denied: Garments belong to non-cluster member"
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Permission denied: Garments belong to non-cluster member"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+    get:
+      tags:
+        - "Orders & Laundry"
+      summary: List User Laundry Work Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LaundryOrder"
+  "/laundry/orders/{id}":
+    get:
+      tags:
+        - "Orders & Laundry"
+      summary: Get Laundry Work Order Details by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Work order retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/LaundryOrder"
+  "/laundry/orders/{id}/status":
+    patch:
+      tags:
+        - "Orders & Laundry"
+      summary: Update Work Order Status (DELIVERED restores clothes to ACTIVE)
+      description: "Updates work order lifecycle status. When status is DELIVERED, automatically flips all garments across all cluster owners back to ACTIVE."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - PENDING_PICKUP
+                    - PICKED_UP
+                    - IN_PROCESS
+                    - READY_FOR_DELIVERY
+                    - DELIVERED
+                    - CANCELLED
+                  example: DELIVERED
+                note:
+                  type: string
+      responses:
+        200:
+          description: Order status updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/LaundryOrder"
+  "/laundry/orders/{id}/payment":
+    patch:
+      tags:
+        - "Orders & Laundry"
+      summary: Update Order Payment Status
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - paymentStatus
+              properties:
+                paymentStatus:
+                  type: string
+                  enum:
+                    - PAID
+                    - UNPAID
+                    - REFUNDED
+                  example: PAID
+      responses:
+        200:
+          description: Payment status updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/LaundryOrder"
+  "/laundry/orders/{id}/resend-whatsapp":
+    post:
+      tags:
+        - "Orders & Laundry"
+      summary: "Re-send WhatsApp PDF to Vendor"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: WhatsApp dispatch triggered
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/features":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Get Available Cluster Features Catalog
+      description: "Retrieves active cluster features for group creation UI toggles/checkboxes."
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClusterFeature"
+  "/fc/clusters":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Create Priority Contact Cluster
+      description: "Creates priority group with selected features (WARDROBE, LAUNDRY, etc.) and initial members."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Gupta Family
+                color:
+                  type: string
+                  example: "#6366F1"
+                icon:
+                  type: string
+                  example: 👥
+                features:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - "6739f4a123..."
+                    - "6739f4b456..."
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - phone
+                    properties:
+                      phone:
+                        type: string
+                        example: "919876543210"
+                      name:
+                        type: string
+                        example: Rahul
+      responses:
+        201:
+          description: Cluster created successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Cluster"
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Get All User Clusters (Ordered by Priority)
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Cluster"
+  "/fc/clusters/{id}":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Get Cluster Details by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Cluster details retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Cluster"
+    put:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Update Cluster Details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Gupta Family Circle
+                color:
+                  type: string
+                  example: "#4F46E5"
+                icon:
+                  type: string
+                  example: 🏡
+      responses:
+        200:
+          description: Cluster updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Cluster"
+    delete:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Delete Cluster
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Cluster deleted successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/clusters/{id}/wardrobes":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Get Cluster Member Wardrobes Overview Hub
+      description: Returns all closets and garments count across every active member in the cluster when WARDROBE feature is active.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Cluster wardrobes retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/ClusterWardrobesOverview"
+        403:
+          description: Unauthorized access to cluster
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Unauthorized access to cluster
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  "/fc/clusters/{id}/features":
+    patch:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Toggle or Update Cluster Features
+      description: "Add, remove, or toggle a single feature or batch update the features array for a cluster."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                featureId:
+                  type: string
+                  example: "6739f4a123..."
+                action:
+                  type: string
+                  enum:
+                    - add
+                    - remove
+                    - toggle
+                  example: toggle
+                features:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        200:
+          description: Cluster features updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Cluster"
+  "/fc/clusters/reorder":
+    patch:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Reorder Cluster Priority Order
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - order
+              properties:
+                order:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - clusterId
+                      - priority
+                    properties:
+                      clusterId:
+                        type: string
+                        example: 6735fa016ba477c7d42cfb80
+                      priority:
+                        type: integer
+                        example: 0
+      responses:
+        200:
+          description: Clusters reordered successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/clusters/{id}/members":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Add Members to Cluster
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - members
+              properties:
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - phone
+                    properties:
+                      phone:
+                        type: string
+                        example: "919876543210"
+                      name:
+                        type: string
+                        example: Rahul
+      responses:
+        200:
+          description: Members added successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: List Cluster Members
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClusterMember"
+  "/fc/clusters/{id}/members/leave":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Leave Cluster
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Left cluster successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/clusters/{id}/members/{memberId}":
+    delete:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Remove Member from Cluster
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Member removed successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/conversations":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: List User Conversations
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FCConversation"
+  "/fc/conversations/direct":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: "Get or Create 1:1 Direct Conversation"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - targetUserId
+              properties:
+                targetUserId:
+                  type: string
+                  example: 6735fa016ba477c7d42cfb82
+      responses:
+        200:
+          description: Conversation ready
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/FCConversation"
+  "/fc/conversations/{id}/messages":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Send Message in Conversation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  example: "Hey everyone, laundry pickup is scheduled!"
+                messageType:
+                  type: string
+                  enum:
+                    - TEXT
+                    - VOICE
+                    - WALKIE_TALKIE
+                  default: TEXT
+                metadata:
+                  type: object
+      responses:
+        201:
+          description: Message sent successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/FCMessage"
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Get Conversation Messages with Pagination
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: before
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FCMessage"
+  "/fc/messages/{id}/bookmark":
+    post:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: "Bookmark Message (Exempt from 15-Minute Auto-Delete)"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Message bookmarked successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+    delete:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Remove Message Bookmark
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Bookmark removed successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/fc/saved-messages":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: "Get All User Saved / Bookmarked Messages"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FCMessage"
+  "/fc/widget/clusters":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: "Get Quick-Action Mobile Widget Clusters Data"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      type: object
+  "/fc/search":
+    get:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: "Full Chat History & Cross-Conversation Search"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FCMessage"
+  "/admin/cluster-features":
+    get:
+      tags:
+        - Admin Cluster Features Master
+      summary: List All Master Cluster Features
+      description: "Retrieves cluster features with optional search, active status filter, and pagination."
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClusterFeature"
+    post:
+      tags:
+        - Admin Cluster Features Master
+      summary: Create Master Cluster Feature
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Laundry
+                icon:
+                  type: string
+                  example: 🧺
+                description:
+                  type: string
+                  example: "Laundry booking and multi-owner dispatch"
+                isActive:
+                  type: boolean
+                  default: true
+                displayOrder:
+                  type: integer
+                  default: 0
+      responses:
+        201:
+          description: Feature created successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/ClusterFeature"
+  "/admin/garment-ai/health":
+    get:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Garment AI Microservice Health & GPU Telemetry"
+      description: "Probes https://bg.arangtik.com/health to verify GPU cluster connectivity, RTX 3090 worker status, and loaded models."
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: GPU worker is online
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      online:
+                        type: boolean
+                        example: true
+                      latencyMs:
+                        type: integer
+                        example: 850
+  "/admin/garment-ai/test":
+    post:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Test Garment Image 3D Ghost-Mannequin Pipeline"
+      description: "Uploads an e-commerce photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024x1024 transparent 3D ghost-mannequin cutouts."
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Garment input photo (JPG, PNG, WebP up to 15MB)"
+                target_garment:
+                  type: string
+                  enum: [all, upper_clothes, pants, dress, skirt]
+                  default: all
+                response_format:
+                  type: string
+                  enum: [json, image_direct]
+                  default: json
+      responses:
+        200:
+          description: Garment processed cleanly through 3D pipeline
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      executionTimeMs:
+                        type: number
+                        example: 48580
+                      processingTimeSec:
+                        type: number
+                        example: 48.58
+                      totalGarments:
+                        type: integer
+                        example: 1
+                      garments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              example: upper_clothes
+                            mappedDbCategory:
+                              type: string
+                              example: UPPER_WEAR
+                            title:
+                              type: string
+                              example: "White Real Madrid Football Jersey"
+                            url:
+                              type: string
+                              example: "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png"
+                            resolution:
+                              type: string
+                              example: "1024x1024"
+  "/admin/cluster-features/seed":
+    post:
+      tags:
+        - Admin Cluster Features Master
+      summary: "Idempotently Seed Default Cluster Features (Wardrobe, Laundry, Walkie-Talkie)"
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: Default features seeded successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClusterFeature"
+  "/admin/cluster-features/{id}":
+    get:
+      tags:
+        - Admin Cluster Features Master
+      summary: Get Feature Details by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/ClusterFeature"
+  "/admin/garment-ai/health":
+    get:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Garment AI Microservice Health & GPU Telemetry"
+      description: "Probes https://bg.arangtik.com/health to verify GPU cluster connectivity, RTX 3090 worker status, and loaded models."
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: GPU worker is online
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      online:
+                        type: boolean
+                        example: true
+                      latencyMs:
+                        type: integer
+                        example: 850
+  "/admin/garment-ai/test":
+    post:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Test Garment Image 3D Ghost-Mannequin Pipeline"
+      description: "Uploads an e-commerce photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024x1024 transparent 3D ghost-mannequin cutouts."
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Garment input photo (JPG, PNG, WebP up to 15MB)"
+                target_garment:
+                  type: string
+                  enum: [all, upper_clothes, pants, dress, skirt]
+                  default: all
+                response_format:
+                  type: string
+                  enum: [json, image_direct]
+                  default: json
+      responses:
+        200:
+          description: Garment processed cleanly through 3D pipeline
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      executionTimeMs:
+                        type: number
+                        example: 48580
+                      processingTimeSec:
+                        type: number
+                        example: 48.58
+                      totalGarments:
+                        type: integer
+                        example: 1
+                      garments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              example: upper_clothes
+                            mappedDbCategory:
+                              type: string
+                              example: UPPER_WEAR
+                            title:
+                              type: string
+                              example: "White Real Madrid Football Jersey"
+                            url:
+                              type: string
+                              example: "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png"
+                            resolution:
+                              type: string
+                              example: "1024x1024"
+    patch:
+      tags:
+        - Admin Cluster Features Master
+      summary: Update Cluster Feature
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                icon:
+                  type: string
+                description:
+                  type: string
+                isActive:
+                  type: boolean
+                displayOrder:
+                  type: integer
+      responses:
+        200:
+          description: Feature updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/ClusterFeature"
+  "/admin/garment-ai/health":
+    get:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Garment AI Microservice Health & GPU Telemetry"
+      description: "Probes https://bg.arangtik.com/health to verify GPU cluster connectivity, RTX 3090 worker status, and loaded models."
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: GPU worker is online
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      online:
+                        type: boolean
+                        example: true
+                      latencyMs:
+                        type: integer
+                        example: 850
+  "/admin/garment-ai/test":
+    post:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Test Garment Image 3D Ghost-Mannequin Pipeline"
+      description: "Uploads an e-commerce photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024x1024 transparent 3D ghost-mannequin cutouts."
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Garment input photo (JPG, PNG, WebP up to 15MB)"
+                target_garment:
+                  type: string
+                  enum: [all, upper_clothes, pants, dress, skirt]
+                  default: all
+                response_format:
+                  type: string
+                  enum: [json, image_direct]
+                  default: json
+      responses:
+        200:
+          description: Garment processed cleanly through 3D pipeline
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      executionTimeMs:
+                        type: number
+                        example: 48580
+                      processingTimeSec:
+                        type: number
+                        example: 48.58
+                      totalGarments:
+                        type: integer
+                        example: 1
+                      garments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              example: upper_clothes
+                            mappedDbCategory:
+                              type: string
+                              example: UPPER_WEAR
+                            title:
+                              type: string
+                              example: "White Real Madrid Football Jersey"
+                            url:
+                              type: string
+                              example: "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png"
+                            resolution:
+                              type: string
+                              example: "1024x1024"
+    delete:
+      tags:
+        - Admin Cluster Features Master
+      summary: "Soft-Delete Cluster Feature"
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Feature deleted successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/admin/cluster-features/{id}/restore":
+    patch:
+      tags:
+        - Admin Cluster Features Master
+      summary: "Restore Soft-Deleted Cluster Feature"
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Feature restored successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/ClusterFeature"
+  "/admin/garment-ai/health":
+    get:
+      tags:
+        - Arangtik Garment AI Studio
+      summary: "Garment AI Microservice Health & GPU Telemetry"
+      description: "Probes https://bg.arangtik.com/health to verify GPU cluster connectivity, RTX 3090 worker status, and loaded models."
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: GPU worker is online
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      online:
+                        type: boolean
+                        example: true
+                      latencyMs:
+                        type: integer
+                        example: 850
+  "/admin/garment-ai/test":
+    post:
+      tags:
+        - Arangtik Garment AI Studio
+      summary: "Test Garment Image 3D Ghost-Mannequin Pipeline"
+      description: "Uploads an e-commerce photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024x1024 transparent 3D ghost-mannequin cutouts."
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Garment input photo (JPG, PNG, WebP up to 15MB)"
+                target_garment:
+                  type: string
+                  enum:
+                    - all
+                    - upper_clothes
+                    - pants
+                    - dress
+                    - skirt
+                  default: all
+                response_format:
+                  type: string
+                  enum:
+                    - json
+                    - image_direct
+                  default: json
+      responses:
+        200:
+          description: Garment processed cleanly through 3D pipeline
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      executionTimeMs:
+                        type: number
+                        example: 48580
+                      processingTimeSec:
+                        type: number
+                        example: 48.58
+                      totalGarments:
+                        type: integer
+                        example: 1
+                      garments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              example: upper_clothes
+                            mappedDbCategory:
+                              type: string
+                              example: UPPER_WEAR
+                            title:
+                              type: string
+                              example: White Real Madrid Football Jersey
+                            url:
+                              type: string
+                              example: "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png"
+                            resolution:
+                              type: string
+                              example: 1024x1024
+  "/admin/garment-ai/health":
+    get:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Garment AI Microservice Health & GPU Telemetry"
+      description: "Probes https://bg.arangtik.com/health to verify GPU cluster connectivity, RTX 3090 worker status, and loaded models."
+      security:
+        - AdminBearerAuth: []
+      responses:
+        200:
+          description: GPU worker is online
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      online:
+                        type: boolean
+                        example: true
+                      latencyMs:
+                        type: integer
+                        example: 850
+  "/admin/garment-ai/test":
+    post:
+      tags:
+        - "Arangtik Garment AI Studio"
+      summary: "Test Garment Image 3D Ghost-Mannequin Pipeline"
+      description: "Uploads an e-commerce photograph or flat-lay to the RTX 3090 GPU worker and receives isolated 1024x1024 transparent 3D ghost-mannequin cutouts."
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Garment input photo (JPG, PNG, WebP up to 15MB)"
+                target_garment:
+                  type: string
+                  enum: [all, upper_clothes, pants, dress, skirt]
+                  default: all
+                response_format:
+                  type: string
+                  enum: [json, image_direct]
+                  default: json
+      responses:
+        200:
+          description: Garment processed cleanly through 3D pipeline
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      executionTimeMs:
+                        type: number
+                        example: 48580
+                      processingTimeSec:
+                        type: number
+                        example: 48.58
+                      totalGarments:
+                        type: integer
+                        example: 1
+                      garments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              example: upper_clothes
+                            mappedDbCategory:
+                              type: string
+                              example: UPPER_WEAR
+                            title:
+                              type: string
+                              example: "White Real Madrid Football Jersey"
+                            url:
+                              type: string
+                              example: "https://bg.arangtik.com/api/outputs/73ed5a1135_garment_001.png"
+                            resolution:
+                              type: string
+                              example: "1024x1024"
+  "/vendor/send-otp":
+    post:
+      tags:
+        - Vendor Management
+      summary: Send Vendor Authentication OTP
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  example: "9876543210"
+      responses:
+        200:
+          description: Vendor OTP dispatched
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/vendor/verify-otp":
+    post:
+      tags:
+        - Vendor Management
+      summary: "Verify Vendor OTP & Login"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - phone
+                - otp
+              properties:
+                phone:
+                  type: string
+                  example: "9876543210"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        200:
+          description: Vendor logged in
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/VendorAuthResponse"
+  "/vendor/profile":
+    get:
+      tags:
+        - Vendor Management
+      summary: Get Authenticated Vendor Profile
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Vendor profile retrieved
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Vendor"
+    patch:
+      tags:
+        - Vendor Management
+      summary: Update Vendor Profile Attributes
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Super Clean Dhobi
+                serviceRadius:
+                  type: number
+                  example: 10
+                isActive:
+                  type: boolean
+                  example: true
+      responses:
+        200:
+          description: Vendor profile updated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/Vendor"
+  "/vendor/nearby":
+    get:
+      tags:
+        - Vendor Management
+      summary: Discover Nearby Vendors via 2dsphere Geolocation
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: longitude
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: radiusKm
+          in: query
+          schema:
+            type: number
+            default: 5
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Vendor"
+  "/vendor/eligible":
+    get:
+      tags:
+        - Vendor Management
+      summary: "Discover Service-Eligible Vendors"
+      parameters:
+        - name: services
+          in: query
+          schema:
+            type: string
+          description: "Comma-separated requested services"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Vendor"
+  "/subscription/plans":
+    get:
+      tags:
+        - "Subscription & Razorpay Payments"
+      summary: Get Active Subscription Plans Catalog
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SubscriptionPlan"
+  "/subscription/create-order":
+    post:
+      tags:
+        - "Subscription & Razorpay Payments"
+      summary: Create Razorpay Subscription Payment Order
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - planId
+              properties:
+                planId:
+                  type: string
+                  example: 6ae0701433480f1d0fb8d9f1
+      responses:
+        200:
+          description: Razorpay order created
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/subscription/verify-payment":
+    post:
+      tags:
+        - "Subscription & Razorpay Payments"
+      summary: "Verify Razorpay Payment Signature & Activate Plan"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - razorpay_order_id
+                - razorpay_payment_id
+                - razorpay_signature
+              properties:
+                razorpay_order_id:
+                  type: string
+                razorpay_payment_id:
+                  type: string
+                razorpay_signature:
+                  type: string
+      responses:
+        200:
+          description: Subscription activated
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/subscription/my-subscription":
+    get:
+      tags:
+        - "Subscription & Razorpay Payments"
+      summary: Get Current Authenticated User Subscription
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/UserSubscription"
+  "/coins/balance":
+    get:
+      tags:
+        - "Coins & Virtual Currency"
+      summary: "Get User Coin Balance & Summary"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      balance:
+                        type: integer
+                        example: 450
+  "/coins/packages":
+    get:
+      tags:
+        - "Coins & Virtual Currency"
+      summary: Get Active Coin Purchase Packages
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CoinPackage"
+  "/coins/purchase/order":
+    post:
+      tags:
+        - "Coins & Virtual Currency"
+      summary: Create Coin Package Purchase Order
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - packageId
+              properties:
+                packageId:
+                  type: string
+                  example: 6ae0801433480f1d0fb8d9f1
+      responses:
+        200:
+          description: Coin purchase order created
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/coins/spend":
+    post:
+      tags:
+        - "Coins & Virtual Currency"
+      summary: "Deduct / Spend Virtual Coins"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - amount
+                - reason
+              properties:
+                amount:
+                  type: integer
+                  example: 10
+                reason:
+                  type: string
+                  example: AI Outfit Recommendation Generation
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+                    properties:
+                      newBalance:
+                        type: integer
+                        example: 440
+  "/hardware/hubs/activate":
+    post:
+      tags:
+        - Hardware IoT Hubs
+      summary: Activate Smart IoT Hub Device
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - serialNumber
+              properties:
+                serialNumber:
+                  type: string
+                  example: "HUB-2026-X819"
+                name:
+                  type: string
+                  example: Living Room Smart Hub
+      responses:
+        200:
+          description: Hub activated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/HardwareHub"
+  "/hardware/hubs":
+    get:
+      tags:
+        - Hardware IoT Hubs
+      summary: Get User Activated Hubs
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HardwareHub"
+  "/hardware/boxes/activate":
+    post:
+      tags:
+        - Hardware KitchenBoxes
+      summary: Activate Smart IoT KitchenBox Device
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              required:
+                - serialNumber
+              properties:
+                serialNumber:
+                  type: string
+                  example: "KB-2026-M402"
+                name:
+                  type: string
+                  example: Pantry Dal Dispenser
+      responses:
+        200:
+          description: KitchenBox activated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    $ref: "#/components/schemas/HardwareKitchenBox"
+  "/hardware/boxes":
+    get:
+      tags:
+        - Hardware KitchenBoxes
+      summary: Get User Activated KitchenBoxes
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HardwareKitchenBox"
+  "/notifications":
+    get:
+      tags:
+        - Notifications
+      summary: List User Push Notifications
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+  "/notifications/{id}/read":
+    patch:
+      tags:
+        - Notifications
+      summary: Mark Single Notification as Read
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Notification marked as read
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/notifications/read-all":
+    patch:
+      tags:
+        - Notifications
+      summary: Mark All Notifications as Read
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: All notifications marked as read
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: object
+  "/store-types":
+    get:
+      tags:
+        - "Store Types & Public Taxonomies"
+      summary: "Get All Active Store Types (Wardrobe, Pantry, Kitchen)"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StoreType"
+  "/categories":
+    get:
+      tags:
+        - "Store Types & Public Taxonomies"
+      summary: "Get Active Service Categories (Level 1: Washerman, Tailor)"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServiceCategory"
+  "/services":
+    get:
+      tags:
+        - "Store Types & Public Taxonomies"
+      summary: "Get Master Catalog of Services (Wash & Iron, Dry Clean)"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Operation completed successfully
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CatalogService"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Standard authenticated customer session token
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (Admin)
+      description: "Administrative portal access token (requires role: admin)"
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: "x-api-key"
+      description: Shared secret key for IoT hardware and integration services
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          example: 45
+        totalPages:
+          type: integer
+          example: 3
+        currentPage:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        hasNextPage:
+          type: boolean
+          example: true
+        hasPrevPage:
+          type: boolean
+          example: false
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: "#/components/schemas/UserProfile"
+    UserProfile:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6ac0952c80239788e764c0f9
+        name:
+          type: string
+          example: Priya Sharma
+        phone:
+          type: string
+          example: "919876543210"
+        email:
+          type: string
+          example: "priya@example.com"
+        role:
+          type: string
+          example: user
+        profileImage:
+          type: string
+          example: "https://api.arangtik.com/uploads/priya.jpg"
+        createdAt:
+          type: string
+          format: "date-time"
+    WardrobeContainer:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6ae0551433480f1d0fb8d9e2
+        userId:
+          type: string
+          example: 6ac0952c80239788e764c0f9
+        name:
+          type: string
+          example: Daily Casuals
+        type:
+          type: string
+          example: PERSONAL
+        ownerName:
+          type: string
+          example: Monika
+        isDefault:
+          type: boolean
+          example: true
+        itemCount:
+          type: integer
+          example: 18
+        coverImage:
+          type: string
+          example: "https://api.arangtik.com/uploads/cover.jpg"
+        ownerFaceImage:
+          type: string
+          example: "https://api.arangtik.com/uploads/face.jpg"
+        isActive:
+          type: boolean
+          example: true
+    WardrobeItem:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6ae0601433480f1d0fb8d9f1
+        userId:
+          type: string
+          example: 6ac0952c80239788e764c0f9
+        wardrobeId:
+          type: string
+          example: 6ae0551433480f1d0fb8d9e2
+        name:
+          type: string
+          example: Navy Blue Silk Kurta
+        category:
+          type: string
+          example: Kurtas
+        subCategory:
+          type: string
+          example: Silk
+        color:
+          type: string
+          example: Navy Blue
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+          example: ACTIVE
+        isFavorite:
+          type: boolean
+          example: false
+        wearCount:
+          type: integer
+          example: 3
+        lastModifiedBy:
+          type: string
+          example: 6ac0952c80239788e764c0f9
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+              type:
+                type: string
+                example: SEGMENTED
+              isPrimary:
+                type: boolean
+                example: true
+    SuggestedOutfit:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Breezy Casual Look
+        occasion:
+          type: string
+          example: CASUAL
+        season:
+          type: string
+          example: SUMMER
+        matchScore:
+          type: number
+          example: 95
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId:
+                type: string
+              slot:
+                type: string
+                example: UPPER_WEAR
+              name:
+                type: string
+                example: Linen Shirt
+    Outfit:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 673b01234ba477c7d42cfa11
+        userId:
+          type: string
+          example: 6735fa016ba477c7d42cfb82
+        targetUserId:
+          type: string
+          example: 6735fa016ba477c7d42cfb82
+        createdBy:
+          type: string
+          example: 6735fa016ba477c7d42cfb81
+        clusterId:
+          type: string
+          example: 6735fa016ba477c7d42cfb80
+        title:
+          type: string
+          example: Friday Office Casual
+        occasion:
+          type: string
+          example: CASUAL
+        status:
+          type: string
+          enum:
+            - PERSONAL
+            - SUGGESTED
+            - ACCEPTED
+            - DECLINED
+            - WORN
+          example: SUGGESTED
+        wearCount:
+          type: integer
+          example: 1
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId:
+                type: string
+              slot:
+                type: string
+                example: UPPER_WEAR
+              name:
+                type: string
+                example: Navy Blazer
+              ownerId:
+                type: string
+                example: 6735fa016ba477c7d42cfb82
+              ownerName:
+                type: string
+                example: Rahul
+    LaundryOrder:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 673b22334ba477c7d42cfc99
+        orderNumber:
+          type: string
+          example: "WO-20261119-4821"
+        clusterId:
+          type: string
+          example: 6735fa016ba477c7d42cfb80
+        status:
+          type: string
+          enum:
+            - PENDING_PICKUP
+            - PICKED_UP
+            - IN_PROCESS
+            - READY_FOR_DELIVERY
+            - DELIVERED
+            - CANCELLED
+          example: PENDING_PICKUP
+        vendorName:
+          type: string
+          example: Super Clean Dhobi
+        totalItems:
+          type: integer
+          example: 5
+        totalAmount:
+          type: number
+          example: 450
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              wardrobeItemId:
+                type: string
+              name:
+                type: string
+              serviceName:
+                type: string
+                example: DRY_CLEAN
+              price:
+                type: number
+                example: 150
+              garmentOwnerId:
+                type: string
+                example: 6735fa016ba477c7d42cfb82
+              garmentOwnerName:
+                type: string
+                example: Rahul
+    ClusterFeature:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6739f4a123..."
+        name:
+          type: string
+          example: Wardrobe
+        code:
+          type: string
+          example: WARDROBE
+        icon:
+          type: string
+          example: 👗
+        description:
+          type: string
+          example: Wardrobe and clothes sharing across members
+        isActive:
+          type: boolean
+          example: true
+    Cluster:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6735fa016ba477c7d42cfb80
+        name:
+          type: string
+          example: Gupta Family
+        color:
+          type: string
+          example: "#6366F1"
+        icon:
+          type: string
+          example: 👥
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClusterFeature"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClusterMember"
+    ClusterMember:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: 6735fa016ba477c7d42cfb82
+        phone:
+          type: string
+          example: "919876543210"
+        displayName:
+          type: string
+          example: Rahul
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - MEMBER
+          example: MEMBER
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INVITED
+          example: ACTIVE
+    ClusterWardrobesOverview:
+      type: object
+      properties:
+        clusterId:
+          type: string
+          example: 6735fa016ba477c7d42cfb80
+        clusterName:
+          type: string
+          example: Gupta Family
+        featureEnabled:
+          type: boolean
+          example: true
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+              name:
+                type: string
+                example: Rahul
+              wardrobeCount:
+                type: integer
+                example: 2
+              totalItems:
+                type: integer
+                example: 35
+              wardrobes:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WardrobeContainer"
+    FCConversation:
+      type: object
+      properties:
+        _id:
+          type: string
+        type:
+          type: string
+          enum:
+            - DIRECT
+            - CLUSTER
+          example: CLUSTER
+        clusterId:
+          type: string
+        participants:
+          type: array
+          items:
+            type: string
+    FCMessage:
+      type: object
+      properties:
+        _id:
+          type: string
+        conversationId:
+          type: string
+        senderId:
+          type: string
+        content:
+          type: string
+          example: "Hey everyone!"
+        messageType:
+          type: string
+          enum:
+            - TEXT
+            - VOICE
+            - WALKIE_TALKIE
+          example: TEXT
+        isSaved:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: "date-time"
+    Vendor:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Super Clean Dhobi
+        phone:
+          type: string
+          example: "919876543210"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - PENDING
+            - SUSPENDED
+          example: ACTIVE
+        serviceRadius:
+          type: number
+          example: 10
+    VendorAuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        vendor:
+          $ref: "#/components/schemas/Vendor"
+    SubscriptionPlan:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Family Pro Plan
+        price:
+          type: number
+          example: 499
+        billingCycle:
+          type: string
+          example: MONTHLY
+        isActive:
+          type: boolean
+          example: true
+    UserSubscription:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ACTIVE
+        planId:
+          $ref: "#/components/schemas/SubscriptionPlan"
+        currentPeriodEnd:
+          type: string
+          format: "date-time"
+    CoinPackage:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: 500 Coins Pack
+        coins:
+          type: integer
+          example: 500
+        price:
+          type: number
+          example: 99
+    HardwareHub:
+      type: object
+      properties:
+        _id:
+          type: string
+        serialNumber:
+          type: string
+          example: "HUB-2026-X819"
+        name:
+          type: string
+          example: Living Room Smart Hub
+        isActive:
+          type: boolean
+          example: true
+    HardwareKitchenBox:
+      type: object
+      properties:
+        _id:
+          type: string
+        serialNumber:
+          type: string
+          example: "KB-2026-M402"
+        name:
+          type: string
+          example: Pantry Dal Dispenser
+        isActive:
+          type: boolean
+          example: true
+    Notification:
+      type: object
+      properties:
+        _id:
+          type: string
+        title:
+          type: string
+          example: "New Outfit Styled for You! 👗"
+        body:
+          type: string
+          example: "Priya styled an outfit for you: \"Friday Casuals\""
+        type:
+          type: string
+          example: OUTFIT_SUGGESTION
+        isRead:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: "date-time"
+    StoreType:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Wardrobe
+        code:
+          type: string
+          example: WARDROBE
+        isActive:
+          type: boolean
+          example: true
+    ServiceCategory:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Washerman
+        isActive:
+          type: boolean
+          example: true
+    CatalogService:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Wash and Iron
+        code:
+          type: string
+          example: WASH_AND_IRON

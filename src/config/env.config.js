@@ -52,8 +52,8 @@ module.exports = {
 
   // Python Garment AI Service (Person Parsing, Garment Splitting, Inpainting, Background Removal)
   PYTHON_BG_REMOVAL_URL: process.env.PYTHON_BG_REMOVAL_URL || 'https://bg.arangtik.com/api/background-removal',
-  PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || process.env.PYTHON_PARSING_SERVICE_URL || 'http://localhost:8000',
-  PYTHON_SERVICE_TIMEOUT_MS: parseInt(process.env.PYTHON_SERVICE_TIMEOUT_MS, 10) || 30000,
+  PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || process.env.PYTHON_PARSING_SERVICE_URL || 'https://bg.arangtik.com',
+  PYTHON_SERVICE_TIMEOUT_MS: parseInt(process.env.PYTHON_SERVICE_TIMEOUT_MS, 10) || 120000,
 
   
   // Firebase Cloud Messaging (FCM) Configuration
@@ -68,4 +68,12 @@ module.exports = {
   RAZORPAY_KEY_ID: (process.env.RAZORPAY_KEY_ID || '').trim(),
   RAZORPAY_KEY_SECRET: (process.env.RAZORPAY_KEY_SECRET || '').trim(),
   RAZORPAY_WEBHOOK_SECRET: (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim(),
+
+  // Redis & BullMQ Job Queue Configuration
+  REDIS_URL: process.env.REDIS_URL || '',
+  REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+  REDIS_PORT: parseInt(process.env.REDIS_PORT, 10) || 6379,
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+  REDIS_TLS: process.env.REDIS_TLS === 'true',
+  GARMENT_AI_CONCURRENCY: parseInt(process.env.GARMENT_AI_CONCURRENCY, 10) || 2,
 };

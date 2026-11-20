@@ -78,8 +78,8 @@ test('Real Integration: POST /api/wardrobe/add-item with Python AI Service', asy
 
     console.log(`[Test] 4. Item created with ID: ${createdItemId}. Waiting for background worker to process with Python and Gemini...`);
 
-    // Poll MongoDB for background worker completion (timeout after 30 seconds)
-    const maxWaitMs = 30000;
+    // Poll MongoDB for background worker completion (timeout after 120 seconds for GPU diffusion)
+    const maxWaitMs = 120000;
     const pollIntervalMs = 1500;
     const pollStart = Date.now();
     let completedItem = null;

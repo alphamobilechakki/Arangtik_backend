@@ -29,10 +29,38 @@ const calculateSourceImageHash = (filePathOrBuffer) => {
  */
 
 /**
+ * Maps Arangtik Garment AI categories ('upper_clothes', 'pants', 'dress', 'skirt', etc.)
+ * to MongoDB WardrobeItem schema categories.
+ */
+const mapAiCategoryToDbCategory = (aiCategory) => {
+  if (!aiCategory) return null;
+  const c = String(aiCategory).toLowerCase().trim();
+  if (c.includes('upper') || c.includes('shirt') || c.includes('tshirt') || c.includes('top') || c.includes('blouse') || c.includes('kurta')) {
+    return 'UPPER_WEAR';
+  }
+  if (c.includes('pant') || c.includes('jean') || c.includes('trouser') || c.includes('short') || c.includes('skirt') || c.includes('lower')) {
+    return 'LOWER_WEAR';
+  }
+  if (c.includes('dress') || c.includes('saree') || c.includes('sari') || c.includes('lehenga') || c.includes('gown') || c.includes('anarkali') || c.includes('one_piece')) {
+    return 'ONE_PIECE';
+  }
+  if (c.includes('jacket') || c.includes('coat') || c.includes('blazer') || c.includes('outerwear') || c.includes('cardigan') || c.includes('sweater')) {
+    return 'OUTERWEAR';
+  }
+  if (c.includes('shoe') || c.includes('footwear') || c.includes('sneaker') || c.includes('heel') || c.includes('sandal')) {
+    return 'FOOTWEAR';
+  }
+  if (c.includes('access') || c.includes('belt') || c.includes('bag') || c.includes('cap') || c.includes('hat') || c.includes('watch')) {
+    return 'ACCESSORIES';
+  }
+  return null;
+};
+
+/**
  * Calls Python AI Microservice for Person Parsing, Garment Splitting, and Inpainting
  * @param {string} imagePath Local path to original image file
  * @param {string} mode 'with_person' | 'without_person'
- * @returns {Promise<Array<{ localPath: string, url: string, filename: string, garmentType?: string, isFallback?: boolean }>>}
+ * @returns {Promise<Array<{ localPath: string, url: string, filename: string, garmentType?: string, category?: string, title?: string, isFallback?: boolean }>>}
  */
 const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
   if (!fs.existsSync(imagePath)) {
@@ -40,37 +68,23 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
   }
 
   const normalizedMode = String(mode).toLowerCase().includes('without') ? 'without_person' : 'with_person';
-  const baseServiceUrl = (PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const baseServiceUrl = (PYTHON_SERVICE_URL || 'https://bg.arangtik.com').replace(/\/+$/, '');
   const bgRemovalUrl = (PYTHON_BG_REMOVAL_URL || 'https://bg.arangtik.com/api/background-removal').replace(/\/+$/, '');
   const fileName = path.basename(imagePath);
   const ext = path.extname(imagePath).toLowerCase();
   const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
   const fileBuffer = fs.readFileSync(imagePath);
 
-  // Determine endpoints based on mode:
-  // - without_person: Live Background Removal endpoint (https://bg.arangtik.com/api/background-removal)
-  // - with_person: Person Parsing & Garment Splitting endpoint
-  let candidateEndpoints = [];
-  if (normalizedMode === 'without_person') {
-    candidateEndpoints = [
-      bgRemovalUrl,
-      bgRemovalUrl.replace(/^https:/i, 'http:'),
-      'https://bg.arangtik.com/api/background-removal',
-      'http://bg.arangtik.com/api/background-removal',
-      `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/api/background-removal`,
-      `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/background-removal`,
-    ];
-  } else {
-    candidateEndpoints = [
-      process.env.PYTHON_PARSING_SERVICE_URL || `${baseServiceUrl}/process`,
-      `${baseServiceUrl}/parse-garments`,
-      baseServiceUrl,
-      baseServiceUrl.replace(/^https:/i, 'http:'),
-    ];
-  }
-  candidateEndpoints = candidateEndpoints.filter(Boolean).filter((u, idx, arr) => arr.indexOf(u) === idx);
+  // The unified Arangtik Garment AI pipeline handles both flat-lays and model-worn images
+  // Primary official endpoint is https://bg.arangtik.com/api/background-removal
+  const candidateEndpoints = [
+    bgRemovalUrl,
+    'https://bg.arangtik.com/api/background-removal',
+    `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/api/background-removal`,
+    `${baseServiceUrl.replace(/\/api\/background-removal$/i, '')}/background-removal`,
+  ].filter(Boolean).filter((u, idx, arr) => arr.indexOf(u) === idx);
 
-  console.log(`[PythonGarmentAI] Calling Python microservice (mode: ${normalizedMode}, endpoints: ${candidateEndpoints[0]}, file: ${fileName})`);
+  console.log(`[PythonGarmentAI] Calling Arangtik Garment AI (mode: ${normalizedMode}, endpoint: ${candidateEndpoints[0]}, file: ${fileName})`);
 
   let response = null;
   let lastError = null;
@@ -79,13 +93,18 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
     try {
       const formData = new FormData();
       const fileBlob = new Blob([fileBuffer], { type: mimeType });
-      formData.append('image', fileBlob, fileName);
+      // Official Arangtik Garment AI multipart specification
       formData.append('file', fileBlob, fileName);
+      formData.append('image', fileBlob, fileName); // backward compatibility
+      formData.append('response_format', 'json');
+      formData.append('target_garment', 'all');
       formData.append('mode', normalizedMode);
       formData.append('type', normalizedMode);
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), PYTHON_SERVICE_TIMEOUT_MS || 30000);
+      const configuredTimeout = parseInt(PYTHON_SERVICE_TIMEOUT_MS, 10);
+      const timeoutMs = !isNaN(configuredTimeout) && configuredTimeout >= 60000 ? configuredTimeout : 120000;
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -97,15 +116,19 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
       if (res.ok) {
         response = res;
         break;
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[PythonGarmentAI] Endpoint ${endpoint} returned HTTP ${res.status}: ${errText.slice(0, 150)}`);
       }
     } catch (err) {
       lastError = err;
+      console.warn(`[PythonGarmentAI] Error calling ${endpoint}:`, err.message);
     }
   }
 
   // Graceful fallback if Python service is offline / unreachable during development
   if (!response) {
-    console.warn(`[PythonGarmentAI] Python service unreachable at ${baseServiceUrl} (${lastError?.message || 'Check connection'}). Fallback to original image.`);
+    console.warn(`[PythonGarmentAI] Python service unreachable at ${candidateEndpoints[0]} (${lastError?.message || 'Check connection'}). Fallback to original image.`);
     return [
       {
         localPath: imagePath,
@@ -149,7 +172,10 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const base64Data = it.image || it.imageBase64 || it.data || (typeof it === 'string' ? it : null);
-        const garmentType = it.garmentType || it.type || it.label || null;
+        const aiTitle = it.title || it.recognized_label || it.name || null;
+        const rawAiCategory = it.category || it.garmentType || it.type || it.label || null;
+        const mappedDbCategory = mapAiCategoryToDbCategory(rawAiCategory);
+        const garmentType = mappedDbCategory || rawAiCategory;
 
         if (base64Data && typeof base64Data === 'string' && (base64Data.startsWith('data:') || base64Data.length > 200)) {
           const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
@@ -163,6 +189,8 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
             url: formatUploadUrl(`/uploads/crops/${outName}`),
             filename: outName,
             garmentType,
+            category: mappedDbCategory,
+            title: aiTitle,
           });
         } else if (it.url || it.imageUrl || it.output_png_url || it.png_url || it.output_url) {
           const rawUrl = it.output_png_url || it.png_url || it.output_url || it.imageUrl || it.url;
@@ -189,11 +217,17 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
             url: savedLocalPath ? formatUploadUrl(`/uploads/crops/${savedFilename}`) : fullUrl,
             filename: savedFilename,
             garmentType,
+            category: mappedDbCategory,
+            title: aiTitle,
           });
         }
       }
     } else if (jsonResult.image || jsonResult.imageUrl || jsonResult.output_png_url || jsonResult.png_url || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || jsonResult.result) {
       const singleData = jsonResult.image || jsonResult.imageBase64 || jsonResult.output_image || jsonResult.processed_image || (typeof jsonResult.result === 'string' ? jsonResult.result : null);
+      const singleAiTitle = jsonResult.title || jsonResult.recognized_label || jsonResult.name || null;
+      const singleAiCategory = jsonResult.category || jsonResult.garmentType || jsonResult.type || null;
+      const singleMappedCat = mapAiCategoryToDbCategory(singleAiCategory);
+
       if (singleData && typeof singleData === 'string' && (singleData.startsWith('data:') || singleData.length > 200)) {
         const cleanBase64 = singleData.replace(/^data:image\/\w+;base64,/, '');
         const buf = Buffer.from(cleanBase64, 'base64');
@@ -205,6 +239,9 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
           localPath: outPath,
           url: formatUploadUrl(`/uploads/crops/${outName}`),
           filename: outName,
+          garmentType: singleMappedCat || singleAiCategory,
+          category: singleMappedCat,
+          title: singleAiTitle,
         });
       } else {
         const rawSingleUrl = jsonResult.output_png_url || jsonResult.png_url || jsonResult.output_url || jsonResult.imageUrl || jsonResult.url;
@@ -231,6 +268,9 @@ const callPythonGarmentService = async (imagePath, mode = 'with_person') => {
             localPath: savedLocalPath,
             url: savedLocalPath ? formatUploadUrl(`/uploads/crops/${savedFilename}`) : fullSingleUrl,
             filename: savedFilename,
+            garmentType: singleMappedCat || singleAiCategory,
+            category: singleMappedCat,
+            title: singleAiTitle,
           });
         }
       }
@@ -297,8 +337,8 @@ const runBackgroundClothingPipeline = async (itemId, userId, file, options = {})
       };
     }
 
-    const finalName = options.name || aiAttributes.name || 'Dress Item';
-    const finalCategory = options.category || aiAttributes.category || 'UPPER_WEAR';
+    const finalName = options.name || primaryGarment.title || aiAttributes.name || 'Dress Item';
+    const finalCategory = options.category || primaryGarment.category || aiAttributes.category || 'UPPER_WEAR';
     const finalSubCategory = options.subCategory || aiAttributes.subCategory || '';
     const finalColor = options.color || aiAttributes.color || aiAttributes.attributes?.primaryColor || '';
     const primaryImgUrl = primaryGarment.url || originalImageUrl;
@@ -348,8 +388,8 @@ const runBackgroundClothingPipeline = async (itemId, userId, file, options = {})
           await WardrobeItem.create({
             userId,
             wardrobeId: targetWardrobeId,
-            name: extraAi.name || 'Dress Item',
-            category: extraAi.category || (extraGarment.garmentType === 'lower_wear' ? 'LOWER_WEAR' : 'UPPER_WEAR'),
+            name: extraGarment.title || extraAi.name || 'Dress Item',
+            category: extraGarment.category || extraAi.category || (extraGarment.garmentType === 'lower_wear' ? 'LOWER_WEAR' : 'UPPER_WEAR'),
             subCategory: extraAi.subCategory || '',
             color: extraAi.color || '',
             pattern: extraAi.attributes?.pattern || 'SOLID',
@@ -460,15 +500,43 @@ const processAndSaveWardrobeItem = async (userId, file, options = {}) => {
     isActive: true,
   });
 
-  // Launch async processing in the background (fire-and-forget, non-blocking)
-  setImmediate(() => {
-    runBackgroundClothingPipeline(initialItem._id, userId, file, { ...options, mode, wardrobeId: targetWardrobeId })
-      .catch((err) => console.error('[BackgroundWorker] Uncaught async error:', err.message));
-  });
+  // Dispatch background 3D Ghost-Mannequin job:
+  // 1. If Redis is available, enqueue via BullMQ with automatic retries, backoff, and concurrency
+  // 2. If Redis is offline/fallback, execute smoothly via setImmediate in-memory worker
+  const { enqueueGarmentJob } = require('../../queues');
+  const { isRedisAvailable } = require('../../config/redis.config');
+
+  const jobPayload = {
+    itemId: initialItem._id,
+    userId,
+    file,
+    options: { ...options, mode, wardrobeId: targetWardrobeId },
+  };
+
+  const redisOnline = isRedisAvailable();
+  const queueEngine = redisOnline ? 'BULLMQ_REDIS' : 'IN_MEMORY_FALLBACK';
+
+  if (redisOnline) {
+    console.log(`[WardrobePipeline] 🟢 [BULLMQ] Enqueueing item ${initialItem._id} to Redis queue "garment-ai-queue"`);
+    enqueueGarmentJob(jobPayload).catch((qErr) => {
+      console.warn('[WardrobePipeline] ⚠️ Enqueue failed, falling back to in-memory worker:', qErr.message);
+      setImmediate(() => {
+        runBackgroundClothingPipeline(initialItem._id, userId, file, { ...options, mode, wardrobeId: targetWardrobeId })
+          .catch((err) => console.error('[BackgroundWorker] Uncaught async error:', err.message));
+      });
+    });
+  } else {
+    console.warn(`[WardrobePipeline] ⚠️ [BYPASS] Redis is offline. Running item ${initialItem._id} via in-memory setImmediate fallback.`);
+    setImmediate(() => {
+      runBackgroundClothingPipeline(initialItem._id, userId, file, { ...options, mode, wardrobeId: targetWardrobeId })
+        .catch((err) => console.error('[BackgroundWorker] Uncaught async error:', err.message));
+    });
+  }
 
   return {
     success: true,
     isProcessing: true,
+    queueEngine,
     mode,
     item: initialItem,
     items: [initialItem],
