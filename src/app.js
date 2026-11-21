@@ -7,8 +7,15 @@ const path = require('path');
 const { CLIENT_URL } = require('./config/env.config');
 const apiRoutes = require('./routes/index');
 const { errorHandler, notFound } = require('./middlewares/error.middleware');
+const { initConsoleHook, terminalHttpMiddleware } = require('./modules/admin/terminal/terminalLogger');
+
+// Hook console logs for in-memory terminal streaming
+initConsoleHook();
 
 const app = express();
+
+// Real-time terminal request capture
+app.use(terminalHttpMiddleware);
 
 // Security Middlewares
 app.use(

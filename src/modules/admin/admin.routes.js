@@ -14,6 +14,7 @@ const coinPackageRoutes = require('./subscription/coins/coinPackage.routes');
 const adminSubscriptionRoutes = require('./subscription/adminSubscription.routes');
 const clusterFeatureRoutes = require('./clusterFeature/clusterFeature.routes');
 const garmentAiRoutes = require('./garmentAi/adminGarmentAi.routes');
+const terminalRoutes = require('./terminal/terminal.routes');
 
 // ── Vendor & Order Management ──────────────────────────────
 const adminVendorRoutes = require('./vendor/adminVendor.routes');
@@ -37,6 +38,7 @@ router.use('/coin-packages', coinPackageRoutes);
 router.use('/subscription', adminSubscriptionRoutes);
 router.use('/cluster-features', clusterFeatureRoutes);
 router.use('/garment-ai', garmentAiRoutes);
+router.use('/terminal', terminalRoutes);
 
 // ── Business Management Routes ──────────────────────────────
 router.use('/vendors', adminVendorRoutes);
