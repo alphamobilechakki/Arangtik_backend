@@ -25,14 +25,13 @@ const extractFilesFromReq = (req) => {
 
 /**
  * @desc    Add item to wardrobe store (Single unified endpoint)
- *          Handles photo upload, with/without person mode, Python AI split & background Gemini analysis
+ *          Handles photo upload, automatic garment segmentation, 3D synthesis & background analysis
  * @route   POST /api/wardrobe/add-item
  * @access  Private
  */
 const addItem = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const files = extractFilesFromReq(req);
-  const mode = req.body.mode || req.body.personMode || req.body.type || (req.body.withPerson === 'true' || req.body.withPerson === true ? 'with_person' : 'without_person');
 
   // Multi-Photo or Single Photo Upload mode (e.g. 1 to 50 gallery photos)
   if (files.length > 0) {
@@ -43,10 +42,7 @@ const addItem = asyncHandler(async (req, res) => {
     // Har image ke liye alag item create hoga aur background me process hoga
     for (const file of files) {
       try {
-        const result = await clothAnalysisService.processAndSaveWardrobeItem(userId, file, {
-          ...req.body,
-          mode,
-        });
+        const result = await clothAnalysisService.processAndSaveWardrobeItem(userId, file, req.body);
 
         if (result.isDuplicate) {
           duplicateItems.push(result.item);

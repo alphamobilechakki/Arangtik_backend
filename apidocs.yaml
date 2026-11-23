@@ -843,8 +843,8 @@ paths:
     post:
       tags:
         - Wardrobe Management
-      summary: "Upload Clothing Item Photo & Process with AI"
-      description: "Single or batch photo upload. Performs AI image segmentation, perceptual duplicate detection, and visual taxonomy classification."
+      summary: "Add Clothing Item(s) to Wardrobe (Single / Batch AI Ingestion)"
+      description: "Uploads single garment photo or batch of up to 50 gallery photos (or manual JSON fallback). Responds immediately (< 200ms) with processingStatus: PROCESSING, dispatching background 3D Ghost-Mannequin extraction and Gemini classification to BullMQ Redis queue. Automatic person mode detection is applied; with_person / without_person parameters are no longer needed."
       security:
         - BearerAuth: []
       requestBody:
@@ -853,30 +853,67 @@ paths:
           "multipart/form-data":
             schema:
               type: object
-              required:
-                - photo
               properties:
                 photo:
                   type: string
                   format: binary
+                  description: "Single garment photograph"
+                photos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: "Batch gallery garment photographs (up to 50)"
+                wardrobeId:
+                  type: string
+                  example: 6ae0551433480f1d0fb8d9e2
+                  description: "Target wardrobe closet ID (defaults to active wardrobe)"
+                name:
+                  type: string
+                  example: "Navy Blue Silk Kurta"
+                  description: "Optional custom title (defaults to Analyzing Outfit...)"
+                category:
+                  type: string
+                  example: "UPPER_WEAR"
+                subCategory:
+                  type: string
+                  example: "KURTA"
+                color:
+                  type: string
+                  example: "Navy Blue"
+                allowDuplicate:
+                  type: boolean
+                  default: false
+                  description: "Force addition even if visual duplicate is detected"
+                sourceType:
+                  type: string
+                  enum: [CAMERA_CAPTURE, GALLERY]
+                  default: CAMERA_CAPTURE
+          "application/json":
+            schema:
+              type: object
+              properties:
                 wardrobeId:
                   type: string
                   example: 6ae0551433480f1d0fb8d9e2
                 name:
                   type: string
-                  example: Navy Blue Silk Kurta
+                  example: "Black Formal Trousers"
                 category:
                   type: string
-                  example: Kurtas
+                  example: "LOWER_WEAR"
+                subCategory:
+                  type: string
+                  example: "TROUSERS"
                 color:
                   type: string
-                  example: Navy Blue
-                forceAdd:
-                  type: boolean
-                  example: false
+                  example: "Black"
+                sourceType:
+                  type: string
+                  example: "MANUAL"
       responses:
         200:
-          description: Exact or visual duplicate detected and matched
+          description: Duplicate garment detected (skipped duplicate addition)
           content:
             "application/json":
               schema:
@@ -890,11 +927,21 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: Operation completed successfully
+                    example: "This dress already exists in your Almari as \"Navy Blue Silk Kurta\" (skipped duplicate addition)."
                   data:
-                    $ref: "#/components/schemas/WardrobeItem"
+                    type: object
+                    properties:
+                      isDuplicate:
+                        type: boolean
+                        example: true
+                      item:
+                        $ref: "#/components/schemas/WardrobeItem"
+                      duplicates:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WardrobeItem"
         201:
-          description: Wardrobe item added successfully
+          description: Wardrobe item created and queued for background processing
           content:
             "application/json":
               schema:
@@ -902,15 +949,47 @@ paths:
                 properties:
                   statusCode:
                     type: integer
-                    example: 200
+                    example: 201
                   success:
                     type: boolean
                     example: true
                   message:
                     type: string
-                    example: Operation completed successfully
+                    example: "Item added successfully to wardrobe store"
                   data:
                     $ref: "#/components/schemas/WardrobeItem"
+        400:
+          description: Bad request (invalid payload or no photo)
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Please upload an image"
+        403:
+          description: Quota limit exceeded for user subscription tier
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Clothing items quota limit reached for your account tier."
   "/wardrobe/get-items":
     get:
       tags:
@@ -3411,6 +3490,123 @@ paths:
                             resolution:
                               type: string
                               example: "1024x1024"
+  "/admin/terminal/logs":
+    get:
+      tags:
+        - "Admin Live Terminal"
+      summary: "Get Real-Time In-Memory Logs & BullMQ Queue Stats"
+      description: "Returns in-memory ring-buffered developer logs and live Redis BullMQ queue telemetry without hitting MongoDB or disk."
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: "Max number of recent logs to return (up to 1000)"
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [ALL, INFO, WARN, ERROR, SUCCESS, AI]
+            default: ALL
+          description: "Filter by log severity level"
+      responses:
+        200:
+          description: Logs retrieved successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Logs retrieved successfully"
+                  data:
+                    type: object
+                    properties:
+                      logs:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            timestamp:
+                              type: string
+                            level:
+                              type: string
+                            module:
+                              type: string
+                            message:
+                              type: string
+                            metadata:
+                              type: object
+                      totalInMemory:
+                        type: integer
+                        example: 2
+                      bufferCapacity:
+                        type: integer
+                        example: 1000
+                      queueStats:
+                        type: object
+                        properties:
+                          isRedisConnected:
+                            type: boolean
+                          waiting:
+                            type: integer
+                          active:
+                            type: integer
+                          completed:
+                            type: integer
+                          failed:
+                            type: integer
+                          delayed:
+                            type: integer
+                      serverTime:
+                        type: string
+  "/admin/terminal/clear":
+    delete:
+      tags:
+        - "Admin Live Terminal"
+      summary: "Clear In-Memory Ring Buffer Logs"
+      description: "Flushes the ephemeral in-memory logs ring buffer array with zero database impact."
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        200:
+          description: Terminal logs cleared successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Terminal logs cleared successfully"
+                  data:
+                    type: object
+                    properties:
+                      cleared:
+                        type: boolean
+                        example: true
+                      timestamp:
+                        type: string
   "/vendor/send-otp":
     post:
       tags:

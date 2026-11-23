@@ -51,7 +51,7 @@ const uploadClothMedia = upload.fields([
   { name: 'files', maxCount: 50 },
 ]);
 
-// Single Unified Add Item Endpoint (Handles 1 to 50 photos, with/without person mode, Python AI split & background Gemini analysis)
+// Single Unified Add Item Endpoint (Handles 1 to 50 photos, automatic AI split & background Gemini analysis)
 router.post('/add-item', checkQuota('clothingItems'), uploadClothMedia, wardrobeController.addItem);
 
 /* ==========================================================================

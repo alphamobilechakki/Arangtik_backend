@@ -1007,6 +1007,433 @@ Authorization: Bearer <JWT_ACCESS_TOKEN>
 
 ---
 
+### 3.7. Add Clothing Item to Wardrobe (Single & Multi-Photo AI Ingestion)
+*Adds one or multiple clothing items to the user's wardrobe closet. Supports uploading 1 image or batch-uploading up to 50 gallery photos in a single request, as well as a JSON fallback for manual entries. The endpoint operates asynchronously: it immediately saves the garment record with `processingStatus: "PROCESSING"` and responds in < 200ms (HTTP 201 Created), while dispatching background 3D Ghost-Mannequin extraction, background removal, and visual taxonomy analysis to the BullMQ Redis queue (`garment-ai-queue`).*
+
+> [!NOTE]
+> **No Person Mode Parameter Required:** The API automatically detects whether a garment photo contains a person, flat-lay, or hanger clothing. Callers do **NOT** need to send `with_person` or `without_person`.
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/wardrobe/add-item`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Quota Enforced**: `clothingItems` (based on user tier)
+- **Content-Type**:
+  - `multipart/form-data` (Recommended for image uploads)
+  - `application/json` (For manual cataloguing without image file)
+
+#### Request Headers
+```http
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+Content-Type: multipart/form-data
+```
+
+#### Request Parameters (Multipart / Form-Data)
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `photo` / `image` / `file` | `file` (binary) | Optional* | Single garment image file (JPEG, PNG, WebP up to 15MB). |
+| `photos` / `images` / `files` | `files[]` (binary) | Optional* | Multiple image files for batch gallery ingestion (up to 50 images). |
+| `wardrobeId` | `string` (ObjectId) | No | Target wardrobe closet ID. Defaults to the user's active/default wardrobe if omitted. |
+| `name` | `string` | No | Optional display name (e.g. `"Navy Blue Embroidered Kurta"`). Defaults to `"Analyzing Outfit..."` until AI completes. |
+| `category` | `string` | No | Optional category hint (e.g., `"UPPER_WEAR"`, `"LOWER_WEAR"`). Overridden by AI classifier. |
+| `subCategory` | `string` | No | Optional subcategory hint (e.g., `"SHIRT"`, `"JEANS"`, `"KURTA"`). |
+| `color` | `string` | No | Optional primary color hint. Overridden by AI color extractor. |
+| `allowDuplicate` / `forceAdd` | `boolean` | No | Pass `true` to force adding the garment even if an exact perceptual visual duplicate already exists in the wardrobe. (Default: `false`). |
+| `sourceType` | `string` | No | Origin of the photo: `"CAMERA_CAPTURE"` (default) or `"GALLERY"`. |
+
+*\* Note: At least one image file OR a JSON body must be provided.*
+
+##### Request Example (Multipart Form-Data — Single Photo)
+```http
+POST /api/wardrobe/add-item HTTP/1.1
+Host: localhost:8083
+Authorization: Bearer eyJhbGciOi...
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="photo"; filename="blue_shirt.jpg"
+Content-Type: image/jpeg
+
+<binary content>
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="wardrobeId"
+
+6ae0551433480f1d0fb8d9e2
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="sourceType"
+
+CAMERA_CAPTURE
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+```
+
+##### Request Example (Fallback JSON — Manual Entry Without Image)
+```json
+{
+  "wardrobeId": "6ae0551433480f1d0fb8d9e2",
+  "name": "Black Formal Trousers",
+  "category": "LOWER_WEAR",
+  "subCategory": "TROUSERS",
+  "color": "Black",
+  "sourceType": "MANUAL"
+}
+```
+
+#### Response Cycles
+
+##### HTTP 201 Created (Single Photo Upload — Fast Response < 200ms)
+*Returns immediately with `processingStatus: "PROCESSING"`. The AI worker processes segmentation & taxonomy in the background.*
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Item added successfully to wardrobe store",
+  "data": {
+    "_id": "6ae05a9033480f1d0fb8d9f5",
+    "userId": "6ac0952c80239788e764c0f9",
+    "wardrobeId": "6ae0551433480f1d0fb8d9e2",
+    "name": "Analyzing Outfit...",
+    "category": "PENDING",
+    "subCategory": "",
+    "color": "",
+    "processingStatus": "PROCESSING",
+    "images": [
+      {
+        "url": "http://localhost:8083/uploads/img_mvq9gr7f_f3515d.jpeg",
+        "type": "ORIGINAL",
+        "isPrimary": true,
+        "filename": "img_mvq9gr7f_f3515d.jpeg"
+      }
+    ],
+    "sourceType": "CAMERA_CAPTURE",
+    "sourcePhotoUrl": "http://localhost:8083/uploads/img_mvq9gr7f_f3515d.jpeg",
+    "sourceImageHash": "a1b2c3d4e5f67890...",
+    "isActive": true,
+    "status": "ACTIVE",
+    "createdAt": "2026-11-23T11:00:00.000Z",
+    "updatedAt": "2026-11-23T11:00:00.000Z"
+  }
+}
+```
+
+##### HTTP 201 Created (Batch Gallery Upload — Up to 50 Photos)
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "3 item(s) added successfully! Processing each photo in background.",
+  "data": {
+    "totalUploaded": 3,
+    "totalCreated": 3,
+    "totalDuplicates": 0,
+    "items": [
+      {
+        "_id": "6ae05a9033480f1d0fb8d9f5",
+        "name": "Analyzing Outfit...",
+        "processingStatus": "PROCESSING",
+        "sourcePhotoUrl": "http://localhost:8083/uploads/img_1.jpeg"
+      },
+      {
+        "_id": "6ae05a9033480f1d0fb8d9f6",
+        "name": "Analyzing Outfit...",
+        "processingStatus": "PROCESSING",
+        "sourcePhotoUrl": "http://localhost:8083/uploads/img_2.jpeg"
+      },
+      {
+        "_id": "6ae05a9033480f1d0fb8d9f7",
+        "name": "Analyzing Outfit...",
+        "processingStatus": "PROCESSING",
+        "sourcePhotoUrl": "http://localhost:8083/uploads/img_3.jpeg"
+      }
+    ],
+    "duplicates": []
+  }
+}
+```
+
+##### HTTP 200 OK (Duplicate Photo Detected)
+*Triggered when perceptual image hashing detects that the identical garment photo is already catalogued in the user's wardrobe and `allowDuplicate=false`.*
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "This dress already exists in your Almari as \"Navy Blue Embroidered Kurta\" (skipped duplicate addition).",
+  "data": {
+    "isDuplicate": true,
+    "item": {
+      "_id": "6ae0551433480f1d0fb8d9e2",
+      "name": "Navy Blue Embroidered Kurta",
+      "category": "ETHNIC_WEAR",
+      "color": "Navy Blue",
+      "processingStatus": "COMPLETED",
+      "sourceImageHash": "a1b2c3d4e5f67890..."
+    },
+    "duplicates": [ ... ],
+    "items": []
+  }
+}
+```
+
+##### HTTP 400 Bad Request
+```json
+{
+  "statusCode": 400,
+  "success": false,
+  "message": "Please upload an image or provide valid garment details",
+  "errors": []
+}
+```
+
+##### HTTP 403 Forbidden (Quota Exceeded)
+```json
+{
+  "statusCode": 403,
+  "success": false,
+  "message": "Clothing items quota limit reached for your account tier. Please upgrade to add more items.",
+  "errors": []
+}
+```
+
+---
+
+### 3.8. Get Clothing Items with Filters & Pagination
+*Lists clothing items belonging to the user or discoverable across a shared Frequent Connect cluster, with multifaceted filtering by wardrobe, store type, category, subcategory, color, occasion, season, and keyword search.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/wardrobe/get-items`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `wardrobeId` | `string` (ObjectId) | No | Filter items by specific wardrobe container ID. |
+| `storeTypeId` / `storeType` | `string` | No | Filter by store type ObjectId or code (`WARDROBE`, `PANTRY`, `ALL`). |
+| `category` | `string` | No | Category filter (e.g. `UPPER_WEAR`, `LOWER_WEAR`, `ETHNIC_WEAR`, `DRESS`). |
+| `subCategory` | `string` | No | Sub-category filter (e.g. `SHIRT`, `JEANS`, `TSHIRT`, `SAREE`). |
+| `color` | `string` | No | Filter by garment primary color (e.g. `Blue`, `Black`, `Red`). |
+| `occasion` | `string` | No | Filter by occasion (e.g. `CASUAL`, `FORMAL`, `PARTY`, `FESTIVE`). |
+| `season` | `string` | No | Filter by season (e.g. `SUMMER`, `WINTER`, `ALL_SEASON`). |
+| `favorite` | `boolean` | No | Filter bookmarked favorite outfits (`true` / `false`). |
+| `search` | `string` | No | Text search across item name, tags, fabric, and description. |
+| `status` | `string` | No | Filter by lifecycle status: `ACTIVE` (default) or `INACTIVE`. |
+| `clusterId` | `string` (ObjectId) | No | Discover clothes across all active members of the specified cluster. |
+| `ownerId` | `string` (ObjectId) | No | Discover clothes of a specific member in the shared cluster. |
+| `page` | `integer` | No | Page number (default: `1`). |
+| `limit` | `integer` | No | Items per page (default: `20`, max: `100`). |
+| `sort` | `string` | No | Sort order, e.g. `-createdAt` (newest first). |
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wardrobe items fetched successfully",
+  "data": {
+    "items": [
+      {
+        "_id": "6ae05a9033480f1d0fb8d9f5",
+        "userId": "6ac0952c80239788e764c0f9",
+        "wardrobeId": "6ae0551433480f1d0fb8d9e2",
+        "name": "White Real Madrid Jersey",
+        "category": "UPPER_WEAR",
+        "subCategory": "JERSEY",
+        "color": "White",
+        "processingStatus": "COMPLETED",
+        "images": [
+          {
+            "url": "https://bg.arangtik.com/api/outputs/73ed_garment_001.png",
+            "type": "CUTOUT",
+            "isPrimary": true
+          },
+          {
+            "url": "http://localhost:8083/uploads/jersey.jpg",
+            "type": "ORIGINAL",
+            "isPrimary": false
+          }
+        ],
+        "isFavorite": false,
+        "isActive": true,
+        "createdAt": "2026-11-23T11:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "pages": 1
+    }
+  }
+}
+```
+
+---
+
+### 3.9. Get Single Clothing Item Details
+*Retrieves complete details of an individual clothing item, including original and 3D cutout image URLs, AI taxonomy analysis, care instructions, and wear history.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/wardrobe/get-item/:id`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | The unique `_id` of the wardrobe item. |
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wardrobe item details fetched successfully",
+  "data": {
+    "_id": "6ae05a9033480f1d0fb8d9f5",
+    "userId": "6ac0952c80239788e764c0f9",
+    "wardrobeId": "6ae0551433480f1d0fb8d9e2",
+    "name": "White Real Madrid Jersey",
+    "category": "UPPER_WEAR",
+    "subCategory": "JERSEY",
+    "color": "White",
+    "fabric": "Polyester Dri-FIT",
+    "occasion": "SPORTS",
+    "season": "ALL_SEASON",
+    "processingStatus": "COMPLETED",
+    "images": [
+      {
+        "url": "https://bg.arangtik.com/api/outputs/73ed_garment_001.png",
+        "type": "CUTOUT",
+        "isPrimary": true
+      }
+    ],
+    "sourceType": "CAMERA_CAPTURE",
+    "isFavorite": false,
+    "isActive": true,
+    "createdAt": "2026-11-23T11:00:00.000Z",
+    "updatedAt": "2026-11-23T11:00:45.000Z"
+  }
+}
+```
+
+##### HTTP 404 Not Found
+```json
+{
+  "statusCode": 404,
+  "success": false,
+  "message": "Wardrobe item not found",
+  "errors": []
+}
+```
+
+---
+
+### 3.10. Update Clothing Item Attributes
+*Modifies an existing clothing item's metadata such as title, category, subcategory, color, tags, occasion, season, or favorite status.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/wardrobe/edit-item/:id`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  Content-Type: application/json
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | The unique `_id` of the wardrobe item to update. |
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | No | New title for the clothing item. |
+| `wardrobeId` | `string` (ObjectId) | No | Move item to a different wardrobe closet. |
+| `category` | `string` | No | Updated category. |
+| `subCategory` | `string` | No | Updated subcategory. |
+| `color` | `string` | No | Primary color. |
+| `fabric` | `string` | No | Fabric / material name. |
+| `occasion` | `string` | No | Occasion classification. |
+| `season` | `string` | No | Suitable season. |
+| `isFavorite` | `boolean` | No | Toggle favorite status. |
+
+##### Request Example
+```json
+{
+  "name": "Real Madrid Home Kit 2026",
+  "isFavorite": true,
+  "occasion": "CASUAL"
+}
+```
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wardrobe item updated successfully",
+  "data": {
+    "_id": "6ae05a9033480f1d0fb8d9f5",
+    "name": "Real Madrid Home Kit 2026",
+    "isFavorite": true,
+    "occasion": "CASUAL",
+    "updatedAt": "2026-11-23T11:05:00.000Z"
+  }
+}
+```
+
+---
+
+### 3.11. Delete / Archive Clothing Item
+*Safely soft-deletes or permanently removes a clothing item from the wardrobe closet.*
+
+- **Method**: `DELETE`
+- **Full Endpoint**: `/api/wardrobe/delete-item/:id`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+
+#### URL Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` (ObjectId) | **Yes** | The unique `_id` of the wardrobe item to delete. |
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `permanent` | `boolean` | No | Pass `true` to delete permanently. Default is `false` (safe soft delete / archived). |
+
+#### Response Cycle
+
+##### HTTP 200 OK (Tested)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Wardrobe item deleted/archived successfully",
+  "data": {
+    "success": true,
+    "message": "Wardrobe item deleted successfully"
+  }
+}
+```
+
+---
+
 ## 4. Wardrobe Quick Reference Table
 
 | Method | Endpoint | Access | Short Description |
@@ -1017,6 +1444,11 @@ Authorization: Bearer <JWT_ACCESS_TOKEN>
 | `PATCH` | `/api/wardrobe/update-wardrobe/:id` | Protected | Update closet attributes, storeType, or media |
 | `DELETE` | `/api/wardrobe/delete-wardrobe/:id` | Protected | Soft-delete closet (or permanent via `?hard=true`) |
 | `PATCH` | `/api/wardrobe/restore-wardrobe/:id` | Protected | Restore soft-deleted closet container back to active |
+| `POST` | `/api/wardrobe/add-item` | Protected | Add clothing item(s) (1 to 50 photos, async BullMQ AI processing) |
+| `GET` | `/api/wardrobe/get-items` | Protected | List clothes with filters (category, color, season, search) |
+| `GET` | `/api/wardrobe/get-item/:id` | Protected | Retrieve detailed attributes and cutout images of single item |
+| `PATCH` | `/api/wardrobe/edit-item/:id` | Protected | Edit clothing item attributes (name, category, colors, favorite) |
+| `DELETE` | `/api/wardrobe/delete-item/:id` | Protected | Archive or permanently delete clothing item (`?permanent=true`) |
 
 
 
@@ -6155,6 +6587,90 @@ Uploads an e-commerce model photograph or flat-lay to the RTX 3090 GPU worker an
   }
 }
 ```
+
+---
+
+## 20. Admin Real-Time Developer Live Terminal & In-Memory Logs APIs (`/api/admin/terminal`)
+
+High-performance, zero-database, zero-disk overhead real-time developer terminal APIs designed for monitoring BullMQ Redis queues, Python GPU 3D Ghost-Mannequin job processing, and backend microservice health in real time without polluting MongoDB or file system storage.
+
+- **Base Path:** `/api/admin/terminal`
+- **Authentication:** Admin Protected (`Bearer <Admin JWT>` or `x-api-key: <ADMIN_SYNC_API_KEY>`)
+
+### 20.1. Get Real-Time In-Memory Logs & BullMQ Queue Stats
+Fetches the circular in-memory buffer of recent server logs (default last 100 entries, capacity 1000) alongside live Redis BullMQ queue performance counters (`waiting`, `active`, `completed`, `failed`, `delayed`).
+
+- **Method / Path:** `GET /api/admin/terminal/logs`
+- **Authentication:** Protected (`Bearer <Admin JWT>` or header `x-api-key`)
+- **Query Parameters:**
+  - `limit` (integer, optional): Number of recent log entries to return (default: `100`, max: `1000`).
+  - `level` (string, optional): Filter by minimum log level (`ALL`, `INFO`, `WARN`, `ERROR`, `SUCCESS`, `AI`).
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Logs retrieved successfully",
+  "data": {
+    "logs": [
+      {
+        "id": "log_1732338000000_1",
+        "timestamp": "2026-11-23T11:00:00.000Z",
+        "level": "INFO",
+        "module": "WARDROBE",
+        "message": "[WardrobePipeline] 🟢 [BULLMQ] Enqueued item 6ae05a9033480f1d0fb8d9f5 (BullMQ Job ID: 12)",
+        "metadata": {
+          "itemId": "6ae05a9033480f1d0fb8d9f5",
+          "userId": "6ac0952c80239788e764c0f9"
+        }
+      },
+      {
+        "id": "log_1732338045000_2",
+        "timestamp": "2026-11-23T11:00:45.000Z",
+        "level": "SUCCESS",
+        "module": "GARMENT_AI",
+        "message": "[BullMQ] Job 12 finished successfully: 1 garment(s) segmented & analyzed.",
+        "metadata": {
+          "durationMs": 44820,
+          "cutoutUrl": "https://bg.arangtik.com/api/outputs/73ed_garment_001.png"
+        }
+      }
+    ],
+    "totalInMemory": 2,
+    "bufferCapacity": 1000,
+    "queueStats": {
+      "isRedisConnected": true,
+      "waiting": 0,
+      "active": 0,
+      "completed": 12,
+      "failed": 0,
+      "delayed": 0
+    },
+    "serverTime": "2026-11-23T11:01:00.000Z"
+  }
+}
+```
+
+---
+
+### 20.2. Clear In-Memory Ring Buffer
+Flushes the volatile in-memory log array. Has zero disk or database impact.
+
+- **Method / Path:** `DELETE /api/admin/terminal/clear`
+- **Authentication:** Protected (`Bearer <Admin JWT>` or header `x-api-key`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Terminal logs cleared successfully",
+  "data": {
+    "cleared": true,
+    "timestamp": "2026-11-23T11:02:00.000Z"
+  }
+}
+```
+
 
 
 
