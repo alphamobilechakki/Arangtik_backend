@@ -3,6 +3,7 @@ const router = express.Router();
 
 const authRoutes = require('../modules/auth/auth.routes');
 const wardrobeRoutes = require('../modules/wardrobe/wardrobe.routes');
+const jewelleryRoutes = require('../modules/jewellery/jewellery.routes');
 const uploadRoutes = require('../modules/upload/upload.routes');
 const integrationRoutes = require('../modules/integration/user/user.routes');
 const hubIntegrationRoutes = require('../modules/integration/hub/hub.routes');
@@ -33,6 +34,9 @@ router.use('/auth', authRoutes);
 
 // Wardrobe Store Routes
 router.use('/wardrobe', wardrobeRoutes);
+
+// Jewellery Management Routes (Boxes, Sets, Categories & Items)
+router.use('/jewellery', jewelleryRoutes);
 
 
 // Integration & External Admin Sync Routes (Protected by x-api-key)

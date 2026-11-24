@@ -45,6 +45,8 @@ tags:
     description: User FCM push notifications and read status updates
   - name: "Store Types & Public Taxonomies"
     description: "Store types, level-1 service categories, and public service catalogues"
+  - name: "Jewellery Management"
+    description: "Jewellery boxes, cohesive sets, pieces, status transitions (lend, cleaning, locker), and admin categories"
 paths:
   "/health":
     get:
@@ -4398,6 +4400,659 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/CatalogService"
+  "/jewellery/categories":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: List active categories for app dropdowns
+      responses:
+        "200":
+          description: List of active jewellery categories
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Categories retrieved successfully"
+                data:
+                  - _id: "6742d5e2b02891f7c81a1001"
+                    name: "Necklace"
+                    code: "NECKLACE"
+                    sortOrder: 1
+                  - _id: "6742d5e2b02891f7c81a1002"
+                    name: "Earring"
+                    code: "EARRING"
+                    sortOrder: 2
+                  - _id: "6742d5e2b02891f7c81a1003"
+                    name: "Ring"
+                    code: "RING"
+                    sortOrder: 3
+  "/jewellery/boxes":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: List user jewellery boxes with item count
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Boxes retrieved successfully
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Boxes retrieved successfully"
+                data:
+                  - _id: "6742d5e2b02891f7c81a2001"
+                    name: "Bank Safe Locker"
+                    description: "High security vault locker deposit"
+                    type: "FAMILY"
+                    isDefault: false
+                    itemCount: 14
+    post:
+      tags:
+        - "Jewellery Management"
+      summary: Create jewellery box
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: "Bank Safe Locker" }
+                description: { type: string, example: "High security vault deposit box" }
+                type: { type: string, enum: [PERSONAL, FAMILY, SHARED, OTHER], example: "FAMILY" }
+                ownerName: { type: string, example: "Priya Sharma" }
+                isDefault: { type: boolean, example: false }
+      responses:
+        "201":
+          description: Box created successfully
+          content:
+            application/json:
+              example:
+                statusCode: 201
+                success: true
+                message: "Jewellery box created successfully"
+                data:
+                  _id: "6742d5e2b02891f7c81a2001"
+                  name: "Bank Safe Locker"
+                  type: "FAMILY"
+                  isDefault: false
+  "/jewellery/boxes/{id}":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: Get box by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a2001"
+      responses:
+        "200":
+          description: Box retrieved
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                data:
+                  _id: "6742d5e2b02891f7c81a2001"
+                  name: "Bank Safe Locker"
+                  type: "FAMILY"
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Update box
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a2001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: "Primary Bank Safe Locker" }
+                description: { type: string, example: "Updated locker description" }
+      responses:
+        "200":
+          description: Box updated
+    delete:
+      tags:
+        - "Jewellery Management"
+      summary: Soft-delete box (cascades to items & sets)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Box deleted
+  "/jewellery/sets":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: List user jewellery sets
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: jewelleryBoxId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sets retrieved
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                data:
+                  - _id: "6742d5e2b02891f7c81a3001"
+                    name: "Bridal Emerald & Diamond Set"
+                    itemCount: 4
+  "/jewellery/sets/{id}":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: Get set by ID with member pieces
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Set and pieces retrieved
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Update set details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Set updated
+    delete:
+      tags:
+        - "Jewellery Management"
+      summary: Soft-delete set
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Set deleted
+  "/jewellery":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: List user jewellery pieces with filters and search
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: jewelleryBoxId
+          in: query
+          schema:
+            type: string
+        - name: jewelleryCategory
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [GOLD, SILVER, ARTIFICIAL, CUSTOM]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [IN_LOCKER, LEND, CLEANING, OTHER]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Items retrieved successfully
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Jewellery items retrieved successfully"
+                data:
+                  - _id: "6742d5e2b02891f7c81a4001"
+                    name: "Heritage Polki Diamond Choker"
+                    jewelleryCategory: "NECKLACE"
+                    type: "GOLD"
+                    status: "IN_LOCKER"
+                    weight: 48.5
+                    color: "Yellow Gold"
+                    gemstone: "Polki Diamond"
+                    brand: "Tanishq"
+                    sourceImageUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f"
+    post:
+      tags:
+        - "Jewellery Management"
+      summary: Create single jewellery item
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, jewelleryCategory]
+              properties:
+                name: { type: string, example: "Heritage Polki Diamond Choker" }
+                jewelleryCategory: { type: string, example: "NECKLACE" }
+                jewelleryBoxId: { type: string, example: "6742d5e2b02891f7c81a2001" }
+                setId: { type: string, example: "6742d5e2b02891f7c81a3001" }
+                type: { type: string, enum: [GOLD, SILVER, ARTIFICIAL, CUSTOM], example: "GOLD" }
+                status: { type: string, enum: [IN_LOCKER, LEND, CLEANING, OTHER], example: "IN_LOCKER" }
+                weight: { type: number, example: 48.5 }
+                color: { type: string, example: "Yellow Gold" }
+                gemstone: { type: string, example: "Polki Diamond" }
+                brand: { type: string, example: "Tanishq" }
+                sourceImageUrl: { type: string, example: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f" }
+      responses:
+        "201":
+          description: Piece created successfully
+          content:
+            application/json:
+              example:
+                statusCode: 201
+                success: true
+                message: "Jewellery item created successfully"
+                data:
+                  _id: "6742d5e2b02891f7c81a4001"
+                  name: "Heritage Polki Diamond Choker"
+                  type: "GOLD"
+                  status: "IN_LOCKER"
+                  weight: 48.5
+  "/jewellery/set-with-items":
+    post:
+      tags:
+        - "Jewellery Management"
+      summary: Create set and multiple pieces from single photo
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [setName, items]
+              properties:
+                setName: { type: string, example: "Bridal Emerald & Diamond Set" }
+                jewelleryBoxId: { type: string, example: "6742d5e2b02891f7c81a2001" }
+                sourcePhotoUrl: { type: string, example: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f" }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string, example: "Emerald Centerpiece Choker" }
+                      jewelleryCategory: { type: string, example: "NECKLACE" }
+                      type: { type: string, example: "GOLD" }
+                      status: { type: string, example: "IN_LOCKER" }
+                      weight: { type: number, example: 55 }
+                      color: { type: string, example: "Yellow Gold" }
+                      gemstone: { type: string, example: "Emerald & Diamond" }
+      responses:
+        "201":
+          description: Set and items created successfully
+  "/jewellery/{id}":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: Get jewellery piece by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a4001"
+      responses:
+        "200":
+          description: Item retrieved
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Update jewellery piece metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a4001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: "Royal Heritage Polki Choker" }
+                status: { type: string, example: "LEND" }
+      responses:
+        "200":
+          description: Item updated
+    delete:
+      tags:
+        - "Jewellery Management"
+      summary: Soft-delete jewellery piece
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Item deleted
+  "/jewellery/{id}/status":
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Update physical status (IN_LOCKER, LEND, CLEANING, OTHER)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a4001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [IN_LOCKER, LEND, CLEANING, OTHER], example: "CLEANING" }
+                statusNotes: { type: string, example: "Sent to Tanishq jewellery store for polishing" }
+      responses:
+        "200":
+          description: Status updated successfully
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Status updated successfully"
+                data:
+                  _id: "6742d5e2b02891f7c81a4001"
+                  status: "CLEANING"
+                  statusUpdatedAt: "2026-11-24T16:50:00.000Z"
+  "/jewellery/{id}/move":
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Move piece to another box
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetBoxId]
+              properties:
+                targetBoxId: { type: string, example: "6742d5e2b02891f7c81a2002" }
+      responses:
+        "200":
+          description: Item moved
+  "/jewellery/{id}/favorite":
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Toggle favorite status
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Favorite status toggled
+  "/admin/jewellery/stats":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: High-level operational KPIs and SLA alerts (Admin)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Operational statistics retrieved
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Operational stats retrieved successfully"
+                data:
+                  totalItems: 35
+                  inLockerCount: 22
+                  lendCount: 7
+                  cleaningCount: 4
+                  otherCount: 2
+                  slaOverdueCount: 4
+                  totalEstimatedValueINR: 4850000
+  "/admin/jewellery/items":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: Global operations table with search, filters & tab counts (Admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tab
+          in: query
+          schema:
+            type: string
+            enum: [ALL, IN_LOCKER, LEND, CLEANING, OVERDUE]
+            example: "ALL"
+        - name: search
+          in: query
+          schema:
+            type: string
+            example: "9876543210"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            example: 10
+      responses:
+        "200":
+          description: Items retrieved with tab counts and SLA aging
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Operational items retrieved successfully"
+                data:
+                  items:
+                    - _id: "6742d5e2b02891f7c81a4001"
+                      name: "Heritage Polki Diamond Choker"
+                      type: "GOLD"
+                      status: "CLEANING"
+                      daysInStatus: 18
+                      isOverdueCleaning: true
+                      user:
+                        name: "Priya Sharma"
+                        phone: "919876543210"
+                  tabCounts:
+                    all: 35
+                    inLocker: 22
+                    lend: 7
+                    cleaning: 4
+                    overdue: 4
+                  pagination:
+                    page: 1
+                    limit: 10
+                    totalPages: 4
+                    totalItems: 35
+  "/admin/jewellery/items/{id}":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: Detailed piece inspection (Admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a4001"
+      responses:
+        "200":
+          description: Piece details with user and box
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                data:
+                  _id: "6742d5e2b02891f7c81a4001"
+                  name: "Heritage Polki Diamond Choker"
+                  daysInStatus: 18
+                  user:
+                    name: "Priya Sharma"
+                    phone: "919876543210"
+  "/admin/jewellery/items/{id}/status-override":
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Support status override with audit logging (Admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "6742d5e2b02891f7c81a4001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [IN_LOCKER, LEND, CLEANING, OTHER], example: "IN_LOCKER" }
+                reason: { type: string, example: "Customer confirmed item received back in locker" }
+      responses:
+        "200":
+          description: Status overridden successfully
+          content:
+            application/json:
+              example:
+                statusCode: 200
+                success: true
+                message: "Status successfully overridden by administrator"
+  "/admin/jewellery/items/{id}/restore":
+    patch:
+      tags:
+        - "Jewellery Management"
+      summary: Accidental deletion recovery (Admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Item restored
+  "/admin/jewellery/users/{userId}":
+    get:
+      tags:
+        - "Jewellery Management"
+      summary: User customer support drill-down (Admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User jewellery summary and boxes
 components:
   securitySchemes:
     BearerAuth:

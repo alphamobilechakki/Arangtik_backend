@@ -6671,6 +6671,841 @@ Flushes the volatile in-memory log array. Has zero disk or database impact.
 }
 ```
 
+---
+
+## 21. Jewellery Management Module (`/api/jewellery` & `/api/admin/jewellery-categories`)
+
+The Jewellery Management module provides a complete solution for cataloging, categorizing, organizing, and tracking precious jewellery items.
+
+### Core Concepts:
+1. **JewelleryCategory** (Master taxonomy, e.g. `NECKLACE`, `EARRING`, `RING`, `BRACELET`, `BANGLE`, `ANKLET`, `PENDANT`, `BROOCH`, `MAANGTIKA`, `NOSERING`, `OTHER`).
+2. **JewelleryBox** (User's storage containers, e.g. "Mummy's Gold Vault", "Bank Safe Locker", with automatic default box handling).
+3. **JewellerySet** (Minimalist grouping concept for sets, e.g., 1 necklace + 2 earrings in a single set photo).
+4. **Jewellery** (Individual items with `sourceImage`, `generatedImage`, material `type` [`GOLD`, `SILVER`, `ARTIFICIAL`, `CUSTOM`], and physical `status` [`IN_LOCKER`, `LEND`, `CLEANING`, `OTHER`]).
+
+---
+
+### 21.1. Admin Jewellery Categories (`/api/admin/jewellery-categories`)
+
+#### 21.1.1. List All Categories (Admin)
+Returns all jewellery categories with pagination, search, and soft-delete visibility.
+
+- **Method / Path:** `GET /api/admin/jewellery-categories`
+- **Authentication:** Public or Protected (`Bearer <Admin JWT>`)
+- **Query Parameters:**
+  - `search` (string, optional): Case-insensitive match on category name or code.
+  - `isActive` (boolean, optional): Filter active/inactive categories (`true` / `false`).
+  - `includeDeleted` (boolean, optional): Include soft-deleted categories (`true` / `false`).
+  - `page` (integer, default: 1): Page number.
+  - `limit` (integer, default: 20): Records per page.
+  - `paginate` (boolean, optional): Set `false` or `all=true` for unpaginated array.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery categories retrieved successfully",
+  "data": {
+    "categories": [
+      {
+        "_id": "6742d4a1b02891f7c81a1001",
+        "name": "Necklace",
+        "code": "NECKLACE",
+        "icon": "https://api.arangtik.com/uploads/necklace_icon.png",
+        "description": "Chokers, chains, collars, and beaded necklaces",
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": "2026-11-23T12:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 11,
+      "totalPages": 1,
+      "currentPage": 1,
+      "perPage": 20,
+      "totalRecords": 11,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+#### 21.1.2. Create Category (Admin)
+Creates a new jewellery category. Automatically normalizes and upper-cases the category `code` if omitted.
+
+- **Method / Path:** `POST /api/admin/jewellery-categories`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Request Body:**
+  - `name` (string, required): Display name (e.g., `"Tiara"`).
+  - `code` (string, optional): Unique uppercase code (e.g., `"TIARA"`).
+  - `description` (string, optional): Description up to 500 characters.
+  - `icon` (file or string URL/base64, optional): Category icon image.
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Jewellery category created successfully",
+  "data": {
+    "_id": "6742d4a1b02891f7c81a1012",
+    "name": "Tiara",
+    "code": "TIARA",
+    "icon": "https://api.arangtik.com/uploads/tiara_icon.png",
+    "description": "Crowns and headpieces",
+    "isActive": true,
+    "isDeleted": false
+  }
+}
+```
+
+#### 21.1.3. Update Category (Admin)
+Updates category metadata or icon.
+
+- **Method / Path:** `PATCH /api/admin/jewellery-categories/:id`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Request Body (all optional):** `name`, `code`, `description`, `icon`, `isActive`.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery category updated successfully",
+  "data": {
+    "_id": "6742d4a1b02891f7c81a1012",
+    "name": "Tiara & Crown",
+    "code": "TIARA",
+    "description": "Royal tiaras and ceremonial head crowns",
+    "isActive": true
+  }
+}
+```
+
+#### 21.1.4. Soft Delete Category (Admin)
+Soft-deletes a category. Prevents deletion if any active jewellery pieces are linked to this category.
+
+- **Method / Path:** `DELETE /api/admin/jewellery-categories/:id`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Query Parameters:** `hard=true` (optional, permanently deletes if unlinked).
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery category deleted successfully",
+  "data": {
+    "message": "Jewellery category deleted successfully"
+  }
+}
+```
+
+---
+
+### 21.2. Public Category Discovery (`/api/jewellery/categories`)
+
+#### 21.2.1. List Active Categories for App Dropdown
+Convenience endpoint for mobile apps to fetch categories for selection during jewellery piece creation.
+
+- **Method / Path:** `GET /api/jewellery/categories`
+- **Authentication:** Public or Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):** Identical to 21.1.1.
+
+---
+
+### 21.3. User Jewellery Boxes (`/api/jewellery/boxes`)
+
+#### 21.3.1. List User Boxes
+Retrieves all jewellery boxes belonging to the authenticated user, automatically annotated with dynamic active `itemCount`.
+
+- **Method / Path:** `GET /api/jewellery/boxes`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Query Parameters:** `search`, `page`, `limit`, `paginate=false`.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery boxes retrieved successfully",
+  "data": {
+    "boxes": [
+      {
+        "_id": "6742d5e2b02891f7c81a2001",
+        "userId": "6ac0952c80239788e764c0f9",
+        "name": "Mummy's Gold Vault",
+        "description": "Master household gold collection",
+        "type": "FAMILY",
+        "ownerName": "Mummy",
+        "coverImage": "https://api.arangtik.com/uploads/vault_cover.jpg",
+        "isDefault": true,
+        "itemCount": 12,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": "2026-11-23T12:15:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+#### 21.3.2. Create Jewellery Box
+Creates a storage box. If this is the user's first box or `isDefault: true` is passed, it becomes the default box and automatically unsets previous defaults.
+
+- **Method / Path:** `POST /api/jewellery/boxes`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Request Body:**
+  - `name` (string, required): Box name (e.g., `"Bank Safe Locker"`).
+  - `description` (string, optional): Box notes.
+  - `type` (string, optional): Enum `["PERSONAL", "FAMILY", "SHARED", "OTHER"]` (default: `"PERSONAL"`).
+  - `ownerName` (string, optional): Human label for the box owner.
+  - `coverImage` (file or string URL, optional): Box cover image.
+  - `isDefault` (boolean, optional): Whether this is the default storage box.
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Jewellery box created successfully",
+  "data": {
+    "_id": "6742d5e2b02891f7c81a2002",
+    "userId": "6ac0952c80239788e764c0f9",
+    "name": "Bank Safe Locker",
+    "type": "FAMILY",
+    "isDefault": false,
+    "isActive": true,
+    "isDeleted": false
+  }
+}
+```
+
+#### 21.3.3. Get Box by ID
+- **Method / Path:** `GET /api/jewellery/boxes/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):** Box details including `itemCount`.
+
+#### 21.3.4. Update Jewellery Box
+- **Method / Path:** `PATCH /api/jewellery/boxes/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Request Body (optional):** `name`, `description`, `type`, `ownerName`, `coverImage`, `isDefault`.
+
+#### 21.3.5. Soft-Delete Jewellery Box (With Cascade)
+Soft-deletes the box. Also automatically cascades soft-deletion to all jewellery items and sets contained within this box. If the deleted box was the default, the system automatically promotes another active box to default.
+
+- **Method / Path:** `DELETE /api/jewellery/boxes/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery box and its items deleted successfully",
+  "data": {
+    "message": "Jewellery box and its items deleted successfully"
+  }
+}
+```
+
+---
+
+### 21.4. Jewellery Sets (`/api/jewellery/sets`)
+
+Minimalist grouping document representing items designed or worn together (e.g. 1 necklace + 2 matching earrings).
+
+#### 21.4.1. List Sets
+- **Method / Path:** `GET /api/jewellery/sets`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Query Parameters:** `jewelleryBoxId` (optional filter), `search`, `page`, `limit`.
+- **Success Response (200 OK):** Returns sets list with `itemCount` and populated `jewelleryBoxId`.
+
+#### 21.4.2. Get Set by ID with Member Pieces
+- **Method / Path:** `GET /api/jewellery/sets/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery set retrieved successfully",
+  "data": {
+    "_id": "6742d7a5b02891f7c81a3001",
+    "userId": "6ac0952c80239788e764c0f9",
+    "jewelleryBoxId": {
+      "_id": "6742d5e2b02891f7c81a2001",
+      "name": "Mummy's Gold Vault",
+      "type": "FAMILY"
+    },
+    "name": "Royal Emerald Bridal Set",
+    "coverImageUrl": "https://api.arangtik.com/uploads/emerald_set_full.jpg",
+    "sourcePhotoUrl": "https://api.arangtik.com/uploads/emerald_set_full.jpg",
+    "itemCount": 3,
+    "items": [
+      {
+        "_id": "6742d810b02891f7c81a4001",
+        "name": "Emerald Choker Necklace",
+        "type": "GOLD",
+        "status": "IN_LOCKER",
+        "weight": 55,
+        "jewelleryCategory": {
+          "_id": "6742d4a1b02891f7c81a1001",
+          "name": "Necklace",
+          "code": "NECKLACE"
+        }
+      },
+      {
+        "_id": "6742d810b02891f7c81a4002",
+        "name": "Emerald Jhumka Pair",
+        "type": "GOLD",
+        "status": "IN_LOCKER",
+        "weight": 24,
+        "jewelleryCategory": {
+          "_id": "6742d4a1b02891f7c81a1002",
+          "name": "Earring",
+          "code": "EARRING"
+        }
+      }
+    ]
+  }
+}
+```
+
+#### 21.4.3. Update Set Details
+- **Method / Path:** `PATCH /api/jewellery/sets/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Request Body (optional):** `name`, `jewelleryBoxId` (moving a set moves all member items to that box automatically), `coverImageUrl`.
+
+#### 21.4.4. Delete Set
+- **Method / Path:** `DELETE /api/jewellery/sets/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):** Soft-deletes set and member items.
+
+---
+
+### 21.5. Jewellery Pieces (`/api/jewellery`)
+
+#### 21.5.1. Create Single Jewellery Piece
+Uploads photo(s) and creates an individual jewellery item. If `jewelleryBoxId` is omitted, the user's default box is automatically assigned.
+
+- **Method / Path:** `POST /api/jewellery`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Fields / Body:**
+  - `name` (string, required): Piece name (e.g. `"Diamond Solitaire Ring"`).
+  - `jewelleryCategory` (string, required): Category `_id` or string code (e.g. `"RING"` or `"NECKLACE"`).
+  - `jewelleryBoxId` (string, optional): Target box ID (falls back to default box).
+  - `setId` (string, optional): ID of a `JewellerySet` if this belongs to a set.
+  - `type` (string, optional): Enum `["GOLD", "SILVER", "ARTIFICIAL", "CUSTOM"]` (default: `"GOLD"`).
+  - `status` (string, optional): Enum `["IN_LOCKER", "LEND", "CLEANING", "OTHER"]` (default: `"IN_LOCKER"`).
+  - `color` (string, optional): Material tint / color (e.g. `"Rose Gold"`, `"Yellow Gold"`).
+  - `gemstone` (string, optional): Inset stones (e.g. `"VVS1 Diamond"`, `"Emerald"`).
+  - `weight` (number, optional): Weight in grams (e.g. `5.2`).
+  - `brand` (string, optional): Brand / Jeweller name (e.g. `"Tanishq"`, `"CaratLane"`).
+  - `sourceImage` (file, optional): Uploaded original picture.
+  - `generatedImage` (file, optional): Background-removed or AI-rendered picture.
+  - `sourceImageUrl` (string, optional): Image URL alternative to file upload.
+  - `generatedImageUrl` (string, optional): Generated image URL alternative.
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Jewellery item created successfully",
+  "data": {
+    "_id": "6742d810b02891f7c81a4005",
+    "userId": "6ac0952c80239788e764c0f9",
+    "jewelleryBoxId": {
+      "_id": "6742d5e2b02891f7c81a2001",
+      "name": "Mummy's Gold Vault",
+      "type": "FAMILY"
+    },
+    "jewelleryCategory": {
+      "_id": "6742d4a1b02891f7c81a1003",
+      "name": "Ring",
+      "code": "RING",
+      "icon": "https://api.arangtik.com/uploads/ring_icon.png"
+    },
+    "setId": null,
+    "name": "Diamond Solitaire Ring",
+    "sourceImage": {
+      "url": "https://api.arangtik.com/uploads/ring_source.jpg",
+      "filename": "ring_source.jpg"
+    },
+    "generatedImage": {
+      "url": "https://api.arangtik.com/uploads/ring_generated.png",
+      "filename": "ring_generated.png",
+      "generatedAt": "2026-11-23T12:20:00.000Z"
+    },
+    "type": "GOLD",
+    "status": "IN_LOCKER",
+    "color": "Rose Gold",
+    "gemstone": "VVS1 Diamond",
+    "weight": 5.2,
+    "brand": "CaratLane",
+    "isFavorite": false,
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2026-11-23T12:20:00.000Z"
+  }
+}
+```
+
+#### 21.5.2. Create Set with Items from Single Photo
+Atomically creates a `JewellerySet` and all contained `Jewellery` items from a single multi-piece photograph (e.g. 1 necklace and 2 matching earrings).
+
+- **Method / Path:** `POST /api/jewellery/set-with-items`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Request Body:**
+```json
+{
+  "setName": "Bridal Emerald & Diamond Set",
+  "jewelleryBoxId": "6742d5e2b02891f7c81a2001",
+  "sourcePhotoUrl": "https://api.arangtik.com/uploads/emerald_set_full.jpg",
+  "items": [
+    {
+      "name": "Emerald Centerpiece Choker",
+      "jewelleryCategory": "NECKLACE",
+      "type": "GOLD",
+      "status": "IN_LOCKER",
+      "weight": 55,
+      "color": "Yellow Gold",
+      "gemstone": "Emerald & Diamond"
+    },
+    {
+      "name": "Emerald Jhumka Left",
+      "jewelleryCategory": "EARRING",
+      "type": "GOLD",
+      "status": "IN_LOCKER",
+      "weight": 14,
+      "color": "Yellow Gold"
+    },
+    {
+      "name": "Emerald Jhumka Right",
+      "jewelleryCategory": "EARRING",
+      "type": "GOLD",
+      "status": "IN_LOCKER",
+      "weight": 14,
+      "color": "Yellow Gold"
+    }
+  ]
+}
+```
+- **Success Response (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Jewellery set and items created successfully",
+  "data": {
+    "set": {
+      "_id": "6742d7a5b02891f7c81a3001",
+      "name": "Bridal Emerald & Diamond Set",
+      "coverImageUrl": "https://api.arangtik.com/uploads/emerald_set_full.jpg",
+      "sourcePhotoUrl": "https://api.arangtik.com/uploads/emerald_set_full.jpg"
+    },
+    "items": [
+      {
+        "_id": "6742d810b02891f7c81a4010",
+        "name": "Emerald Centerpiece Choker",
+        "setId": "6742d7a5b02891f7c81a3001",
+        "type": "GOLD",
+        "status": "IN_LOCKER"
+      },
+      {
+        "_id": "6742d810b02891f7c81a4011",
+        "name": "Emerald Jhumka Left",
+        "setId": "6742d7a5b02891f7c81a3001",
+        "type": "GOLD",
+        "status": "IN_LOCKER"
+      },
+      {
+        "_id": "6742d810b02891f7c81a4012",
+        "name": "Emerald Jhumka Right",
+        "setId": "6742d7a5b02891f7c81a3001",
+        "type": "GOLD",
+        "status": "IN_LOCKER"
+      }
+    ]
+  }
+}
+```
+
+#### 21.5.3. List Jewellery Items with Filters & Search
+Fetches the user's inventory with full classification population (`category`, `box`, `set`).
+
+- **Method / Path:** `GET /api/jewellery`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Query Parameters:**
+  - `jewelleryBoxId` (string, optional): Filter by storage box.
+  - `jewelleryCategory` (string, optional): Category ID or uppercase code (`NECKLACE`, `EARRING`, etc.).
+  - `setId` (string, optional): Set ID, or pass `"null"` / `"none"` for standalone un-set items.
+  - `type` (string, optional): Material enum (`GOLD`, `SILVER`, `ARTIFICIAL`, `CUSTOM`).
+  - `status` (string, optional): Location status (`IN_LOCKER`, `LEND`, `CLEANING`, `OTHER`).
+  - `isFavorite` (boolean, optional): Filter starred favorites (`true` / `false`).
+  - `search` (string, optional): Search keyword against item name, brand, color, or gemstone.
+  - `page` (integer, default: 1): Page number.
+  - `limit` (integer, default: 20): Records per page.
+  - `paginate` (boolean, optional): Pass `false` or `all=true` for flat array.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery items retrieved successfully",
+  "data": {
+    "items": [
+      {
+        "_id": "6742d810b02891f7c81a4005",
+        "name": "Diamond Solitaire Ring",
+        "jewelleryCategory": {
+          "_id": "6742d4a1b02891f7c81a1003",
+          "name": "Ring",
+          "code": "RING",
+          "icon": "https://api.arangtik.com/uploads/ring_icon.png"
+        },
+        "jewelleryBoxId": {
+          "_id": "6742d5e2b02891f7c81a2001",
+          "name": "Mummy's Gold Vault",
+          "type": "FAMILY"
+        },
+        "setId": null,
+        "type": "GOLD",
+        "status": "IN_LOCKER",
+        "color": "Rose Gold",
+        "gemstone": "VVS1 Diamond",
+        "weight": 5.2,
+        "brand": "CaratLane",
+        "isFavorite": false
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+#### 21.5.4. Get Single Piece by ID
+- **Method / Path:** `GET /api/jewellery/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):** Returns single piece with populated category, box, and set.
+
+#### 21.5.5. Update Jewellery Piece Metadata
+- **Method / Path:** `PATCH /api/jewellery/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Content-Type:** `multipart/form-data` or `application/json`
+- **Request Body (optional):** `name`, `jewelleryBoxId`, `jewelleryCategory`, `setId`, `type`, `status`, `color`, `gemstone`, `weight`, `brand`, `isFavorite`, `sourceImage`, `generatedImage`.
+
+#### 21.5.6. Update Status Directly (Lend, Cleaning, Locker)
+Quick endpoint for changing the current physical state of the jewellery item.
+
+- **Method / Path:** `PATCH /api/jewellery/:id/status`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Request Body:**
+```json
+{
+  "status": "LEND"
+}
+```
+*Valid statuses:* `"IN_LOCKER"`, `"LEND"`, `"CLEANING"`, `"OTHER"`.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery status updated to LEND",
+  "data": {
+    "_id": "6742d810b02891f7c81a4005",
+    "name": "Diamond Solitaire Ring",
+    "status": "LEND"
+  }
+}
+```
+
+#### 21.5.7. Move Piece to Another Box
+Moves a piece from one box to another (e.g. moving from "Daily Wear Box" to "Bank Safe Locker").
+
+- **Method / Path:** `PATCH /api/jewellery/:id/move`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Request Body:**
+```json
+{
+  "targetJewelleryBoxId": "6742d5e2b02891f7c81a2002"
+}
+```
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery moved to new box successfully",
+  "data": {
+    "_id": "6742d810b02891f7c81a4005",
+    "jewelleryBoxId": "6742d5e2b02891f7c81a2002"
+  }
+}
+```
+
+#### 21.5.8. Toggle Favorite
+Toggles `isFavorite` flag between `true` and `false`.
+
+- **Method / Path:** `PATCH /api/jewellery/:id/favorite`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Item added to favorites",
+  "data": {
+    "_id": "6742d810b02891f7c81a4005",
+    "isFavorite": true,
+    "message": "Item added to favorites"
+  }
+}
+```
+
+#### 21.5.9. Soft Delete Piece
+Soft-deletes a single piece (sets `isDeleted: true`, sets `deletedAt`, excludes from all regular queries).
+
+- **Method / Path:** `DELETE /api/jewellery/:id`
+- **Authentication:** Protected (`Bearer <User JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery item deleted successfully",
+  "data": {
+    "message": "Jewellery item deleted successfully"
+  }
+}
+```
+
+---
+
+### 21.6. Admin Jewellery Operations Dashboard & Monitoring (`/api/admin/jewellery`)
+
+Production-grade administrative monitoring, SLA tracking for items out for cleaning or lend, cross-user search, and support interventions.
+
+#### 21.6.1. Get Operational Statistics & SLA Alerts
+Fetches high-level KPIs, status distribution, material type breakdown, and automated SLA alerts (cleaning > 14 days, lend > 30 days, missing photos).
+
+- **Method / Path:** `GET /api/admin/jewellery/stats`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery operational statistics retrieved successfully",
+  "data": {
+    "overview": {
+      "totalPieces": 450,
+      "totalBoxes": 210,
+      "totalSets": 85,
+      "uniqueOwners": 180
+    },
+    "statusDistribution": {
+      "IN_LOCKER": 380,
+      "LEND": 45,
+      "CLEANING": 20,
+      "OTHER": 5
+    },
+    "typeDistribution": {
+      "GOLD": 320,
+      "SILVER": 90,
+      "ARTIFICIAL": 35,
+      "CUSTOM": 5
+    },
+    "operationalAlerts": {
+      "overdueCleaning": 4,
+      "extendedLend": 8,
+      "missingPhotos": 2,
+      "totalAlerts": 14
+    },
+    "topCategories": [
+      { "_id": "6742d4a1b02891f7c81a1001", "name": "Necklace", "code": "NECKLACE", "count": 140 },
+      { "_id": "6742d4a1b02891f7c81a1002", "name": "Earring", "code": "EARRING", "count": 180 }
+    ]
+  }
+}
+```
+
+#### 21.6.2. Global Jewellery Operations Table (Search, Filters & Tab Badges)
+Returns cross-user inventory with two-phase fast indexed search, SLA aging metrics (`daysInStatus`), and live tab counts (`tabCounts: { all, inLocker, lend, cleaning, overdue }`).
+
+- **Method / Path:** `GET /api/admin/jewellery/items`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Query Parameters:**
+  - `search` (string, optional): Case-insensitive match on user phone, user name, piece name, brand, color, or gemstone.
+  - `status` (string, optional): Enum `["IN_LOCKER", "LEND", "CLEANING", "OTHER"]`.
+  - `type` (string, optional): Enum `["GOLD", "SILVER", "ARTIFICIAL", "CUSTOM"]`.
+  - `jewelleryCategory` (string, optional): Category ID or uppercase code (`NECKLACE`, `EARRING`, etc.).
+  - `userId` (string, optional): Filter to a specific user ID.
+  - `isAlert` (boolean, optional): Filter only items with active SLA alerts (`true`).
+  - `includeDeleted` (boolean, optional): Include soft-deleted items (`true`).
+  - `page` (integer, default: 1): Page number.
+  - `limit` (integer, default: 20): Records per page.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery items retrieved successfully",
+  "data": {
+    "tabCounts": {
+      "all": 450,
+      "inLocker": 380,
+      "lend": 45,
+      "cleaning": 20,
+      "overdue": 12
+    },
+    "items": [
+      {
+        "_id": "6742d810b02891f7c81a4005",
+        "name": "Diamond Solitaire Ring",
+        "type": "GOLD",
+        "status": "CLEANING",
+        "daysInStatus": 18,
+        "isAlert": true,
+        "alertReason": "OVERDUE_CLEANING (18 days at vendor)",
+        "weight": 5.2,
+        "color": "Rose Gold",
+        "gemstone": "VVS1 Diamond",
+        "brand": "CaratLane",
+        "user": {
+          "_id": "6ac0952c80239788e764c0f9",
+          "name": "Priya Sharma",
+          "phone": "918949056321"
+        },
+        "box": {
+          "_id": "6742d5e2b02891f7c81a2001",
+          "name": "Mummy's Gold Vault"
+        },
+        "category": {
+          "code": "RING",
+          "name": "Ring"
+        },
+        "sourceImage": { "url": "https://api.arangtik.com/uploads/ring.jpg" },
+        "generatedImage": { "url": "https://api.arangtik.com/uploads/ring_cutout.png" },
+        "updatedAt": "2026-11-06T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 450,
+      "totalPages": 23
+    }
+  }
+}
+```
+
+#### 21.6.3. User Customer Support Drill-down
+Customer support endpoint to inspect a specific user's complete jewellery profile, including their boxes, sets, and status breakdown.
+
+- **Method / Path:** `GET /api/admin/jewellery/users/:userId`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "User jewellery overview retrieved successfully",
+  "data": {
+    "user": {
+      "_id": "6ac0952c80239788e764c0f9",
+      "name": "Priya Sharma",
+      "phone": "918949056321",
+      "role": "user"
+    },
+    "totalPieces": 14,
+    "statusBreakdown": {
+      "IN_LOCKER": 11,
+      "LEND": 2,
+      "CLEANING": 1,
+      "OTHER": 0
+    },
+    "boxes": [ ... ],
+    "sets": [ ... ],
+    "items": [ ... ]
+  }
+}
+```
+
+#### 21.6.4. Single Piece Inspection
+- **Method / Path:** `GET /api/admin/jewellery/items/:id`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Success Response (200 OK):** Detailed piece payload with populated user, box, category, and set info.
+
+#### 21.6.5. Support Status Override with Mandatory Audit Reason
+Allows an authorized admin/support agent to manually change an item's status on behalf of a user while recording a mandatory audit note and tracking `lastModifiedBy`.
+
+- **Method / Path:** `PATCH /api/admin/jewellery/items/:id/status-override`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Request Body:**
+```json
+{
+  "status": "IN_LOCKER",
+  "reason": "Customer called support: verified vendor returned necklace on 24 Nov"
+}
+```
+*Valid statuses:* `"IN_LOCKER"`, `"LEND"`, `"CLEANING"`, `"OTHER"`.
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery status overridden successfully",
+  "data": {
+    "_id": "6742d810b02891f7c81a4005",
+    "name": "Diamond Solitaire Ring",
+    "previousStatus": "CLEANING",
+    "status": "IN_LOCKER",
+    "reason": "Customer called support: verified vendor returned necklace on 24 Nov",
+    "updatedBy": "65f1a2b3c4d5e6f7a8b9c0d1",
+    "updatedAt": "2026-11-24T12:00:00.000Z"
+  }
+}
+```
+
+#### 21.6.6. Accidental Deletion Recovery (Restore)
+Restores an accidentally soft-deleted jewellery piece back to active status (`isDeleted: false, deletedAt: null`).
+
+- **Method / Path:** `PATCH /api/admin/jewellery/items/:id/restore`
+- **Authentication:** Protected (`Bearer <Admin JWT>`)
+- **Success Response (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Jewellery item restored successfully",
+  "data": {
+    "message": "Jewellery item restored successfully",
+    "item": {
+      "_id": "6742d810b02891f7c81a4005",
+      "isDeleted": false,
+      "deletedAt": null
+    }
+  }
+}
+```
+
+
+
 
 
 

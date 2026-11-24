@@ -15,6 +15,8 @@ const adminSubscriptionRoutes = require('./subscription/adminSubscription.routes
 const clusterFeatureRoutes = require('./clusterFeature/clusterFeature.routes');
 const garmentAiRoutes = require('./garmentAi/adminGarmentAi.routes');
 const terminalRoutes = require('./terminal/terminal.routes');
+const jewelleryCategoryRoutes = require('../jewellery/category/jewelleryCategory.routes');
+const adminJewelleryRoutes = require('./jewellery/adminJewellery.routes');
 
 // ── Vendor & Order Management ──────────────────────────────
 const adminVendorRoutes = require('./vendor/adminVendor.routes');
@@ -39,6 +41,8 @@ router.use('/subscription', adminSubscriptionRoutes);
 router.use('/cluster-features', clusterFeatureRoutes);
 router.use('/garment-ai', garmentAiRoutes);
 router.use('/terminal', terminalRoutes);
+router.use('/jewellery-categories', jewelleryCategoryRoutes);
+router.use('/jewellery', adminJewelleryRoutes);
 
 // ── Business Management Routes ──────────────────────────────
 router.use('/vendors', adminVendorRoutes);
