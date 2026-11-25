@@ -1,14 +1,40 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+// Helper to sanitize MongoDB URIs (remove accidental double slashes after host)
+const cleanMongoUri = (uri) => {
+  if (!uri || typeof uri !== 'string') return '';
+  return uri.trim().replace(/^(mongodb(?:\+srv)?:\/\/[^\/]+)\/\/+/i, '$1/');
+};
+
+const nodeEnv = (process.env.NODE_ENV || 'development').trim().toLowerCase();
+const isProd = nodeEnv === 'production';
+
+// Production URIs (supports MONGODB_URI_PRODUCTION, MONGODB_PROD_URI)
+const prodMongoUri = cleanMongoUri(process.env.MONGODB_URI_PRODUCTION || process.env.MONGODB_PROD_URI);
+
+// Development URIs (supports MONGODB_URI_DEVELOPMENT, MONGODB_DEV_URI)
+const devMongoUri = cleanMongoUri(process.env.MONGODB_URI_DEVELOPMENT || process.env.MONGODB_DEV_URI);
+
+// Fallback / legacy URI
+const fallbackMongoUri = cleanMongoUri(process.env.MONGODB_URI);
+
+// Select active URI based on NODE_ENV
+const activeMongoUri = isProd
+  ? (prodMongoUri || fallbackMongoUri)
+  : (devMongoUri || fallbackMongoUri || 'mongodb://127.0.0.1:27017/arangtik');
+
+// Keep process.env.MONGODB_URI synced with the active environment's URI
+process.env.MONGODB_URI = activeMongoUri;
+
 module.exports = {
   PORT: process.env.PORT || 5000,
   NODE_ENV: process.env.NODE_ENV || 'development',
+  IS_PRODUCTION: isProd,
   BASE_URL: process.env.BASE_URL || 'https://api.arangtik.com',
-  MONGODB_URI: (process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/arangtik').replace(
-    /^(mongodb(?:\+srv)?:\/\/[^\/]+)\/\/+/i,
-    '$1/'
-  ),
+  MONGODB_URI: activeMongoUri,
+  MONGODB_URI_DEVELOPMENT: devMongoUri,
+  MONGODB_URI_PRODUCTION: prodMongoUri,
   JWT_SECRET: process.env.JWT_SECRET || 'arangtik_super_secret_jwt_key_2026',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',

@@ -22,7 +22,19 @@ const frequentConnectRoutes = require('../modules/frequentConnect/frequentConnec
 
 // Health Check
 router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Arangtik Backend API is healthy' });
+  const mongoose = require('mongoose');
+  const { NODE_ENV } = require('../config/env.config');
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+
+  res.status(200).json({
+    status: 'ok',
+    message: 'Arangtik Backend API is healthy',
+    environment: NODE_ENV,
+    database: {
+      status: dbStatus,
+      name: mongoose.connection.name || 'unknown',
+    },
+  });
 });
 
 // Upload Routes (Single & Multiple Image Storage)
