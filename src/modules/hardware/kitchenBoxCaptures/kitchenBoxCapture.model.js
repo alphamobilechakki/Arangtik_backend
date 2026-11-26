@@ -29,6 +29,12 @@ const kitchenBoxCaptureSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+
+    event: {
+      type: String,
+      enum: ['INITIAL', 'PERIODIC', 'ADDED', 'REMOVED', 'MANUAL'],
+      index: true,
+    },
   },
   {
     timestamps: true,

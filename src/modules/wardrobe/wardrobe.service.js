@@ -83,7 +83,6 @@ const createWardrobe = async (userId, data, files = null) => {
     ownerName: ownerName || '',
     coverImage: coverImage || '',
     ownerFaceImage: ownerFaceImage || '',
-    referenceFace,
     isDefault: !!isDefault,
     isActive: true,
     isDeleted: false,

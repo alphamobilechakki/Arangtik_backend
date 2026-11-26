@@ -41,12 +41,20 @@ const resolveHub = async (identifier) => {
   throw new ApiError(404, `Hub not found for identifier: ${identifier}`);
 };
 
+const ALLOWED_CAPTURE_EVENTS = [
+  'INITIAL',
+  'PERIODIC',
+  'ADDED',
+  'REMOVED',
+  'MANUAL',
+];
+
 /**
- * Record a new sensor snapshot (kitchenBoxId, hubId, image, tof, dimensions)
+ * Record a new sensor snapshot (kitchenBoxId, hubId, image, tof, dimensions, event)
  * Automatically syncs latest readings to the parent KitchenBox.
  */
 const createCapture = async (data = {}) => {
-  const { kitchenBoxId, hubId, image, tof, dimensions } = data;
+  const { kitchenBoxId, hubId, image, tof, dimensions, event } = data;
 
   if (!kitchenBoxId) {
     throw new ApiError(400, 'kitchenBoxId is required (ObjectId or MAC address)');
@@ -76,6 +84,18 @@ const createCapture = async (data = {}) => {
     }
   }
 
+  // 3b. Validate capture event type if provided
+  let normalizedEvent;
+  if (event !== undefined && event !== null && String(event).trim() !== '') {
+    normalizedEvent = String(event).trim().toUpperCase();
+    if (!ALLOWED_CAPTURE_EVENTS.includes(normalizedEvent)) {
+      throw new ApiError(
+        400,
+        `Invalid event value. Must be one of: ${ALLOWED_CAPTURE_EVENTS.join(', ')}`
+      );
+    }
+  }
+
   // 4. Save and resolve image URL (convert base64 if needed)
   let finalImageUrl = image ? String(image).trim() : null;
   if (
@@ -95,13 +115,14 @@ const createCapture = async (data = {}) => {
     image: finalImageUrl,
     tof: parsedTof,
     dimensions: dimensions ? String(dimensions).trim() : box.dimensions || null,
+    ...(normalizedEvent ? { event: normalizedEvent } : {}),
   });
 
   await capture.save();
 
   // 6. Automatically sync latest readings to parent KitchenBox container
   const boxUpdates = {};
-  if (parsedTof !== null) boxUpdates.tof = parsedTof;
+  if (parsedTof !== null) boxUpdates.empty_tof = parsedTof;
   if (finalImageUrl) boxUpdates.image = finalImageUrl;
   if (dimensions) boxUpdates.dimensions = String(dimensions).trim();
 

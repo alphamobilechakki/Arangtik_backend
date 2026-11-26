@@ -54,13 +54,23 @@ class KitchenBoxCaptureService {
       withImage,
       withTof,
       activeBoxes,
+      eventCounts,
     ] = await Promise.all([
       KitchenBoxCapture.countDocuments(),
       KitchenBoxCapture.countDocuments({ createdAt: { $gte: last24h } }),
       KitchenBoxCapture.countDocuments({ image: { $ne: null } }),
       KitchenBoxCapture.countDocuments({ tof: { $ne: null } }),
       KitchenBoxCapture.distinct('kitchenBoxId'),
+      KitchenBoxCapture.aggregate([
+        { $match: { event: { $ne: null } } },
+        { $group: { _id: '$event', count: { $sum: 1 } } },
+      ]),
     ]);
+
+    const byEvent = eventCounts.reduce((acc, item) => {
+      if (item._id) acc[item._id] = item.count;
+      return acc;
+    }, {});
 
     return {
       total: totalCaptures,
@@ -68,6 +78,7 @@ class KitchenBoxCaptureService {
       withImage,
       withTof,
       activeContainersCount: activeBoxes.length,
+      byEvent,
     };
   }
 
@@ -82,6 +93,7 @@ class KitchenBoxCaptureService {
       endDate,
       hasImage,
       hasTof,
+      event,
       page = 1,
       limit = 20,
       sortBy = 'createdAt',
@@ -120,6 +132,10 @@ class KitchenBoxCaptureService {
 
     if (hasTof === 'true' || hasTof === true) {
       query.tof = { $ne: null };
+    }
+
+    if (event && event !== 'ALL') {
+      query.event = String(event).trim().toUpperCase();
     }
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);

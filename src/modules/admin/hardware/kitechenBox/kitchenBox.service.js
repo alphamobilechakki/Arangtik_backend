@@ -304,7 +304,7 @@ class KitchenBoxService {
       KitchenBox.countDocuments({ status: 'provisioned' }),
       KitchenBox.countDocuments({ status: 'maintenance' }),
       KitchenBox.countDocuments({ status: 'deactivated' }),
-      KitchenBox.countDocuments({ tof: { $ne: null } }),
+      KitchenBox.countDocuments({ empty_tof: { $ne: null } }),
     ]);
 
     return {
@@ -321,7 +321,7 @@ class KitchenBoxService {
    * Admin Create KitchenBox with all details
    */
   async createKitchenBox(data = {}, req = null) {
-    const { name, mac_id, hub_mac_id, userId, item_name, dimensions, tof, image, status } = data;
+    const { name, mac_id, hub_mac_id, userId, item_name, dimensions, empty_tof, tof, image, status } = data;
 
     if (!mac_id || !isValidMac(mac_id)) {
       throw new ApiError(400, 'A valid MAC ID is required (e.g. 24:0A:C4:11:00:55)');
@@ -362,10 +362,11 @@ class KitchenBoxService {
       boxStatus = status;
     }
 
-    let parsedTof = null;
-    if (tof !== undefined && tof !== null && tof !== '') {
-      parsedTof = parseFloat(tof);
-      if (isNaN(parsedTof)) throw new ApiError(400, 'tof must be a valid number or null');
+    const rawEmptyTof = empty_tof !== undefined ? empty_tof : tof;
+    let parsedEmptyTof = null;
+    if (rawEmptyTof !== undefined && rawEmptyTof !== null && rawEmptyTof !== '') {
+      parsedEmptyTof = parseFloat(rawEmptyTof);
+      if (isNaN(parsedEmptyTof)) throw new ApiError(400, 'empty_tof must be a valid number or null');
     }
 
     // Auto-generate QR code for KitchenBox
@@ -384,7 +385,7 @@ class KitchenBoxService {
       userId: resolvedUserId,
       item_name: item_name ? String(item_name).trim() : null,
       dimensions: dimensions ? String(dimensions).trim() : null,
-      tof: parsedTof,
+      empty_tof: parsedEmptyTof,
       image: image ? String(image).trim() : null,
       qr_code: qrCode,
       status: boxStatus,
@@ -505,7 +506,7 @@ class KitchenBoxService {
   }
 
   /**
-   * Admin update KitchenBox details (Supports name, mac_id, hub_mac_id, userId, item_name, dimensions, tof, status, image)
+   * Admin update KitchenBox details (Supports name, mac_id, hub_mac_id, userId, item_name, dimensions, empty_tof, status, image)
    */
   async updateKitchenBox(id, updateData = {}, req = null) {
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -517,7 +518,7 @@ class KitchenBoxService {
       throw new ApiError(404, 'KitchenBox not found');
     }
 
-    const { name, mac_id, hub_mac_id, userId, item_name, dimensions, tof, status, image } = updateData;
+    const { name, mac_id, hub_mac_id, userId, item_name, dimensions, empty_tof, tof, status, image } = updateData;
 
     // 1. MAC ID Change with format & uniqueness check
     if (mac_id !== undefined) {
@@ -585,11 +586,12 @@ class KitchenBoxService {
     if (dimensions !== undefined) box.dimensions = dimensions ? String(dimensions).trim() : null;
     if (image !== undefined) box.image = image ? String(image).trim() : null;
 
-    // 6. ToF Sensor Reading
-    if (tof !== undefined) {
-      const val = tof === null || tof === '' ? null : parseFloat(tof);
-      if (val !== null && isNaN(val)) throw new ApiError(400, 'tof must be a valid number or null');
-      box.tof = val;
+    // 6. Empty ToF Sensor Reading
+    const rawEmptyTof = empty_tof !== undefined ? empty_tof : tof;
+    if (rawEmptyTof !== undefined) {
+      const val = rawEmptyTof === null || rawEmptyTof === '' ? null : parseFloat(rawEmptyTof);
+      if (val !== null && isNaN(val)) throw new ApiError(400, 'empty_tof must be a valid number or null');
+      box.empty_tof = val;
     }
 
     // 7. Status update

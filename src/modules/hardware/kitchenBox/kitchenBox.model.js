@@ -51,8 +51,8 @@ const kitchenBoxSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Time-of-Flight sensor reading (mm) — updated by hub
-    tof: {
+    // Time-of-Flight sensor reading (mm) — empty tof
+    empty_tof: {
       type: Number,
       default: null,
     },

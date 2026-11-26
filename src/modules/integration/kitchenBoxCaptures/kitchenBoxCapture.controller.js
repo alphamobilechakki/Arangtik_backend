@@ -9,7 +9,7 @@ const { saveBase64Image } = require('../../../middlewares/upload.middleware');
  * POST /api/integration/captures
  */
 const createCapture = asyncHandler(async (req, res) => {
-  const { kitchenBoxId, hubId, image, tof, dimensions } = req.body;
+  const { kitchenBoxId, hubId, image, tof, dimensions, event } = req.body;
 
   if (!kitchenBoxId) {
     throw new ApiError(400, 'kitchenBoxId is required (ObjectId or MAC address)');
@@ -27,6 +27,7 @@ const createCapture = asyncHandler(async (req, res) => {
     image: savedImageUrl,
     tof,
     dimensions,
+    event,
   });
 
   return res
