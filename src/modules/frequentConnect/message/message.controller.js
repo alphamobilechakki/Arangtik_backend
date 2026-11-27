@@ -68,46 +68,9 @@ const sendVoiceMessage = asyncHandler(async (req, res) => {
   return ApiResponse.created(res, message, 'Voice message sent successfully');
 });
 
-/**
- * POST /api/fc/messages/:id/save – Bookmark / save message
- */
-const saveMessage = asyncHandler(async (req, res) => {
-  const result = await messageService.saveMessage(
-    req.user.id,
-    req.params.id,
-    req.body.note
-  );
-  return ApiResponse.success(res, result, 'Message saved successfully');
-});
-
-/**
- * DELETE /api/fc/messages/:id/save – Unsave / remove bookmark
- */
-const unsaveMessage = asyncHandler(async (req, res) => {
-  const result = await messageService.unsaveMessage(
-    req.user.id,
-    req.params.id
-  );
-  return ApiResponse.success(res, result, 'Message unsaved successfully');
-});
-
-/**
- * GET /api/fc/saved-messages or GET /api/fc/messages/saved – List all saved messages
- */
-const getSavedMessages = asyncHandler(async (req, res) => {
-  const result = await messageService.getSavedMessages(
-    req.user.id,
-    req.query
-  );
-  return ApiResponse.success(res, result, 'Saved messages retrieved successfully');
-});
-
 module.exports = {
   sendMessage,
   sendVoiceMessage,
   getMessages,
   updateStatus,
-  saveMessage,
-  unsaveMessage,
-  getSavedMessages,
 };

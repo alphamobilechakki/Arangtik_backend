@@ -29,8 +29,7 @@ router.get('/walkie/active', adminFCWalkieController.getActiveSessions);
 router.get('/walkie/history', adminFCWalkieController.getSessionHistory);
 router.get('/voice/logs', adminFCWalkieController.getVoiceLogs);
 
-// 5. Saved Messages, Auto-Delete Logs, Invitations & Audit Logs
-router.get('/saved-messages', adminFCAuditController.getSavedMessages);
+// 5. Auto-Delete Logs, Invitations & Audit Logs
 router.get('/auto-delete/logs', adminFCAuditController.getAutoDeleteLogs);
 router.get('/invitations', adminFCAuditController.getInvitations);
 router.get('/audit-logs', adminFCAuditController.getAuditLogs);

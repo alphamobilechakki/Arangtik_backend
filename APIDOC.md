@@ -5093,36 +5093,36 @@ User Reorders/Views Clusters ────► [GET/PUT /api/fc/clusters] ──�
 User Taps Cluster or Contact ────► [POST /api/fc/conversations/direct] ──► Loads Room & Active Participants
 ```
 
-##### 2. 15-Minute Auto-Delete & Bookmarking Lifecycle
+##### 2. 15-Minute Auto-Delete (Conversation-Level) Lifecycle
 ```
-Sender Posts Message ──► Recipient Views (Status: SEEN) ──► Sets seenAt Timestamp & autoDeleteAt = seenAt + 15m
-                               │
-               ┌───────────────┴───────────────┐
-               ▼                               ▼
-       User Saves Message?             User Does NOT Save?
-               │                               │
-       [POST /messages/:id/bookmark]           ▼
-               │                       Background Cron (every 60s)
-               ▼                               │
-     savedBy.push({userId, note})      autoDeleteAt <= Now?
-     Exempt from deletion                      │
-                                               ▼
-                                      isAutoDeleted = true;
-                                      Text scrubbed & audio file unlinked from disk
+User Enables Auto-Delete on Conversation ──► [PATCH /api/fc/conversations/:id/auto-delete] (autoDelete = true)
+                                                               │
+Sender Posts Message ──► Recipient Views (Status: SEEN) ───────┼──► Sets seenAt Timestamp on Recipient Status
+                                                               │
+                                                               ▼
+                                                    Background Cron (runs every 60s)
+                                                               │
+                                                    seenAt + 15m <= Now (All Recipients)?
+                                                               │
+                                                               ▼ YES
+                                                    Audio file unlinked from disk (if voice)
+                                                    Message document PERMANENTLY deleted from DB
+                                                    Broadcasts 'message-deleted' to room
 ```
 
 ##### 3. Walkie-Talkie Push-to-Talk (PTT) Half-Duplex Flow
 ```
-Client A (Presses PTT) ─────────► [Socket: walkie-request-floor] ──► Floor Available?
-                                                                           │
-                            ┌──────────────────────────────────────────────┴──────────────────────────┐
-                            ▼ YES                                                                     ▼ NO (Occupied)
-                     Grants Floor                                                             Emits 'walkie-floor-denied'
-             Broadcasts 'walkie-incoming'                                                     (Reason: FLOOR_BUSY)
-                            │
-Client A (Streams Audio) ───┼───► [Socket: walkie-audio-stream (Binary)] ───► Relays Audio Chunks to Room Participants
-                            │
-Client A (Releases PTT) ────┴───► [Socket: walkie-release-floor] ──────────► Broadcasts 'walkie-ended'
+Client A (Presses PTT) ─────────► [Socket: walkie-start] ──► Floor Available?
+                                                                 │
+                                  ┌──────────────────────────────┴──────────────────────────┐
+                                  ▼ YES                                                     ▼ NO (Occupied)
+                           Acquires Floor                                            Emits 'walkie-busy'
+                   Broadcasts 'walkie-incoming'                                      (code: FLOOR_BUSY)
+                                  │
+Client A (Streams Audio) ─────────┼───► [Socket: walkie-audio (Binary)] ───► Broadcasts 'walkie-audio-stream' to Room
+                                  │
+Client A (Releases PTT) ──────────┴───► [Socket: walkie-stop] ─────────────► Broadcasts 'walkie-ended'
+                                                                             (duration & reason: NORMAL/TIMEOUT/DISCONNECTED)
 ```
 
 ---
@@ -5152,14 +5152,12 @@ Client A (Releases PTT) ────┴───► [Socket: walkie-release-floo
 | `POST` | `/api/fc/conversations/direct` *(or `POST /`)* | Create or fetch a 1:1 direct conversation | Yes |
 | `GET` | `/api/fc/conversations` | List user conversations (direct & cluster rooms) | Yes |
 | `GET` | `/api/fc/conversations/:id` | Get details of a single conversation | Yes |
+| `PATCH` | `/api/fc/conversations/:id/auto-delete` | Toggle or set conversation-level 15-minute auto-delete | Yes |
 | `GET` | `/api/fc/conversations/:id/history` | Retrieve full paginated chat history | Yes |
 | `POST` | `/api/fc/conversations/:id/messages` | Send a text message | Yes |
 | `GET` | `/api/fc/conversations/:id/messages` | Retrieve conversation message stream | Yes |
 | `POST` | `/api/fc/conversations/:id/voice` | Upload and send an instant voice audio recording | Yes |
 | `PATCH` | `/api/fc/messages/:id/status` | Update message status (`DELIVERED`, `SEEN`, `PLAYED`) | Yes |
-| `POST` | `/api/fc/messages/:id/bookmark` *(or `/save`)* | Bookmark message to exempt from 15-min auto-delete | Yes |
-| `DELETE` | `/api/fc/messages/:id/bookmark` *(or `/save`)* | Remove bookmark | Yes |
-| `GET` | `/api/fc/messages/saved` *(or `/saved-messages`)* | List user's saved/bookmarked messages | Yes |
 | `GET` | `/api/fc/widget/clusters` | Lightweight cluster list with unread badges for mobile widget | Yes |
 | `GET` | `/api/fc/widget/recent` | Recent conversation tiles for home screen widget | Yes |
 | `GET` | `/api/fc/search/messages` | Full-text search across authorized messages | Yes |
@@ -5175,7 +5173,6 @@ Client A (Releases PTT) ────┴───► [Socket: walkie-release-floo
 | `GET` | `/api/admin/fc/members` | Cross-cluster member lookup with status & role filtering | Admin |
 | `GET` | `/api/admin/fc/conversations` | Channel and chat room surveillance feed | Admin |
 | `GET` | `/api/admin/fc/messages` | Message & voice audit logs with audio playback & scrub states | Admin |
-| `GET` | `/api/admin/fc/saved-messages` | Surveillance of messages exempted via bookmarks | Admin |
 | `GET` | `/api/admin/fc/auto-delete/logs` | 15-minute auto-deletion audit logs and pending countdowns | Admin |
 | `GET` | `/api/admin/fc/invitations` | Outgoing circle invitations and acceptance tracking | Admin |
 | `GET` | `/api/admin/fc/walkie/active` | Live Push-to-Talk active floor holders and sessions | Admin |
@@ -5634,7 +5631,56 @@ Fetches an existing 1:1 direct chat channel between the authenticated user and a
 
 ---
 
-#### 16.3.8 Send Text Message
+#### 16.3.8 Toggle Conversation-Level 15-Minute Auto-Delete
+Enables or disables the 15-minute message self-destruction feature for the entire conversation. By default, conversations have `autoDelete: false` (all chat history is permanently saved). When enabled, any message whose recipients have all seen it at least 15 minutes ago will be permanently deleted from the database and any associated audio file unlinked from disk. Messages bookmarked/saved by users are exempted.
+
+- **Method / Path:** `PATCH /api/fc/conversations/:id/auto-delete`
+- **Authentication:** Protected (`Bearer <JWT>`)
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "autoDelete": true
+}
+```
+*Note: If `autoDelete` is omitted from the body, the endpoint toggles the current boolean state.*
+
+- **Success Response — Enabled (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Conversation auto-delete enabled (messages delete 15m after seen)",
+  "data": {
+    "conversationId": "6735fa026ba477c7d42cfb82",
+    "autoDelete": true
+  }
+}
+```
+
+- **Success Response — Disabled (200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Conversation auto-delete disabled (chats will be saved)",
+  "data": {
+    "conversationId": "6735fa026ba477c7d42cfb82",
+    "autoDelete": false
+  }
+}
+```
+
+- **Error Responses:**
+  - `403 Forbidden`: `{ "success": false, "message": "You are not a participant in this conversation" }`
+  - `404 Not Found`: `{ "success": false, "message": "Conversation not found" }`
+
+- **Real-Time WebSocket Broadcast:**
+Emits `conversation-updated` to socket room `conversation:<id>` with payload `{ conversationId, autoDelete }`.
+
+---
+
+#### 16.3.9 Send Text Message
 Sends an instant text message to a conversation. Broadcasts `new-message` to the room via Socket.IO.
 
 - **Method / Path:** `POST /api/fc/conversations/:id/messages`
@@ -5746,96 +5792,6 @@ Updates read receipts. Marking `SEEN` activates the **15-minute auto-deletion ti
         "isSaved": false
       }
     ]
-  }
-}
-```
-
----
-
-#### 16.3.11 Bookmark / Save Message
-Embeds a bookmark record directly into `FCMessage.savedBy`. This exempts the message from being scrubbed by the 15-minute auto-deletion cron.
-
-- **Method / Path:** `POST /api/fc/messages/:id/bookmark` *(or `POST /api/fc/messages/:id/save`)*
-- **Authentication:** Protected (`Bearer <JWT>`)
-- **Request Body:**
-```json
-{
-  "note": "Important home gate access code"
-}
-```
-- **Success Response (200 OK):**
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Message saved successfully",
-  "data": {
-    "userId": "6ae31cca0c00fa1dfe7e3c92",
-    "messageId": "6735fc016ba477c7d42cfba0",
-    "conversationId": "6735fa026ba477c7d42cfb82",
-    "savedAt": "2026-11-14T10:25:00.000Z",
-    "note": "Important home gate access code"
-  }
-}
-```
-
----
-
-#### 16.3.12 Remove Bookmark / Unsave
-Removes the bookmark from `savedBy`, restoring standard auto-deletion eligibility.
-
-- **Method / Path:** `DELETE /api/fc/messages/:id/bookmark` *(or `DELETE /api/fc/messages/:id/save`)*
-- **Authentication:** Protected (`Bearer <JWT>`)
-- **Success Response (200 OK):**
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Message unsaved successfully",
-  "data": {
-    "unsaved": true,
-    "messageId": "6735fc016ba477c7d42cfba0"
-  }
-}
-```
-
----
-
-#### 16.3.13 List Saved Messages
-Returns all bookmarked messages for the authenticated user directly from `fc_messages` using index `{ 'savedBy.userId': 1 }`.
-
-- **Method / Path:** `GET /api/fc/messages/saved` *(or `GET /api/fc/saved-messages`)*
-- **Authentication:** Protected (`Bearer <JWT>`)
-- **Query Parameters:** `page` (default: 1), `limit` (default: 20)
-- **Success Response (200 OK):**
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Saved messages retrieved successfully",
-  "data": {
-    "savedMessages": [
-      {
-        "_id": "6735fc016ba477c7d42cfba0",
-        "messageId": {
-          "_id": "6735fc016ba477c7d42cfba0",
-          "content": "Hey! Gate code is 4920",
-          "type": "TEXT",
-          "senderId": {
-            "name": "John Doe",
-            "phone": "+919876543210"
-          }
-        },
-        "note": "Important home gate access code",
-        "savedAt": "2026-11-14T10:25:00.000Z"
-      }
-    ],
-    "pagination": {
-      "total": 1,
-      "page": 1,
-      "limit": 20,
-      "pages": 1
-    }
   }
 }
 ```
@@ -6004,13 +5960,116 @@ const socket = io('https://api.arangtik.com/fc', {
 | `user-typing` | Client $\rightarrow$ Server $\rightarrow$ Room | `{ conversationId, isTyping: boolean }` — Displays live typing animation. |
 | `message-status` | Bi-directional | `{ messageId, conversationId, status }` — Real-time delivery and read receipt broadcast. |
 | `check-presence` | Client $\rightarrow$ Server | `{ userIds: string[] }` — Queries active online socket status of contacts. |
-| `walkie-request-floor` | Client $\rightarrow$ Server | `{ conversationId }` — User requests microphone floor lease. |
-| `walkie-floor-granted` | Server $\rightarrow$ Client | `{ conversationId, floorExpiresAt }` — Confirms speaker has acquired exclusive floor. |
-| `walkie-floor-denied` | Server $\rightarrow$ Client | `{ conversationId, reason: "FLOOR_BUSY", currentSpeaker }` — Rejects mic request if occupied. |
-| `walkie-incoming` | Server $\rightarrow$ Room | `{ conversationId, speakerId, speakerName }` — Alerts listeners to open audio playback stream. |
-| `walkie-audio-stream` | Client $\rightarrow$ Server $\rightarrow$ Room | `{ conversationId, chunk: Buffer }` — Relays raw binary audio chunks live to room listeners. |
-| `walkie-release-floor` | Client $\rightarrow$ Server | `{ conversationId }` — Speaker releases microphone; broadcasts `walkie-ended`. |
-| `walkie-ended` | Server $\rightarrow$ Room | `{ conversationId }` — Closes incoming audio playback stream for listeners. |
+| `walkie-start` | Client $\rightarrow$ Server | `{ conversationId }` — Speaker presses PTT button to acquire floor. Returns ack callback. |
+| `walkie-incoming` | Server $\rightarrow$ Room | `{ conversationId, speakerId, speakerName, startedAt }` — Broadcasts that a speaker is speaking live. |
+| `walkie-busy` | Server $\rightarrow$ Client | `{ conversationId, currentSpeaker }` — Rejects PTT floor request when already occupied (Half-Duplex). |
+| `walkie-audio` | Client $\rightarrow$ Server | `{ conversationId, chunk: Buffer }` — Speaker streams raw binary audio chunks while holding PTT. |
+| `walkie-audio-stream` | Server $\rightarrow$ Room | `{ conversationId, speakerId, chunk: Buffer }` — Relays live audio stream to room listeners. |
+| `walkie-stop` | Client $\rightarrow$ Server | `{ conversationId }` — Speaker releases PTT button to release floor. Returns ack callback. |
+| `walkie-ended` | Server $\rightarrow$ Room | `{ conversationId, speakerId, duration, reason }` — Broadcasts talk ended (`NORMAL`, `TIMEOUT`, or `DISCONNECTED`). |
+| `walkie-status` | Client $\rightarrow$ Server | `{ conversationId }` — Queries active floor holder status. Returns ack callback. |
+
+#### 16.5.1 Walkie-Talkie Push-to-Talk (PTT) Request-Response Cycles
+
+##### 1. Acquire Floor (`walkie-start`)
+Client emits when user presses and holds the on-screen PTT microphone button.
+- **Client Emit:**
+```javascript
+socket.emit('walkie-start', { conversationId: '6735fa026ba477c7d42cfb82' }, (response) => {
+  if (response.success) {
+    console.log('Floor acquired, started at:', response.startedAt);
+  } else {
+    console.warn('Cannot speak:', response.message);
+  }
+});
+```
+- **Server Response (Ack Callback):**
+  - **Success:** `{ "success": true, "startedAt": "2026-11-27T10:15:00.000Z" }`
+  - **Error/Busy:** `{ "success": false, "code": "FLOOR_BUSY", "message": "Aryan Sharma is currently speaking" }`
+- **Room Broadcast (`walkie-incoming`):**
+```json
+{
+  "conversationId": "6735fa026ba477c7d42cfb82",
+  "speakerId": "6ae31cca0c00fa1dfe7e3c99",
+  "speakerName": "Aryan Sharma",
+  "startedAt": "2026-11-27T10:15:00.000Z"
+}
+```
+- **FCM Push Notification:** Dispatches high-priority alert `FC_WALKIE_TALKIE_REQUEST` to offline participants.
+
+##### 2. Floor Occupied Rejection (`walkie-busy`)
+Emitted directly to a client if they attempt to speak while another participant holds the floor:
+```json
+{
+  "conversationId": "6735fa026ba477c7d42cfb82",
+  "currentSpeaker": {
+    "speakerId": "6ae31cca0c00fa1dfe7e3c99",
+    "speakerName": "Aryan Sharma"
+  }
+}
+```
+
+##### 3. Stream Audio Chunks (`walkie-audio`)
+Client continuously streams audio chunks while holding the PTT button:
+- **Client Emit:**
+```javascript
+socket.emit('walkie-audio', {
+  conversationId: '6735fa026ba477c7d42cfb82',
+  chunk: audioBuffer // Binary Buffer or ArrayBuffer
+});
+```
+- **Server Relay (`walkie-audio-stream`):**
+```javascript
+socket.on('walkie-audio-stream', ({ conversationId, speakerId, chunk }) => {
+  // Feed raw chunk into live audio playback pipeline
+});
+```
+
+##### 4. Release Floor (`walkie-stop`)
+Client emits when user releases the PTT button:
+- **Client Emit:**
+```javascript
+socket.emit('walkie-stop', { conversationId: '6735fa026ba477c7d42cfb82' }, (response) => {
+  console.log('Spoke for', response.duration, 'seconds');
+});
+```
+- **Server Response (Ack Callback):**
+```json
+{
+  "success": true,
+  "duration": 8
+}
+```
+- **Room Broadcast (`walkie-ended`):**
+```json
+{
+  "conversationId": "6735fa026ba477c7d42cfb82",
+  "speakerId": "6ae31cca0c00fa1dfe7e3c99",
+  "duration": 8,
+  "reason": "NORMAL"
+}
+```
+*Note: `reason` can be `NORMAL` (user released button), `TIMEOUT` (server-side 60s max speak cutoff), or `DISCONNECTED` (socket abruptly dropped).*
+
+##### 5. Check Floor Status (`walkie-status`)
+- **Client Emit:**
+```javascript
+socket.emit('walkie-status', { conversationId: '6735fa026ba477c7d42cfb82' }, (status) => {
+  console.log('Is Busy:', status.isBusy, 'Speaker:', status.speaker);
+});
+```
+- **Server Response (Ack Callback):**
+```json
+{
+  "success": true,
+  "isBusy": true,
+  "speaker": {
+    "speakerId": "6ae31cca0c00fa1dfe7e3c99",
+    "speakerName": "Aryan Sharma",
+    "startedAt": "2026-11-27T10:15:00.000Z"
+  }
+}
+```
 
 ---
 

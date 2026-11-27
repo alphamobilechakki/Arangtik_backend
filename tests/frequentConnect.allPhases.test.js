@@ -272,9 +272,12 @@ async function runTests() {
       .send({ status: 'SEEN' });
     assert(markSeenRes.status === 200 && markSeenRes.body.data.status === 'SEEN', 'User B marks message as SEEN');
 
-    // Verify autoDeleteAt timestamp was scheduled
+    // Verify SEEN status set seenAt timestamp for recipient
     const dbMsg = await Message.findById(textMessageId);
-    assert(dbMsg.autoDeleteAt !== null, 'SEEN status triggered autoDeleteAt timestamp calculation');
+    const recipientEntry = dbMsg.recipientStatuses.find(
+      (rs) => rs.userId.toString() === userB._id.toString()
+    );
+    assert(recipientEntry && recipientEntry.seenAt !== null, 'SEEN status set seenAt timestamp for recipient');
 
     // =========================================================================
     // PHASE 3: REAL-TIME SOCKET.IO
@@ -414,24 +417,21 @@ async function runTests() {
     assert(endData.speakerId === userA._id.toString(), 'User A releases PTT and listeners receive "walkie-ended"');
 
     // =========================================================================
-    // PHASE 6: 15-MINUTE AUTO-DELETE & SAVED MESSAGES
+    // PHASE 6: 15-MINUTE AUTO-DELETE (CONVERSATION LEVEL)
     // =========================================================================
-    console.log('\n--- Phase 6: Auto-Delete & Saved Messages ---');
+    console.log('\n--- Phase 6: Conversation-Level 15-Minute Auto-Delete ---');
 
-    // 6.1 Bookmark/Save Message
-    const saveRes = await request(app)
-      .post(`/api/fc/messages/${textMessageId}/save`)
-      .set('Authorization', `Bearer ${tokenB}`)
-      .send({ note: 'Important message' });
-    assert(saveRes.status === 200 && saveRes.body.data.messageId, 'User B saves/bookmarks message');
+    // 6.1 Enable conversation-level 15-minute auto-delete
+    const enableAutoDeleteRes = await request(app)
+      .patch(`/api/fc/conversations/${directConvId}/auto-delete`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ autoDelete: true });
+    assert(
+      enableAutoDeleteRes.status === 200 && enableAutoDeleteRes.body.data.autoDelete === true,
+      'Conversation-level 15-minute auto-delete enabled'
+    );
 
-    // 6.2 List Saved Messages
-    const getSavedRes = await request(app)
-      .get('/api/fc/saved-messages')
-      .set('Authorization', `Bearer ${tokenB}`);
-    assert(getSavedRes.status === 200 && getSavedRes.body.data.savedMessages.length >= 1, 'Saved messages listed successfully');
-
-    // 6.3 Test Auto-Delete Cron: Force message timestamp to 20 minutes ago
+    // 6.2 Test Auto-Delete Cron: Force message timestamp to 20 minutes ago
     const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
     await Message.findByIdAndUpdate(voiceMessageId, {
       'recipientStatuses.$[].seenAt': twentyMinsAgo,
@@ -440,10 +440,21 @@ async function runTests() {
     // Run auto-delete cycle
     await runAutoDeleteCycle();
 
+    // Verify voice message document is PERMANENTLY deleted from database
     const voiceMsgAfterCron = await Message.findById(voiceMessageId);
     assert(
-      voiceMsgAfterCron.isAutoDeleted === true && voiceMsgAfterCron.content === '',
-      '15-minute auto-delete cycle automatically scrubbed expired message and cleared voice file'
+      voiceMsgAfterCron === null,
+      '15-minute auto-delete cycle permanently deleted expired message document from database'
+    );
+
+    // 6.3 Disable conversation-level auto-delete
+    const disableAutoDeleteRes = await request(app)
+      .patch(`/api/fc/conversations/${directConvId}/auto-delete`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ autoDelete: false });
+    assert(
+      disableAutoDeleteRes.status === 200 && disableAutoDeleteRes.body.data.autoDelete === false,
+      'Conversation-level auto-delete successfully disabled'
     );
 
     // =========================================================================

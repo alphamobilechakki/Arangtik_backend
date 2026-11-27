@@ -123,6 +123,34 @@ class ConversationService {
 
     await conversation.save();
 
+    // Broadcast real-time update to conversation participants via Socket.IO
+    try {
+      const { getIO } = require('../../../config/socket.config');
+      const io = getIO();
+      io.of('/fc').to(`conversation:${conversationId}`).emit('conversation-updated', {
+        conversationId: conversation._id,
+        autoDelete: conversation.autoDelete,
+      });
+    } catch (wsErr) {
+      // Non-fatal if socket is not initialized
+    }
+
+    // Log audit event
+    try {
+      const fcAuditLogService = require('../audit/fcAuditLog.service');
+      fcAuditLogService.logEvent({
+        eventCategory: 'AUTO_DELETE',
+        action: 'AUTO_DELETE_SCHEDULED',
+        actorId: userId,
+        conversationId: conversation._id,
+        targetType: 'CONVERSATION',
+        targetId: conversation._id,
+        metadata: { autoDelete: conversation.autoDelete },
+      });
+    } catch (auditErr) {
+      // Non-fatal
+    }
+
     return {
       conversationId: conversation._id,
       autoDelete: conversation.autoDelete,

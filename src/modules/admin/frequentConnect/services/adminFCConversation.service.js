@@ -125,10 +125,6 @@ class AdminFCConversationService {
       filter.conversationId = query.conversationId;
     }
 
-    if (query.isAutoDeleted !== undefined) {
-      filter.isAutoDeleted = query.isAutoDeleted === 'true';
-    }
-
     if (query.startDate || query.endDate) {
       filter.createdAt = {};
       if (query.startDate) filter.createdAt.$gte = new Date(query.startDate);
@@ -141,8 +137,7 @@ class AdminFCConversationService {
         .skip(skip)
         .limit(limit)
         .populate('senderId', 'name phone profileImage')
-        .populate('savedBy.userId', 'name phone profileImage')
-        .populate('recipientStatuses.userId', 'name phone profileImage')
+                .populate('recipientStatuses.userId', 'name phone profileImage')
         .populate({
           path: 'conversationId',
           select: 'type clusterId',

@@ -2480,6 +2480,57 @@ paths:
                     example: Operation completed successfully
                   data:
                     $ref: "#/components/schemas/FCConversation"
+  "/fc/conversations/{id}/auto-delete":
+    patch:
+      tags:
+        - "Frequent Connect (Clusters & Messaging)"
+      summary: Toggle or Set 15-Minute Auto-Delete on Conversation
+      description: Enables or disables the 15-minute message self-destruction feature for the conversation. When enabled, messages seen by all recipients past 15 minutes are permanently deleted and audio files removed from disk.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation ID
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                autoDelete:
+                  type: boolean
+                  description: Optional explicit boolean flag. If omitted, toggles current state.
+                  example: true
+      responses:
+        200:
+          description: Auto-delete setting updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Conversation auto-delete enabled (messages delete 15m after seen)
+                  data:
+                    type: object
+                    properties:
+                      conversationId:
+                        type: string
+                        example: 6735fa026ba477c7d42cfb82
+                      autoDelete:
+                        type: boolean
+                        example: true
   "/fc/conversations/{id}/messages":
     post:
       tags:
@@ -2554,97 +2605,6 @@ paths:
           in: query
           schema:
             type: string
-      responses:
-        200:
-          description: Successful operation
-          content:
-            "application/json":
-              schema:
-                type: object
-                properties:
-                  statusCode:
-                    type: integer
-                    example: 200
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: Operation completed successfully
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/FCMessage"
-  "/fc/messages/{id}/bookmark":
-    post:
-      tags:
-        - "Frequent Connect (Clusters & Messaging)"
-      summary: "Bookmark Message (Exempt from 15-Minute Auto-Delete)"
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: Message bookmarked successfully
-          content:
-            "application/json":
-              schema:
-                type: object
-                properties:
-                  statusCode:
-                    type: integer
-                    example: 200
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: Operation completed successfully
-                  data:
-                    type: object
-    delete:
-      tags:
-        - "Frequent Connect (Clusters & Messaging)"
-      summary: Remove Message Bookmark
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: Bookmark removed successfully
-          content:
-            "application/json":
-              schema:
-                type: object
-                properties:
-                  statusCode:
-                    type: integer
-                    example: 200
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: Operation completed successfully
-                  data:
-                    type: object
-  "/fc/saved-messages":
-    get:
-      tags:
-        - "Frequent Connect (Clusters & Messaging)"
-      summary: "Get All User Saved / Bookmarked Messages"
-      security:
-        - BearerAuth: []
       responses:
         200:
           description: Successful operation

@@ -2,6 +2,7 @@ const Cluster = require('../../../frequentConnect/cluster/cluster.model');
 const Conversation = require('../../../frequentConnect/conversation/conversation.model');
 const Message = require('../../../frequentConnect/message/message.model');
 const WalkieTalkieSession = require('../../../frequentConnect/walkieTalkie/walkieTalkie.model');
+const FCAuditLog = require('../../../frequentConnect/audit/fcAuditLog.model');
 const walkieTalkieService = require('../../../frequentConnect/walkieTalkie/walkieTalkie.service');
 
 class AdminFCOverviewService {
@@ -18,7 +19,6 @@ class AdminFCOverviewService {
       membersByStatusAgg,
       totalMessages,
       messagesByTypeAgg,
-      totalSavedMessages,
       totalAutoDeletedMessages,
       totalConversations,
       activeConversations24h,
@@ -33,8 +33,7 @@ class AdminFCOverviewService {
       ]),
       Message.countDocuments(),
       Message.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
-      Message.countDocuments({ 'savedBy.0': { $exists: true } }),
-      Message.countDocuments({ isAutoDeleted: true }),
+      FCAuditLog.countDocuments({ eventCategory: 'AUTO_DELETE', action: 'AUTO_DELETE_SCRUBBED' }),
       Conversation.countDocuments(),
       Conversation.countDocuments({ updatedAt: { $gte: twentyFourHoursAgo } }),
       WalkieTalkieSession.countDocuments(),
@@ -99,7 +98,6 @@ class AdminFCOverviewService {
         text: messageTypes.TEXT,
         voice: messageTypes.VOICE,
         walkieTalkie: messageTypes.WALKIE_TALKIE,
-        saved: totalSavedMessages,
         autoDeleted: totalAutoDeletedMessages,
       },
       conversations: {

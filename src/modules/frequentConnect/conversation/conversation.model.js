@@ -47,7 +47,7 @@ const conversationSchema = new mongoose.Schema(
     },
     autoDelete: {
       type: Boolean,
-      default: false,
+      default: true,
       index: true,
     },
   },

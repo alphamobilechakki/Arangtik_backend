@@ -92,25 +92,19 @@ async function testConsolidatedAndAdmin() {
   check(msgRes.status === 201, 'POST /api/fc/conversations/:id/messages returns 201');
   message = msgRes.body.data;
 
-  // 4. Test Bookmark API: POST /api/fc/messages/:id/bookmark
-  const bookmarkRes = await request(app)
-    .post(`/api/fc/messages/${message._id}/bookmark`)
-    .set('Authorization', `Bearer ${tokenB}`)
-    .send({ note: 'Urgent task bookmark' });
-  check(bookmarkRes.status === 200, 'POST /api/fc/messages/:id/bookmark saves note');
+  // 4. Test Conversation Auto-Delete Toggle: PATCH /api/fc/conversations/:id/auto-delete
+  const toggleAutoDelRes = await request(app)
+    .patch(`/api/fc/conversations/${conversation._id}/auto-delete`)
+    .set('Authorization', `Bearer ${tokenA}`)
+    .send({ autoDelete: true });
+  check(toggleAutoDelRes.status === 200 && toggleAutoDelRes.body.data.autoDelete === true, 'PATCH /api/fc/conversations/:id/auto-delete enables auto-delete');
 
-  // 5. Test Saved Messages Listing: GET /api/fc/messages/saved
-  const getSavedRes = await request(app)
-    .get('/api/fc/messages/saved')
-    .set('Authorization', `Bearer ${tokenB}`);
-  check(getSavedRes.status === 200, 'GET /api/fc/messages/saved returns 200');
-  check(getSavedRes.body.data.savedMessages.length >= 1, 'Saved messages array populated from FCMessage.savedBy');
-
-  // 6. Test Unbookmark API: DELETE /api/fc/messages/:id/bookmark
-  const unbookmarkRes = await request(app)
-    .delete(`/api/fc/messages/${message._id}/bookmark`)
-    .set('Authorization', `Bearer ${tokenB}`);
-  check(unbookmarkRes.status === 200, 'DELETE /api/fc/messages/:id/bookmark removes note');
+  // 5. Test Disable Conversation Auto-Delete: PATCH /api/fc/conversations/:id/auto-delete
+  const disableAutoDelRes = await request(app)
+    .patch(`/api/fc/conversations/${conversation._id}/auto-delete`)
+    .set('Authorization', `Bearer ${tokenA}`)
+    .send({ autoDelete: false });
+  check(disableAutoDelRes.status === 200 && disableAutoDelRes.body.data.autoDelete === false, 'PATCH /api/fc/conversations/:id/auto-delete disables auto-delete');
 
   // 7. Test Admin Overview: GET /api/admin/fc/overview
   const adminOverviewRes = await request(app)
@@ -150,13 +144,7 @@ async function testConsolidatedAndAdmin() {
     .set('Authorization', `Bearer ${adminToken}`);
   check(adminMsgsRes.status === 200, 'GET /api/admin/fc/messages returns 200');
 
-  // 13. Test Admin Saved Messages: GET /api/admin/fc/saved-messages
-  const adminSavedRes = await request(app)
-    .get('/api/admin/fc/saved-messages')
-    .set('Authorization', `Bearer ${adminToken}`);
-  check(adminSavedRes.status === 200, 'GET /api/admin/fc/saved-messages returns 200');
-
-  // 14. Test Admin Auto Delete Logs: GET /api/admin/fc/auto-delete/logs
+  // 13. Test Admin Auto Delete Logs: GET /api/admin/fc/auto-delete/logs
   const adminAutoDeleteRes = await request(app)
     .get('/api/admin/fc/auto-delete/logs')
     .set('Authorization', `Bearer ${adminToken}`);

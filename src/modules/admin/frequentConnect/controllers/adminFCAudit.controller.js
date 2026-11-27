@@ -1,60 +1,11 @@
 const mongoose = require('mongoose');
 const Message = require('../../../frequentConnect/message/message.model');
 const Cluster = require('../../../frequentConnect/cluster/cluster.model');
+const Conversation = require('../../../frequentConnect/conversation/conversation.model');
+const FCAuditLog = require('../../../frequentConnect/audit/fcAuditLog.model');
 const fcAuditLogService = require('../../../frequentConnect/audit/fcAuditLog.service');
 const asyncHandler = require('../../../../utils/asyncHandler');
 const ApiResponse = require('../../../../utils/apiResponse');
-
-/**
- * GET /api/admin/fc/saved-messages – Saved message logs
- */
-const getSavedMessages = asyncHandler(async (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-  const skip = (page - 1) * limit;
-
-  const filter = {
-    'savedBy.0': { $exists: true },
-  };
-  if (req.query.userId) filter['savedBy.userId'] = req.query.userId;
-  if (req.query.conversationId) filter.conversationId = req.query.conversationId;
-
-  const [messages, total] = await Promise.all([
-    Message.find(filter)
-      .sort({ 'savedBy.savedAt': -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('senderId', 'name phone')
-      .populate('savedBy.userId', 'name phone profileImage')
-      .populate({
-        path: 'conversationId',
-        select: 'type clusterId',
-        populate: { path: 'clusterId', select: 'name icon' },
-      })
-      .lean(),
-    Message.countDocuments(filter),
-  ]);
-
-  const savedMessages = messages.flatMap((m) =>
-    (m.savedBy || []).map((s) => ({
-      _id: m._id,
-      messageId: m,
-      userId: s.userId,
-      conversationId: m.conversationId,
-      note: s.note,
-      savedAt: s.savedAt,
-    }))
-  );
-
-  return ApiResponse.success(
-    res,
-    {
-      savedMessages,
-      pagination: { total, page, limit, pages: Math.ceil(total / limit) || 1 },
-    },
-    'Saved messages logs retrieved successfully'
-  );
-});
 
 /**
  * GET /api/admin/fc/auto-delete/logs – Auto-delete logs & scheduled destructions
@@ -64,34 +15,30 @@ const getAutoDeleteLogs = asyncHandler(async (req, res) => {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
   const skip = (page - 1) * limit;
 
-  const filter = {
-    $or: [{ isAutoDeleted: true }, { autoDeleteAt: { $ne: null } }],
-  };
+  const filter = { eventCategory: 'AUTO_DELETE' };
+  if (req.query.conversationId) filter.conversationId = req.query.conversationId;
 
-  if (req.query.isAutoDeleted !== undefined) {
-    filter.isAutoDeleted = req.query.isAutoDeleted === 'true';
-  }
-
-  const [messages, total] = await Promise.all([
-    Message.find(filter)
-      .sort({ autoDeleteAt: -1, updatedAt: -1 })
+  const [logs, total, activeAutoDeleteConvs] = await Promise.all([
+    FCAuditLog.find(filter)
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('senderId', 'name phone')
-      .populate('recipientStatuses.userId', 'name phone')
+      .populate('actorId', 'name phone')
       .populate({
         path: 'conversationId',
-        select: 'type clusterId',
+        select: 'type clusterId autoDelete',
         populate: { path: 'clusterId', select: 'name icon' },
       })
       .lean(),
-    Message.countDocuments(filter),
+    FCAuditLog.countDocuments(filter),
+    Conversation.countDocuments({ autoDelete: true }),
   ]);
 
   return ApiResponse.success(
     res,
     {
-      messages,
+      logs,
+      activeAutoDeleteConversations: activeAutoDeleteConvs,
       pagination: { total, page, limit, pages: Math.ceil(total / limit) || 1 },
     },
     'Auto-delete logs retrieved successfully'
@@ -166,7 +113,6 @@ const getAuditLogs = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  getSavedMessages,
   getAutoDeleteLogs,
   getInvitations,
   getAuditLogs,
