@@ -51,16 +51,15 @@ class SearchService {
     const messageFilter = {
       conversationId: { $in: targetConvIds },
       content: { $regex: searchTerm, $options: 'i' },
-      // Exclude messages that have been auto-deleted for THIS user (unless saved)
+      // Include messages where user is sender or recipient
       $or: [
         { senderId: userId },
         {
-              recipientStatuses: {
-                $elemMatch: {
-                  userId: userId,
-                  $or: [{ isAutoDeleted: false }, { isSaved: true }],
-                },
-        },
+          recipientStatuses: {
+            $elemMatch: {
+              userId: userId,
+            },
+          },
         },
       ],
   };

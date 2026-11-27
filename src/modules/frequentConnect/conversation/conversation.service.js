@@ -100,6 +100,36 @@ class ConversationService {
   }
 
   /**
+   * Toggle or set conversation-level auto-delete flag (default: false, i.e. chats saved)
+   */
+  async toggleAutoDelete(conversationId, userId, autoDelete) {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      throw new ApiError(404, 'Conversation not found');
+    }
+
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === userId.toString()
+    );
+    if (!isParticipant) {
+      throw new ApiError(403, 'You are not a participant in this conversation');
+    }
+
+    if (typeof autoDelete === 'boolean') {
+      conversation.autoDelete = autoDelete;
+    } else {
+      conversation.autoDelete = !conversation.autoDelete;
+    }
+
+    await conversation.save();
+
+    return {
+      conversationId: conversation._id,
+      autoDelete: conversation.autoDelete,
+    };
+  }
+
+  /**
    * Synchronize cluster participants with its cluster conversation
    */
   async syncClusterParticipants(clusterId) {

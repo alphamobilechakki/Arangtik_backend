@@ -1,0 +1,21 @@
+(node:14180) [MONGOOSE] Warning: Duplicate schema index on {"recipientStatuses.userId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[Queue:garment-ai-queue] Queue error: connect ECONNREFUSED 127.0.0.1:6379
+[Queue:jewellery-ai-queue] Queue error: connect ECONNREFUSED 127.0.0.1:6379
+[Queue:jewellery-ai-queue] Queue error: Connection is closed.
+[Queue:garment-ai-queue] Queue error: Connection is closed.
+[Redis Notice]: connect ECONNREFUSED 127.0.0.1:6379. Jobs will gracefully execute via in-memory worker.
+[Worker:garment-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:garment-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:jewellery-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:jewellery-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:jewellery-ai-queue] Worker connection warning: Connection is closed.
+[Worker:jewellery-ai-queue] Worker connection warning: Connection is closed.
+[Worker:garment-ai-queue] Worker connection warning: Connection is closed.
+[Worker:garment-ai-queue] Worker connection warning: Connection is closed.
+[Queue:jewellery-ai-queue] Queue error: connect ECONNREFUSED 127.0.0.1:6379
+[Queue:garment-ai-queue] Queue error: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:jewellery-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:jewellery-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:garment-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379
+[Worker:garment-ai-queue] Worker connection warning: connect ECONNREFUSED 127.0.0.1:6379

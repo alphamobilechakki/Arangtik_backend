@@ -6992,28 +6992,40 @@ Minimalist grouping document representing items designed or worn together (e.g. 
 
 ### 21.5. Jewellery Pieces (`/api/jewellery`)
 
-#### 21.5.1. Create Single Jewellery Piece
-Uploads photo(s) and creates an individual jewellery item. If `jewelleryBoxId` is omitted, the user's default box is automatically assigned.
+#### 21.5.1. Create Jewellery Piece(s) — Image-Only Single & Bulk
+Uploads one or multiple photo(s) to create either a single jewellery item or multiple items in bulk. No `name` or `jewelleryCategory` is required at creation time — only image(s) are needed. If `jewelleryBoxId` is omitted, the user's default box is automatically assigned.
 
 - **Method / Path:** `POST /api/jewellery`
 - **Authentication:** Protected (`Bearer <User JWT>`)
 - **Content-Type:** `multipart/form-data` or `application/json`
+- **Request → Response Lifecycle:**
+  1. `protect` authenticates the user JWT (`req.user`).
+  2. `uploadItemImages` (`multer`) parses up to 20 files per field (`images`, `sourceImage`, `image`, `generatedImage`).
+  3. `validateCreateItem` parses `items` (if JSON-stringified in `multipart/form-data`) and validates either the `items` array or single/shared item fields (`name`, `jewelleryCategory`, `type`, `status`, `weight`).
+  4. `jewelleryController.create` → `jewelleryService.createItem`:
+     - Detects bulk mode when `items` array, `sourceImageUrls` array, or >1 uploaded source image is present.
+     - Resolves/caches `jewelleryBoxId` and `jewelleryCategory`, formats image URLs, and inserts via `Jewellery.insertMany`.
+     - Returns the single populated item (`data: { ... }`) for single-item requests, or `{ count, items: [...] }` for bulk requests.
 - **Fields / Body:**
-  - `name` (string, required): Piece name (e.g. `"Diamond Solitaire Ring"`).
-  - `jewelleryCategory` (string, required): Category `_id` or string code (e.g. `"RING"` or `"NECKLACE"`).
-  - `jewelleryBoxId` (string, optional): Target box ID (falls back to default box).
-  - `setId` (string, optional): ID of a `JewellerySet` if this belongs to a set.
-  - `type` (string, optional): Enum `["GOLD", "SILVER", "ARTIFICIAL", "CUSTOM"]` (default: `"GOLD"`).
-  - `status` (string, optional): Enum `["IN_LOCKER", "LEND", "CLEANING", "OTHER"]` (default: `"IN_LOCKER"`).
-  - `color` (string, optional): Material tint / color (e.g. `"Rose Gold"`, `"Yellow Gold"`).
-  - `gemstone` (string, optional): Inset stones (e.g. `"VVS1 Diamond"`, `"Emerald"`).
-  - `weight` (number, optional): Weight in grams (e.g. `5.2`).
-  - `brand` (string, optional): Brand / Jeweller name (e.g. `"Tanishq"`, `"CaratLane"`).
-  - `sourceImage` (file, optional): Uploaded original picture.
-  - `generatedImage` (file, optional): Background-removed or AI-rendered picture.
-  - `sourceImageUrl` (string, optional): Image URL alternative to file upload.
-  - `generatedImageUrl` (string, optional): Generated image URL alternative.
-- **Success Response (201 Created):**
+  - **Single or Shared Fields:**
+    - `name` (string, optional): Piece name (e.g. `"Diamond Solitaire Ring"`). In multi-image bulk mode without `items`, auto-names as `"<name> 1"`, `"<name> 2"`, etc. if provided.
+    - `jewelleryCategory` (string, optional): Category `_id` or string code (e.g. `"RING"` or `"NECKLACE"`).
+    - `jewelleryBoxId` (string, optional): Target box ID (falls back to default box).
+    - `setId` (string, optional): ID of a `JewellerySet` if this belongs to a set.
+    - `type` (string, optional): Enum `["GOLD", "SILVER", "ARTIFICIAL", "CUSTOM"]` (default: `"GOLD"`).
+    - `status` (string, optional): Enum `["IN_LOCKER", "LEND", "CLEANING", "OTHER"]` (default: `"IN_LOCKER"`).
+    - `color` (string, optional): Material tint / color (e.g. `"Rose Gold"`, `"Yellow Gold"`).
+    - `gemstone` (string, optional): Inset stones (e.g. `"VVS1 Diamond"`, `"Emerald"`).
+    - `weight` (number, optional): Weight in grams (e.g. `5.2`).
+    - `brand` (string, optional): Brand / Jeweller name (e.g. `"Tanishq"`, `"CaratLane"`).
+    - `sourceImage` / `image` / `images` (file or up to 20 files, optional): Uploaded original picture(s).
+    - `generatedImage` (file or up to 20 files, optional): Background-removed or AI-rendered picture(s).
+    - `sourceImageUrl` (string, optional): Single image URL or base64 alternative.
+    - `generatedImageUrl` (string, optional): Single generated image URL or base64 alternative.
+  - **Bulk-Specific Fields:**
+    - `items` (array or JSON string in `multipart/form-data`, optional): Array of item objects (`{ name, jewelleryCategory, jewelleryBoxId?, setId?, type?, status?, color?, gemstone?, weight?, brand?, sourceImageUrl?, generatedImageUrl? }`). Matched by index to uploaded `images`/`sourceImage`/`generatedImage` files if provided.
+    - `sourceImageUrls` (array or JSON string, optional): Array of image URLs/base64 strings to create one item per image using shared metadata.
+- **Success Response — Single Item (201 Created):**
 ```json
 {
   "statusCode": 201,
@@ -7025,7 +7037,8 @@ Uploads photo(s) and creates an individual jewellery item. If `jewelleryBoxId` i
     "jewelleryBoxId": {
       "_id": "6742d5e2b02891f7c81a2001",
       "name": "Mummy's Gold Vault",
-      "type": "FAMILY"
+      "color": "#FFD700",
+      "isDefault": true
     },
     "jewelleryCategory": {
       "_id": "6742d4a1b02891f7c81a1003",
@@ -7054,6 +7067,33 @@ Uploads photo(s) and creates an individual jewellery item. If `jewelleryBoxId` i
     "isActive": true,
     "isDeleted": false,
     "createdAt": "2026-11-23T12:20:00.000Z"
+  }
+}
+```
+- **Success Response — Bulk / Multiple Images (201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "2 jewellery items created successfully",
+  "data": {
+    "count": 2,
+    "items": [
+      {
+        "_id": "6742d810b02891f7c81a4005",
+        "name": "Necklace 1",
+        "sourceImage": { "url": "https://api.arangtik.com/uploads/n1.jpg", "filename": "n1.jpg" },
+        "type": "GOLD",
+        "status": "IN_LOCKER"
+      },
+      {
+        "_id": "6742d810b02891f7c81a4006",
+        "name": "Necklace 2",
+        "sourceImage": { "url": "https://api.arangtik.com/uploads/n2.jpg", "filename": "n2.jpg" },
+        "type": "GOLD",
+        "status": "IN_LOCKER"
+      }
+    ]
   }
 }
 ```

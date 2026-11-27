@@ -21,7 +21,7 @@ const jewellerySchema = new mongoose.Schema(
     jewelleryCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'JewelleryCategory',
-      required: [true, 'Jewellery category is required'],
+      default: null,
       index: true,
     },
     setId: {
@@ -34,7 +34,7 @@ const jewellerySchema = new mongoose.Schema(
     // Identity
     name: {
       type: String,
-      required: [true, 'Jewellery name is required'],
+      // required: [true, 'Jewellery name is required'],
       trim: true,
       maxlength: [120, 'Name cannot exceed 120 characters'],
     },
@@ -125,6 +125,11 @@ const jewellerySchema = new mongoose.Schema(
       default: null,
     },
 
+    // AI pipeline tracking
+    sourceImageHash:         { type: String, trim: true, index: true },
+    sourcePhotoUrl:          { type: String, trim: true, default: '' },
+    processingFailureReason: { type: String, trim: true, default: '' },
+
     lastModifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -198,6 +203,7 @@ jewellerySchema.index({ userId: 1, setId: 1 });
 jewellerySchema.index({ userId: 1, isFavorite: 1 });
 jewellerySchema.index({ userId: 1, isDeleted: 1 });
 jewellerySchema.index({ userId: 1, createdAt: -1 });
+jewellerySchema.index({ userId: 1, sourceImageHash: 1 });
 
 const Jewellery =
   mongoose.models.Jewellery || mongoose.model('Jewellery', jewellerySchema);

@@ -45,6 +45,11 @@ const conversationSchema = new mongoose.Schema(
         default: null,
       },
     },
+    autoDelete: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );

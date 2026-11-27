@@ -11,6 +11,7 @@ router.post('/', conversationController.createOrGetDirectConversation);
 router.post('/direct', conversationController.createOrGetDirectConversation);
 router.get('/', conversationController.getUserConversations);
 router.get('/:id', conversationController.getConversationById);
+router.patch('/:id/auto-delete', conversationController.toggleAutoDelete);
 
 const { uploadVoice } = require('../../../middlewares/voiceUpload.middleware');
 const { rateLimitMessages } = require('../../../middlewares/fcRateLimit.middleware');

@@ -47,9 +47,29 @@ const getConversationHistory = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, 'Conversation history retrieved successfully');
 });
 
+/**
+ * PATCH /api/fc/conversations/:id/auto-delete – Toggle or set conversation-level auto-delete (default: false / chats saved)
+ */
+const toggleAutoDelete = asyncHandler(async (req, res) => {
+  const { autoDelete } = req.body || {};
+  const result = await conversationService.toggleAutoDelete(
+    req.params.id,
+    req.user.id,
+    autoDelete
+  );
+  return ApiResponse.success(
+    res,
+    result,
+    result.autoDelete
+      ? 'Conversation auto-delete enabled (messages delete 15m after seen)'
+      : 'Conversation auto-delete disabled (chats will be saved)'
+  );
+});
+
 module.exports = {
   createOrGetDirectConversation,
   getUserConversations,
   getConversationById,
   getConversationHistory,
+  toggleAutoDelete,
 };

@@ -1,28 +1,35 @@
 const path = require('path');
 const fs = require('fs');
 const Message = require('../modules/frequentConnect/message/message.model');
+const Conversation = require('../modules/frequentConnect/conversation/conversation.model');
 
 const AUTO_DELETE_MINUTES = 15;
 let cronInterval = null;
 
 /**
- * Execute auto-delete cycle:
- * 1. Identify recipient statuses where seenAt + 15 min <= now and isAutoDeleted is false
- * 2. If recipient did NOT save message, mark recipientStatus.isAutoDeleted = true
- * 3. If ALL recipients are auto-deleted and sender doesn't have an active save,
- *    scrub global content and delete physical voice file from disk
+ * Execute auto-delete cycle (conversation-level):
+ * 1. Find conversations with autoDelete: true (by default autoDelete is false / chats are saved)
+ * 2. In those conversations, find messages where all recipients have seenAt + 15 min <= now
+ * 3. Delete physical voice file from disk (if any) and delete the message document
  */
 const runAutoDeleteCycle = async () => {
   try {
+    const autoDeleteConvs = await Conversation.find({ autoDelete: true })
+      .select('_id')
+      .lean();
+
+    if (!autoDeleteConvs || autoDeleteConvs.length === 0) {
+      return;
+    }
+
+    const autoDeleteConvIds = autoDeleteConvs.map((c) => c._id);
     const cutoffTime = new Date(Date.now() - AUTO_DELETE_MINUTES * 60 * 1000);
 
-    // Find candidate messages where at least one recipient status has seenAt <= cutoff and isAutoDeleted = false
     const candidateMessages = await Message.find({
-      isAutoDeleted: false,
+      conversationId: { $in: autoDeleteConvIds },
       recipientStatuses: {
         $elemMatch: {
           seenAt: { $ne: null, $lte: cutoffTime },
-          isAutoDeleted: false,
         },
       },
     }).limit(100);
@@ -31,62 +38,42 @@ const runAutoDeleteCycle = async () => {
       return;
     }
 
-    let recipientsDeletedCount = 0;
-    let messagesScrubbedCount = 0;
+    let messagesDeletedCount = 0;
 
     for (const msg of candidateMessages) {
-      let modified = false;
+      const allRecipientsSeenPastCutoff =
+        Array.isArray(msg.recipientStatuses) &&
+        msg.recipientStatuses.length > 0 &&
+        msg.recipientStatuses.every((rs) => rs.seenAt && rs.seenAt <= cutoffTime);
 
-      // Update individual recipient statuses
-      msg.recipientStatuses.forEach((rs) => {
-        if (rs.seenAt && rs.seenAt <= cutoffTime && !rs.isAutoDeleted) {
-          if (!rs.isSaved) {
-            rs.isAutoDeleted = true;
-            recipientsDeletedCount++;
-            modified = true;
-          }
-        }
-      });
-
-      // Check if ALL recipient statuses are now marked as auto-deleted and no active bookmarks exist
-      const allRecipientsDeleted = msg.recipientStatuses.every((rs) => rs.isAutoDeleted);
-      const hasActiveBookmark = Array.isArray(msg.savedBy) && msg.savedBy.length > 0;
-
-      if (allRecipientsDeleted && !hasActiveBookmark) {
-        msg.isAutoDeleted = true;
-
-        // If message was a voice message, delete physical audio file from disk
-        if (msg.voiceUrl) {
-          try {
-            const urlPath = msg.voiceUrl.split('?')[0];
-            const filename = path.basename(urlPath);
-            const voiceDir = path.resolve(process.cwd(), 'uploads/voice');
-            const filePath = path.join(voiceDir, filename);
-
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-              console.log(`[Auto-Delete]: Removed voice file ${filename}`);
-            }
-          } catch (fileErr) {
-            console.warn('[Auto-Delete]: Error deleting physical voice file:', fileErr.message);
-          }
-        }
-
-        // Scrub text content and URL references
-        msg.content = '';
-        msg.voiceUrl = '';
-        messagesScrubbedCount++;
-        modified = true;
+      if (!allRecipientsSeenPastCutoff) {
+        continue;
       }
 
-      if (modified) {
-        await msg.save();
+      // If message was a voice message, delete physical audio file from disk
+      if (msg.voiceUrl) {
+        try {
+          const urlPath = msg.voiceUrl.split('?')[0];
+          const filename = path.basename(urlPath);
+          const voiceDir = path.resolve(process.cwd(), 'uploads/voice');
+          const filePath = path.join(voiceDir, filename);
+
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[Auto-Delete]: Removed voice file ${filename}`);
+          }
+        } catch (fileErr) {
+          console.warn('[Auto-Delete]: Error deleting physical voice file:', fileErr.message);
+        }
       }
+
+      await Message.deleteOne({ _id: msg._id });
+      messagesDeletedCount++;
     }
 
-    if (recipientsDeletedCount > 0 || messagesScrubbedCount > 0) {
+    if (messagesDeletedCount > 0) {
       console.log(
-        `[Message Auto-Delete]: Auto-deleted ${recipientsDeletedCount} recipient copies, fully scrubbed ${messagesScrubbedCount} messages.`
+        `[Message Auto-Delete]: Deleted ${messagesDeletedCount} messages from auto-delete conversations.`
       );
     }
   } catch (error) {

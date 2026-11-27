@@ -1,0 +1,12 @@
+[MongoDB]: Connecting to [DEVELOPMENT] database...
+[MongoDB Connected - DEVELOPMENT]: ac-pphm55p-shard-00-00.3nspoit.mongodb.net
+[MongoDB Active Database]: arangtik
+⏰ Frequent Connect: 15-Minute Auto-Delete scheduler active (runs every 60s)
+⚡ [Queue Engine] Redis & BullMQ subsystem initialized successfully.
+==================================================
+🚀 Arangtik Backend Server Running in [DEVELOPMENT] mode
+📡 Local Server URL: http://localhost:8083
+🔗 API Base Endpoint: http://localhost:8083/api
+⚡ WebSocket /fc: ws://localhost:8083/fc
+📄 Health Check URL: http://localhost:8083/api/health
+==================================================

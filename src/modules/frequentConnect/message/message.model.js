@@ -26,11 +26,6 @@ const recipientStatusSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    isAutoDeleted: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
     isSaved: {
       type: Boolean,
       default: false,
@@ -104,23 +99,13 @@ const messageSchema = new mongoose.Schema(
     recipientStatuses: [recipientStatusSchema],
     // Embedded bookmarks (Consolidates savedmessages collection)
     savedBy: [savedBySchema],
-    isAutoDeleted: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    autoDeleteAt: {
-      type: Date,
-      default: null,
-      index: true,
-    },
   },
   { timestamps: true }
 );
 
 // Indexes
 messageSchema.index({ conversationId: 1, createdAt: -1 });
-messageSchema.index({ 'recipientStatuses.userId': 1, 'recipientStatuses.isAutoDeleted': 1 });
+messageSchema.index({ 'recipientStatuses.userId': 1 });
 messageSchema.index({ 'savedBy.userId': 1, 'savedBy.savedAt': -1 });
 messageSchema.index({ content: 'text' });
 

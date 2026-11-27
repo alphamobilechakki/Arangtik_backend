@@ -23,7 +23,6 @@ class MessageService {
         statusAt: new Date(),
         seenAt: null,
         playedAt: null,
-        isAutoDeleted: false,
         isSaved: false,
       }));
 
@@ -116,29 +115,8 @@ class MessageService {
       .populate('senderId', 'name phone profileImage')
       .lean();
 
-    // Map messages respecting recipient auto-deletion for the viewing user
-    const processedMessages = messages.map((msg) => {
-      const isSender = (msg.senderId?._id || msg.senderId).toString() === userId.toString();
-      const userStatus = msg.recipientStatuses?.find(
-        (rs) => rs.userId?.toString() === userId.toString()
-      );
-
-      const hasAutoDeleted = !isSender && userStatus?.isAutoDeleted && !userStatus?.isSaved;
-
-      if (hasAutoDeleted || msg.isAutoDeleted) {
-        return {
-          ...msg,
-          content: 'This message was deleted',
-          voiceUrl: '',
-          isDeletedPlaceholder: true,
-        };
-      }
-
-      return msg;
-    });
-
     return {
-      messages: processedMessages.reverse(),
+      messages: messages.reverse(),
       hasMore: messages.length === limit,
     };
   }
@@ -169,11 +147,6 @@ class MessageService {
 
     if (statusUpper === 'SEEN' && !recipientEntry.seenAt) {
       recipientEntry.seenAt = now;
-      // Calculate auto-delete time for this specific recipient: seenAt + 15 mins
-      const deleteAt = new Date(now.getTime() + 15 * 60 * 1000);
-      if (!message.autoDeleteAt || deleteAt < message.autoDeleteAt) {
-        message.autoDeleteAt = deleteAt;
-      }
     }
 
     if (statusUpper === 'PLAYED') {
@@ -220,10 +193,6 @@ class MessageService {
 
     if (!isSender && !recipientStatus) {
       throw new ApiError(403, 'You do not have access to save this message');
-    }
-
-    if (recipientStatus && recipientStatus.isAutoDeleted) {
-      throw new ApiError(400, 'Cannot save a message that has already been deleted');
     }
 
     if (!Array.isArray(message.savedBy)) {

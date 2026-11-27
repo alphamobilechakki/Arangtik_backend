@@ -28,7 +28,7 @@ class WidgetService {
     });
 
     // Count unread messages for user in these conversations:
-    // recipientStatuses where userId matches and status != 'SEEN' and isAutoDeleted != true
+    // recipientStatuses where userId matches and status != 'SEEN'
     const unreadAgg = await Message.aggregate([
       {
         $match: {
@@ -37,7 +37,6 @@ class WidgetService {
             $elemMatch: {
               userId: userId,
               status: { $in: ['SENT', 'DELIVERED'] },
-              isAutoDeleted: false,
             },
           },
         },
@@ -102,7 +101,6 @@ class WidgetService {
             $elemMatch: {
               userId: userId,
               status: { $in: ['SENT', 'DELIVERED'] },
-              isAutoDeleted: false,
             },
           },
         },
