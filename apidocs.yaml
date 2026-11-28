@@ -47,6 +47,8 @@ tags:
     description: "Store types, level-1 service categories, and public service catalogues"
   - name: "Jewellery Management"
     description: "Jewellery boxes, cohesive sets, pieces, status transitions (lend, cleaning, locker), and admin categories"
+  - name: "Occasions & Events"
+    description: "Event category presets, few-clicks event planning, group/cluster sharing, and soft-delete lifecycle"
 paths:
   "/health":
     get:
@@ -5013,6 +5015,446 @@ paths:
       responses:
         "200":
           description: User jewellery summary and boxes
+  "/events/types":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Get active event types & presets
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Event types fetched successfully
+  "/events":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Get user events (upcoming/past/all)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [upcoming, past, all]
+            default: upcoming
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User events retrieved successfully
+    post:
+      tags:
+        - "Occasions & Events"
+      summary: Create event (Few-clicks fast creation)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - eventTypeId
+                - eventDate
+              properties:
+                eventTypeId:
+                  type: string
+                  example: 674720e5c94d3a2b10f84001
+                eventDate:
+                  type: string
+                  format: date
+                  example: "2026-12-15"
+                title:
+                  type: string
+                  example: Aman's Cocktail Party
+                eventTime:
+                  type: string
+                  example: "20:00"
+                clusterIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["674720e5c94d3a2b10f84099"]
+                address:
+                  type: string
+                  example: Taj Lands End, Bandra, Mumbai
+                location:
+                  type: object
+                  description: GeoJSON Point [longitude, latitude]
+                  properties:
+                    type:
+                      type: string
+                      enum: [Point]
+                      default: Point
+                    coordinates:
+                      type: array
+                      items:
+                        type: number
+                      example: [72.8213, 19.0435]
+                imageUrl:
+                  type: string
+                  example: https://example.com/invitation-cover.jpg
+                attachments:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum: [IMAGE, DOCUMENT]
+                dressCode:
+                  type: string
+                  example: Indo-Western Black
+                note:
+                  type: string
+                  example: Bring extra shoes for dancing
+      responses:
+        "201":
+          description: Event created successfully
+  "/events/cluster/{clusterId}":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Get events inside a specific cluster/group
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: clusterId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [upcoming, past, all]
+            default: upcoming
+      responses:
+        "200":
+          description: Cluster events retrieved successfully
+        "403":
+          description: Unauthorized non-member access
+  "/events/{id}":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Get single event by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event details retrieved successfully
+        "404":
+          description: Event not found
+    patch:
+      tags:
+        - "Occasions & Events"
+      summary: Update event details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: Grand Wedding & Reception
+                eventDate:
+                  type: string
+                  format: date
+                  example: "2026-12-15"
+                eventTime:
+                  type: string
+                  example: "20:00"
+                clusterIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["674720e5c94d3a2b10f84099"]
+                address:
+                  type: string
+                  example: The St. Regis, Lower Parel, Mumbai
+                location:
+                  type: object
+                  description: GeoJSON Point [longitude, latitude]
+                  properties:
+                    type:
+                      type: string
+                      enum: [Point]
+                      default: Point
+                    coordinates:
+                      type: array
+                      items:
+                        type: number
+                      example: [72.8258, 18.9944]
+                imageUrl:
+                  type: string
+                  example: https://api.arangtik.com/uploads/wedding-cover.jpg
+                attachments:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum: [IMAGE, DOCUMENT]
+                dressCode:
+                  type: string
+                  example: Royal Sherwani
+                note:
+                  type: string
+                  example: Evening wedding followed by reception
+                status:
+                  type: string
+                  enum: [PLANNED, COMPLETED, CANCELLED]
+      responses:
+        "200":
+          description: Event updated successfully
+    delete:
+      tags:
+        - "Occasions & Events"
+      summary: Soft delete event
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event soft-deleted successfully
+  "/events/{id}/restore":
+    post:
+      tags:
+        - "Occasions & Events"
+      summary: Restore soft-deleted event
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event restored successfully
+  "/admin/events/stats":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Admin Event KPI Stats Overview
+      security:
+        - AdminBearerAuth: []
+      responses:
+        "200":
+          description: Admin event stats retrieved successfully
+  "/admin/events":
+    get:
+      tags:
+        - "Occasions & Events"
+      summary: Admin Global Events Operations Table
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Search by event title, address, or dressCode
+          schema:
+            type: string
+        - name: eventTypeId
+          in: query
+          description: Filter events by EventType ObjectId
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PLANNED, COMPLETED, CANCELLED]
+        - name: isDeleted
+          in: query
+          schema:
+            type: string
+            enum: [true, false, all]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Global events retrieved successfully
+  "/admin/events/{id}":
+    patch:
+      tags:
+        - "Occasions & Events"
+      summary: Admin Moderate / Restore Event
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: Aman's Cocktail Party
+                address:
+                  type: string
+                  example: Taj Lands End, Bandra, Mumbai
+                location:
+                  type: object
+                  description: GeoJSON Point [longitude, latitude]
+                  properties:
+                    type:
+                      type: string
+                      enum: [Point]
+                      default: Point
+                    coordinates:
+                      type: array
+                      items:
+                        type: number
+                      example: [72.8213, 19.0435]
+                imageUrl:
+                  type: string
+                  example: https://api.arangtik.com/uploads/cocktail-cover.jpg
+                attachments:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum: [IMAGE, DOCUMENT]
+                dressCode:
+                  type: string
+                  example: Indo-Western Black
+                status:
+                  type: string
+                  enum: [PLANNED, COMPLETED, CANCELLED]
+                isDeleted:
+                  type: boolean
+      responses:
+        "200":
+          description: Event updated successfully
+  "/admin/event-types":
+    post:
+      tags:
+        - "Occasions & Events"
+      summary: Admin Create Event Category Preset
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - code
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                icon:
+                  type: string
+                sortOrder:
+                  type: number
+                isActive:
+                  type: boolean
+      responses:
+        "201":
+          description: Event category created successfully
+  "/admin/event-types/{id}":
+    patch:
+      tags:
+        - "Occasions & Events"
+      summary: Admin Edit / Toggle Category
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                icon:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Event category updated successfully
 components:
   securitySchemes:
     BearerAuth:
@@ -5600,3 +6042,103 @@ components:
         code:
           type: string
           example: WASH_AND_IRON
+    EventType:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: Wedding
+        code:
+          type: string
+          example: WEDDING
+        icon:
+          type: string
+          example: heart
+        imageUrl:
+          type: string
+        sortOrder:
+          type: number
+          example: 1
+        isActive:
+          type: boolean
+          example: true
+    Event:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+          example: Aman's Cocktail Party
+        eventTypeId:
+          type: string
+        eventTypeCode:
+          type: string
+          example: PARTY
+        eventDate:
+          type: string
+          format: date-time
+        eventTime:
+          type: string
+          example: "20:00"
+        clusterIds:
+          type: array
+          items:
+            type: string
+        location:
+          type: object
+          properties:
+            name:
+              type: string
+              example: Taj Lands End, Bandra
+            address:
+              type: string
+            city:
+              type: string
+            geo:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: Point
+                coordinates:
+                  type: array
+                  items:
+                    type: number
+                  example: [72.8213, 19.0435]
+        imageUrl:
+          type: string
+          example: https://api.arangtik.com/uploads/cocktail-cover.jpg
+        attachments:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+              name:
+                type: string
+              type:
+                type: string
+                enum: [IMAGE, DOCUMENT]
+        dressCode:
+          type: string
+          example: Indo-Western Black
+        note:
+          type: string
+          example: Bring extra shoes for dancing
+        status:
+          type: string
+          enum: [PLANNED, COMPLETED, CANCELLED]
+          example: PLANNED
+        isDeleted:
+          type: boolean
+          example: false
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true

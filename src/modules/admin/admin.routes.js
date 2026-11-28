@@ -17,6 +17,7 @@ const garmentAiRoutes = require('./garmentAi/adminGarmentAi.routes');
 const terminalRoutes = require('./terminal/terminal.routes');
 const jewelleryCategoryRoutes = require('../jewellery/category/jewelleryCategory.routes');
 const adminJewelleryRoutes = require('./jewellery/adminJewellery.routes');
+const adminEventRoutes = require('./event/adminEvent.routes');
 
 // ── Vendor & Order Management ──────────────────────────────
 const adminVendorRoutes = require('./vendor/adminVendor.routes');
@@ -43,6 +44,8 @@ router.use('/garment-ai', garmentAiRoutes);
 router.use('/terminal', terminalRoutes);
 router.use('/jewellery-categories', jewelleryCategoryRoutes);
 router.use('/jewellery', adminJewelleryRoutes);
+router.use('/events', adminEventRoutes);
+router.use('/event-types', adminEventRoutes.eventTypeRouter);
 
 // ── Business Management Routes ──────────────────────────────
 router.use('/vendors', adminVendorRoutes);

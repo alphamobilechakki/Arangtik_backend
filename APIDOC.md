@@ -7603,6 +7603,703 @@ Restores an accidentally soft-deleted jewellery piece back to active status (`is
 }
 ```
 
+---
+
+## 22. Event & Occasion Management Module (`/api/events`)
+
+The Event module enables users to plan and manage personal and collaborative events (Weddings, Parties, Birthdays, Meetings, Festivals, Outings) in **few clicks**. It supports dynamic category catalogs, soft deletion, and sharing/displaying events inside **Frequent Connect Groups (Clusters)**.
+
+---
+
+### 22.1. Get Event Types
+*Retrieves all active event category presets (with names, codes, visual icons, and ordering). Automatically seeds standard presets if none exist.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/events/types`
+- **Access**: Protected (`Bearer <JWT>`)
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event types fetched successfully",
+  "data": [
+    {
+      "_id": "674720e5c94d3a2b10f84001",
+      "name": "Wedding",
+      "code": "WEDDING",
+      "icon": "heart",
+      "imageUrl": "",
+      "sortOrder": 1,
+      "isActive": true
+    },
+    {
+      "_id": "674720e5c94d3a2b10f84002",
+      "name": "Party & Celebration",
+      "code": "PARTY",
+      "icon": "party-popper",
+      "imageUrl": "",
+      "sortOrder": 2,
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+### 22.2. Create Event (Few-Clicks Fast Flow)
+*Creates a personal or group event. Designed for minimal friction: only `eventTypeId` and `eventDate` are required. If `title` is omitted, it auto-defaults to `"{EventType} Event"`.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/events`
+- **Access**: Protected (`Bearer <JWT>`)
+- **Headers**:
+  ```http
+  Content-Type: application/json
+  Authorization: Bearer <JWT>
+  ```
+
+#### Request Body
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `eventTypeId` | `string` | **Yes** | Valid ObjectId referencing `EventType`. |
+| `eventDate` | `string` (ISO/Date) | **Yes** | Event date (e.g. `"2026-12-15"` or ISO timestamp). |
+| `title` | `string` | No | Custom event title (Max 100 chars; auto-assigned if omitted). |
+| `eventTime` | `string` | No | 24-hr time in `HH:mm` format (e.g. `"19:30"`). |
+| `clusterIds` | `array<string>` | No | Array of `FCCluster` IDs to share this event inside user groups. |
+| `address` | `string` | No | Event venue text description / address (e.g. `"Taj Lands End, Bandra, Mumbai"`). |
+| `location` | `object` \| `array` \| `string` | No | GeoJSON Point `{ "type": "Point", "coordinates": [longitude, latitude] }`, coordinates array `[longitude, latitude]`, `{ latitude, longitude }`, or text string. |
+| `imageUrl` | `string` | No | Primary cover or preview image URL. |
+| `attachments` | `array<object>` | No | Media & documents (e.g. PDF invites, tickets, outfit refs) `[{ url, name, type: "DOCUMENT" \| "IMAGE" }]`. |
+| `dressCode` | `string` | No | Outfit dress code (e.g. `"Ethnic Sherwani / Kurta"`). |
+| `note` | `string` | No | Optional notes/description up to 300 characters. |
+| `timeZone` | `string` | No | Default `"Asia/Kolkata"`. |
+| `aiSuggestionsEnabled`| `boolean` | No | Default `true`. |
+
+##### Minimal Request Example (2 Clicks)
+```json
+{
+  "eventTypeId": "674720e5c94d3a2b10f84001",
+  "eventDate": "2026-12-15"
+}
+```
+
+##### Full Request Example (With GeoJSON Coordinates, Group Sharing & Documents)
+```json
+{
+  "eventTypeId": "674720e5c94d3a2b10f84002",
+  "title": "Aman's Cocktail Party",
+  "eventDate": "2026-12-15",
+  "eventTime": "20:00",
+  "clusterIds": ["674720e5c94d3a2b10f84099"],
+  "address": "Taj Lands End, Bandra, Mumbai",
+  "location": {
+    "type": "Point",
+    "coordinates": [72.8213, 19.0435]
+  },
+  "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+  "attachments": [
+    {
+      "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+      "name": "Wedding Invitation PDF",
+      "type": "DOCUMENT"
+    },
+    {
+      "url": "https://api.arangtik.com/uploads/venue-map.png",
+      "name": "Venue Layout Map",
+      "type": "IMAGE"
+    }
+  ],
+  "dressCode": "Indo-Western Black",
+  "note": "Bring extra shoes for dancing"
+}
+```
+
+#### Success Response (HTTP 201 Created)
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Event created successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84010",
+    "userId": "6742d810b02891f7c81a4001",
+    "title": "Aman's Cocktail Party",
+    "eventTypeId": {
+      "_id": "674720e5c94d3a2b10f84002",
+      "name": "Party & Celebration",
+      "code": "PARTY",
+      "icon": "party-popper",
+      "imageUrl": ""
+    },
+    "eventTypeCode": "PARTY",
+    "eventDate": "2026-12-15T00:00:00.000Z",
+    "eventTime": "20:00",
+    "clusterIds": [
+      {
+        "_id": "674720e5c94d3a2b10f84099",
+        "name": "Family Squad",
+        "icon": "home",
+        "type": "FAMILY"
+      }
+    ],
+    "address": "Taj Lands End, Bandra, Mumbai",
+    "location": {
+      "type": "Point",
+      "coordinates": [72.8213, 19.0435]
+    },
+    "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+    "attachments": [
+      {
+        "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+        "name": "Wedding Invitation PDF",
+        "type": "DOCUMENT",
+        "size": 154200
+      },
+      {
+        "url": "https://api.arangtik.com/uploads/venue-map.png",
+        "name": "Venue Layout Map",
+        "type": "IMAGE",
+        "size": 482000
+      }
+    ],
+    "dressCode": "Indo-Western Black",
+    "note": "Bring extra shoes for dancing",
+    "timeZone": "Asia/Kolkata",
+    "aiSuggestionsEnabled": true,
+    "status": "PLANNED",
+    "isDeleted": false,
+    "deletedAt": null,
+    "createdAt": "2026-11-27T16:50:00.000Z",
+    "updatedAt": "2026-11-27T16:50:00.000Z"
+  }
+}
+```
+
+---
+
+### 22.3. Get User Events (List / Timeline)
+*Fetches active personal events for the logged-in user with filtering and pagination.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/events`
+- **Access**: Protected (`Bearer <JWT>`)
+- **Query Parameters**:
+  - `filter` (optional): `"upcoming"` (default), `"past"`, or `"all"`.
+  - `page` (optional): Page number (default: `1`).
+  - `limit` (optional): Items per page (default: `20`, max: `50`).
+  - `search` (optional): Search by event title string.
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Events retrieved successfully",
+  "data": {
+    "events": [
+      {
+        "_id": "674720e5c94d3a2b10f84010",
+        "title": "Aman's Cocktail Party",
+        "eventTypeId": {
+          "_id": "674720e5c94d3a2b10f84002",
+          "name": "Party & Celebration",
+          "code": "PARTY",
+          "icon": "party-popper"
+        },
+        "eventDate": "2026-12-15T00:00:00.000Z",
+        "eventTime": "20:00",
+        "address": "Taj Lands End, Bandra, Mumbai",
+        "location": {
+          "type": "Point",
+          "coordinates": [72.8213, 19.0435]
+        },
+        "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+        "attachments": [
+          {
+            "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+            "name": "Wedding Invitation PDF",
+            "type": "DOCUMENT",
+            "size": 154200
+          }
+        ],
+        "dressCode": "Indo-Western Black",
+        "status": "PLANNED"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 22.4. Get Group / Cluster Events
+*Fetches all events linked to a specific Cluster/Group. Only active members of the cluster are authorized to view.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/events/cluster/:clusterId`
+- **Access**: Protected (`Bearer <JWT>`)
+- **Query Parameters**:
+  - `filter` (optional): `"upcoming"` (default), `"past"`, or `"all"`.
+  - `page` (optional): default `1`.
+  - `limit` (optional): default `20`.
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Cluster events retrieved successfully",
+  "data": {
+    "cluster": {
+      "_id": "674720e5c94d3a2b10f84099",
+      "name": "Family Squad"
+    },
+    "events": [
+      {
+        "_id": "674720e5c94d3a2b10f84010",
+        "userId": {
+          "_id": "6742d810b02891f7c81a4001",
+          "name": "Aman Sharma",
+          "phone": "+919876543210"
+        },
+        "title": "Aman's Cocktail Party",
+        "eventTypeId": {
+          "name": "Party & Celebration",
+          "code": "PARTY",
+          "icon": "party-popper"
+        },
+        "eventDate": "2026-12-15T00:00:00.000Z",
+        "eventTime": "20:00",
+        "address": "Taj Lands End, Bandra, Mumbai",
+        "location": {
+          "type": "Point",
+          "coordinates": [72.8213, 19.0435]
+        },
+        "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+        "attachments": [
+          {
+            "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+            "name": "Wedding Invitation PDF",
+            "type": "DOCUMENT",
+            "size": 154200
+          }
+        ],
+        "dressCode": "Indo-Western Black",
+        "status": "PLANNED"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 22.5. Get Single Event Details
+*Retrieves complete details for a single event. Authorized for creator or fellow cluster members.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/events/:id`
+- **Access**: Protected (`Bearer <JWT>`)
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event details retrieved successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84010",
+    "userId": {
+      "_id": "6742d810b02891f7c81a4001",
+      "name": "Aman Sharma",
+      "phone": "+919876543210",
+      "profileImage": "https://api.arangtik.com/uploads/avatar.jpg"
+    },
+    "title": "Aman's Cocktail Party",
+    "eventTypeId": {
+      "_id": "674720e5c94d3a2b10f84002",
+      "name": "Party & Celebration",
+      "code": "PARTY",
+      "icon": "party-popper",
+      "imageUrl": ""
+    },
+    "eventTypeCode": "PARTY",
+    "eventDate": "2026-12-15T00:00:00.000Z",
+    "eventTime": "20:00",
+    "clusterIds": [
+      {
+        "_id": "674720e5c94d3a2b10f84099",
+        "name": "Family Squad",
+        "type": "FAMILY",
+        "icon": "home"
+      }
+    ],
+    "address": "Taj Lands End, Bandra, Mumbai",
+    "location": {
+      "type": "Point",
+      "coordinates": [72.8213, 19.0435]
+    },
+    "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+    "attachments": [
+      {
+        "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+        "name": "Wedding Invitation PDF",
+        "type": "DOCUMENT",
+        "size": 154200
+      },
+      {
+        "url": "https://api.arangtik.com/uploads/venue-map.png",
+        "name": "Venue Layout Map",
+        "type": "IMAGE",
+        "size": 482000
+      }
+    ],
+    "dressCode": "Indo-Western Black",
+    "note": "Bring extra shoes for dancing",
+    "timeZone": "Asia/Kolkata",
+    "aiSuggestionsEnabled": true,
+    "status": "PLANNED",
+    "isDeleted": false,
+    "createdAt": "2026-11-27T16:50:00.000Z",
+    "updatedAt": "2026-11-27T16:50:00.000Z"
+  }
+}
+```
+
+---
+
+### 22.6. Update Event
+*Updates event fields (title, date, time, address, location, attachments, dressCode, clusterIds, note, status).*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/events/:id`
+- **Access**: Protected (`Bearer <JWT>`) - Creator only
+
+#### Request Body (All optional)
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `title` | `string` | Updated event title (max 100 chars). |
+| `eventDate` | `string` | Updated event date (ISO/Date string). |
+| `eventTime` | `string` | 24-hr `HH:mm` format. |
+| `clusterIds` | `array<string>` | Updated cluster IDs list. |
+| `address` | `string` | Venue address text description. |
+| `location` | `object` \| `array` | GeoJSON `{ type: "Point", coordinates: [lng, lat] }` or `[lng, lat]`. |
+| `imageUrl` | `string` | Event cover image URL. |
+| `attachments` | `array<object>` | Updated documents and photos `[{ url, name, type }]`. |
+| `dressCode` | `string` | Outfit style guideline (max 80 chars). |
+| `note` | `string` | Notes up to 300 characters. |
+| `status` | `string` | `"PLANNED"`, `"COMPLETED"`, or `"CANCELLED"`. |
+| `aiSuggestionsEnabled`| `boolean` | Enable/disable AI outfit styling. |
+
+##### Request Body Example
+```json
+{
+  "title": "Grand Wedding & Reception",
+  "address": "The St. Regis, Lower Parel, Mumbai",
+  "location": {
+    "type": "Point",
+    "coordinates": [72.8258, 18.9944]
+  },
+  "dressCode": "Royal Sherwani / Heavy Lehengas",
+  "status": "COMPLETED",
+  "attachments": [
+    {
+      "url": "https://api.arangtik.com/uploads/final-itinerary.pdf",
+      "name": "Final Wedding Itinerary PDF",
+      "type": "DOCUMENT"
+    }
+  ]
+}
+```
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event updated successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84010",
+    "title": "Grand Wedding & Reception",
+    "address": "The St. Regis, Lower Parel, Mumbai",
+    "location": {
+      "type": "Point",
+      "coordinates": [72.8258, 18.9944]
+    },
+    "dressCode": "Royal Sherwani / Heavy Lehengas",
+    "status": "COMPLETED",
+    "attachments": [
+      {
+        "url": "https://api.arangtik.com/uploads/final-itinerary.pdf",
+        "name": "Final Wedding Itinerary PDF",
+        "type": "DOCUMENT",
+        "size": 182000
+      }
+    ],
+    "isDeleted": false,
+    "updatedAt": "2026-11-28T05:30:00.000Z"
+  }
+}
+```
+
+---
+
+### 22.7. Soft Delete Event
+*Soft deletes an event. Sets `isDeleted: true` and records `deletedAt` timestamp without permanently wiping data.*
+
+- **Method**: `DELETE`
+- **Full Endpoint**: `/api/events/:id`
+- **Access**: Protected (`Bearer <JWT>`) - Creator only
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event deleted successfully",
+  "data": {
+    "id": "674720e5c94d3a2b10f84010",
+    "isDeleted": true
+  }
+}
+```
+
+---
+
+### 22.8. Restore Soft-Deleted Event
+*Restores an accidentally deleted event back to active status (`isDeleted: false, deletedAt: null`).*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/events/:id/restore`
+- **Access**: Protected (`Bearer <JWT>`) - Creator only
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event restored successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84010",
+    "isDeleted": false,
+    "deletedAt": null
+  }
+}
+```
+
+---
+
+### 22.9. Admin Management APIs (`/api/admin/events` & `/api/admin/event-types`)
+*All Admin endpoints require Admin authorization (`Bearer <Admin JWT>` or `x-api-key`).*
+
+#### 22.9.1. Admin Event KPI Stats Overview
+*Returns high-level statistics across all events (total, upcoming, completed, cancelled, soft-deleted, and total categories).*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/events/stats`
+- **Access**: Protected (`Bearer <Admin JWT>`)
+- **Success Response (HTTP 200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Admin event stats retrieved successfully",
+  "data": {
+    "totalEvents": 42,
+    "upcomingEvents": 18,
+    "completedEvents": 20,
+    "cancelledEvents": 4,
+    "deletedEvents": 2,
+    "totalCategories": 9
+  }
+}
+```
+
+#### 22.9.2. Admin Global Events Operations Table
+*Lists events across all users and clusters with search, status filtering, soft-delete toggle, and pagination.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/admin/events`
+- **Access**: Protected (`Bearer <Admin JWT>`)
+- **Query Parameters**:
+  - `search` (optional): Search across event `title`, `address`, or `dressCode`.
+  - `status` (optional): `PLANNED`, `COMPLETED`, `CANCELLED`.
+  - `isDeleted` (optional): `true`, `false` (default), or `all`.
+  - `eventTypeId` (optional): Filter events by specific category ObjectId.
+  - `page` (optional): default `1`.
+  - `limit` (optional): default `20`.
+- **Success Response (HTTP 200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Global events retrieved successfully",
+  "data": {
+    "events": [
+      {
+        "_id": "674720e5c94d3a2b10f84010",
+        "userId": {
+          "_id": "6742d810b02891f7c81a4001",
+          "name": "Aman Sharma",
+          "phone": "+919876543210",
+          "profileImage": "https://api.arangtik.com/uploads/avatar.jpg"
+        },
+        "title": "Aman's Cocktail Party",
+        "eventTypeId": {
+          "_id": "674720e5c94d3a2b10f84002",
+          "name": "Party & Celebration",
+          "code": "PARTY",
+          "icon": "party-popper"
+        },
+        "eventDate": "2026-12-15T00:00:00.000Z",
+        "eventTime": "20:00",
+        "address": "Taj Lands End, Bandra, Mumbai",
+        "location": {
+          "type": "Point",
+          "coordinates": [72.8213, 19.0435]
+        },
+        "imageUrl": "https://api.arangtik.com/uploads/cocktail-cover.jpg",
+        "attachments": [
+          {
+            "url": "https://api.arangtik.com/uploads/wedding-card.pdf",
+            "name": "Wedding Invitation PDF",
+            "type": "DOCUMENT",
+            "size": 154200
+          }
+        ],
+        "dressCode": "Indo-Western Black",
+        "status": "PLANNED",
+        "isDeleted": false
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+#### 22.9.3. Admin Moderate / Restore Event
+*Enables admin to update event status (`PLANNED`, `COMPLETED`, `CANCELLED`), address, coordinates, documents, or soft-delete/restore (`isDeleted: true/false`).*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/admin/events/:id`
+- **Access**: Protected (`Bearer <Admin JWT>`)
+- **Request Body (All optional):**
+```json
+{
+  "title": "Aman's Cocktail Party",
+  "address": "Taj Lands End, Bandra, Mumbai",
+  "location": {
+    "type": "Point",
+    "coordinates": [72.8213, 19.0435]
+  },
+  "dressCode": "Indo-Western Black",
+  "status": "CANCELLED",
+  "isDeleted": false
+}
+```
+- **Success Response (HTTP 200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event updated successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84010",
+    "title": "Aman's Cocktail Party",
+    "address": "Taj Lands End, Bandra, Mumbai",
+    "location": {
+      "type": "Point",
+      "coordinates": [72.8213, 19.0435]
+    },
+    "dressCode": "Indo-Western Black",
+    "status": "CANCELLED",
+    "isDeleted": false,
+    "updatedAt": "2026-11-28T05:35:00.000Z"
+  }
+}
+```
+
+#### 22.9.4. Admin Create Event Category Preset
+*Creates a new event category preset for mobile/web apps.*
+
+- **Method**: `POST`
+- **Full Endpoint**: `/api/admin/event-types` (also available via `/api/admin/events/types`)
+- **Access**: Protected (`Bearer <Admin JWT>`)
+- **Request Body:**
+```json
+{
+  "name": "Live Concert & Gig",
+  "code": "CONCERT",
+  "icon": "music",
+  "sortOrder": 10,
+  "isActive": true
+}
+```
+- **Success Response (HTTP 201 Created):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Event category created successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84055",
+    "name": "Live Concert & Gig",
+    "code": "CONCERT",
+    "icon": "music",
+    "sortOrder": 10,
+    "isActive": true
+  }
+}
+```
+
+#### 22.9.5. Admin Edit / Toggle Category
+*Updates category attributes or toggles active status to hide/show from users without deleting.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/admin/event-types/:id` (also available via `/api/admin/events/types/:id`)
+- **Access**: Protected (`Bearer <Admin JWT>`)
+- **Request Body (Optional fields):**
+```json
+{
+  "name": "Concert & Music Fest",
+  "isActive": false
+}
+```
+- **Success Response (HTTP 200 OK):**
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Event category updated successfully",
+  "data": {
+    "_id": "674720e5c94d3a2b10f84055",
+    "name": "Concert & Music Fest",
+    "isActive": false
+  }
+}
+```
+
+
 
 
 

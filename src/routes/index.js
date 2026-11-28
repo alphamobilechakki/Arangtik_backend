@@ -19,6 +19,7 @@ const categoryServiceRoutes = require('../modules/categoryService/categoryServic
 const adminRoutes = require('../modules/admin/admin.routes');
 const subscriptionRoutes = require('../modules/subscription/subscription.routes');
 const frequentConnectRoutes = require('../modules/frequentConnect/frequentConnect.routes');
+const eventRoutes = require('../modules/event/event.routes');
 
 // Health Check
 router.get('/health', (req, res) => {
@@ -59,6 +60,9 @@ router.use('/integration', integrationRoutes);
 
 // Smart Outfit Suggestion & Styling Routes
 router.use('/outfit', outfitRoutes);
+
+// Occasions & Event Planning Routes (Personal & Groups/Clusters)
+router.use('/events', eventRoutes);
 
 // Universal Orders Routes (Multi-Category Service Work Orders)
 router.use('/orders', orderRoutes);
