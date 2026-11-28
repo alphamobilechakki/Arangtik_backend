@@ -109,6 +109,29 @@ class AuthController {
   });
 
   /**
+   * @desc    Add or update user avatar (supports multipart file upload or JSON avatar URL)
+   * @route   PATCH /api/auth/avatar
+   * @access  Private
+   */
+  updateAvatar = asyncHandler(async (req, res) => {
+    const file = req.file || (req.files?.avatar ? req.files.avatar[0] : (req.files?.image ? req.files.image[0] : null));
+    const avatarValue = req.body?.avatar !== undefined ? req.body.avatar : (req.body?.avatarUrl !== undefined ? req.body.avatarUrl : req.body?.image);
+
+    const result = await authService.updateAvatar(req.user.id, avatarValue, file);
+    return ApiResponse.success(res, result, 'Avatar updated successfully');
+  });
+
+  /**
+   * @desc    Get user avatar
+   * @route   GET /api/auth/avatar
+   * @access  Private
+   */
+  getAvatar = asyncHandler(async (req, res) => {
+    const result = await authService.getAvatar(req.user.id);
+    return ApiResponse.success(res, result, 'Avatar retrieved successfully');
+  });
+
+  /**
    * @desc    Upload user profile image & automatically register reference face embedding
    * @route   POST /api/auth/profile-image
    * @access  Private

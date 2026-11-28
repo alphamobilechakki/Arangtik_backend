@@ -387,6 +387,69 @@ paths:
                     example: Operation completed successfully
                   data:
                     $ref: "#/components/schemas/UserProfile"
+  "/auth/avatar":
+    patch:
+      tags:
+        - "Authentication & Profile"
+      summary: "Add or Update User Avatar"
+      description: "Adds a new avatar or updates an existing avatar using the same idempotent PATCH API. Supports both JSON URL and multipart image file upload."
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  example: "https://api.arangtik.com/uploads/my-3d-avatar.png"
+          "multipart/form-data":
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        200:
+          description: Avatar updated successfully
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Avatar updated successfully
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      name:
+                        type: string
+                      phone:
+                        type: string
+                      avatar:
+                        type: string
+                      profileImage:
+                        type: string
+    get:
+      tags:
+        - "Authentication & Profile"
+      summary: "Get User Avatar"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Avatar retrieved successfully
   "/auth/fcm-token":
     post:
       tags:

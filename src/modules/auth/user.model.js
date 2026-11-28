@@ -70,6 +70,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    avatar: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     wallet: {
       type: Number,
       default: 0,
@@ -105,6 +110,9 @@ userSchema.pre('save', function (next) {
   }
   if (this.profileImage) {
     this.profileImage = formatUploadUrl(this.profileImage);
+  }
+  if (this.avatar) {
+    this.avatar = formatUploadUrl(this.avatar);
   }
   if (this.referenceFace && this.referenceFace.imagePath) {
     this.referenceFace.imagePath = formatUploadUrl(this.referenceFace.imagePath);

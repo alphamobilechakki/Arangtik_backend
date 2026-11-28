@@ -393,7 +393,80 @@ None.
 
 ---
 
-### 2.6. Register FCM Device Token
+### 2.6. Add & Update User Avatar
+*Adds a new avatar or updates an existing avatar for the authenticated user with the **same idempotent PATCH API**. Supports either a direct image file upload (`multipart/form-data`) or a JSON payload containing an avatar image URL.*
+
+- **Method**: `PATCH`
+- **Full Endpoint**: `/api/auth/avatar`
+- **Access**: `Protected` (Requires Bearer Token)
+- **Headers**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  Content-Type: application/json
+  ```
+  *(or `multipart/form-data` when uploading an image file)*
+
+#### Request Body (JSON Option)
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `avatar` | `string` | **Yes** *(or file)* | Direct avatar image URL or uploaded file path. |
+
+##### JSON Request Example
+```json
+{
+  "avatar": "https://api.arangtik.com/uploads/my-3d-avatar.png"
+}
+```
+
+#### Form Data Parameters (Multipart Option)
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `avatar` (or `image`) | `file` (binary) | **Yes** *(or json)* | Image file (`.png`, `.jpg`, `.jpeg`, `.webp`, `.svg`). |
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Avatar updated successfully",
+  "data": {
+    "_id": "6742d810b02891f7c81a4001",
+    "name": "Aman Sharma",
+    "phone": "+919876543210",
+    "avatar": "https://api.arangtik.com/uploads/my-3d-avatar.png",
+    "profileImage": "https://api.arangtik.com/uploads/user-face.jpg"
+  }
+}
+```
+
+---
+
+### 2.7. Get User Avatar
+*Retrieves the current user's digital avatar URL.*
+
+- **Method**: `GET`
+- **Full Endpoint**: `/api/auth/avatar`
+- **Access**: `Protected` (Requires Bearer Token)
+
+#### Success Response (HTTP 200 OK)
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "Avatar retrieved successfully",
+  "data": {
+    "_id": "6742d810b02891f7c81a4001",
+    "name": "Aman Sharma",
+    "phone": "+919876543210",
+    "avatar": "https://api.arangtik.com/uploads/my-3d-avatar.png",
+    "profileImage": "https://api.arangtik.com/uploads/user-face.jpg"
+  }
+}
+```
+
+---
+
+### 2.8. Register FCM Device Token
 *Registers or updates an FCM device push token associated with the authenticated user account.*
 
 - **Method**: `POST`
@@ -556,6 +629,8 @@ None.
 | `GET` | `/api/auth/profile` | Protected | Alias route to fetch authenticated user's profile |
 | `PATCH` | `/api/auth/profile` | Protected | Update profile details (JSON or Multipart image upload) |
 | `PUT` | `/api/auth/profile` | Protected | Alias route to update profile details |
+| `PATCH` | `/api/auth/avatar` | Protected | Add or update digital avatar (JSON URL or file upload) |
+| `GET` | `/api/auth/avatar` | Protected | Fetch authenticated user's digital avatar |
 | `POST` | `/api/auth/profile-image` | Protected | Upload profile photo & extract 128-d reference face biometric |
 | `POST` | `/api/auth/device-token` | Protected | Register FCM device token for push notifications |
 | `DELETE` | `/api/auth/device-token` | Protected | Remove / deactivate FCM device token |

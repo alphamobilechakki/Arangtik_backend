@@ -420,6 +420,11 @@ class AuthService {
         }
       }
 
+      // Handle avatar if provided in profile update
+      if (updateData.avatar !== undefined) {
+        user.avatar = updateData.avatar ? formatUploadUrl(String(updateData.avatar).trim()) : '';
+      }
+
       // Handle file upload if provided
       if (file) {
         user.profileImage = formatUploadUrl(`/uploads/${file.filename}`);
@@ -430,6 +435,57 @@ class AuthService {
       await user.save();
       return user;
     }
+
+  /**
+   * Add or update user avatar (supports both image URL and uploaded file)
+   * PATCH /api/auth/avatar
+   */
+  async updateAvatar(userId, avatarInput = null, file = null) {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    let resolvedAvatar = '';
+
+    if (file) {
+      resolvedAvatar = formatUploadUrl(`/uploads/${file.filename}`);
+    } else if (avatarInput !== null && avatarInput !== undefined) {
+      const trimmed = String(avatarInput).trim();
+      resolvedAvatar = trimmed && trimmed !== 'null' ? formatUploadUrl(trimmed) : '';
+    } else {
+      throw new ApiError(400, 'Avatar image file or avatar URL is required');
+    }
+
+    user.avatar = resolvedAvatar;
+    await user.save();
+
+    return {
+      _id: user._id,
+      name: user.name,
+      phone: user.phone,
+      avatar: user.avatar,
+      profileImage: user.profileImage,
+    };
+  }
+
+  /**
+   * Get user avatar
+   * GET /api/auth/avatar
+   */
+  async getAvatar(userId) {
+    const user = await User.findById(userId).select('_id name phone avatar profileImage');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+    return {
+      _id: user._id,
+      name: user.name,
+      phone: user.phone,
+      avatar: user.avatar || '',
+      profileImage: user.profileImage || '',
+    };
+  }
 
   /**
    * Upload and update user profile image

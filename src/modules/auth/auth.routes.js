@@ -10,11 +10,12 @@ router.post('/send-otp', authController.sendOtp);
 router.post('/verify-otp', authController.verifyOtp);
 
 // Authenticated User Routes
-router.get('/me', protect, authController.getMe);
 router.get('/profile', protect, authController.getMe);
 router.patch('/profile', protect, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'profileImage', maxCount: 1 }]), authController.updateProfile);
-router.put('/profile', protect, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'profileImage', maxCount: 1 }]), authController.updateProfile);
-router.post('/profile-image', protect, upload.single('image'), authController.uploadProfileImage);
+// Avatar Routes: Add or update avatar (supports multipart upload 'avatar'/'image' or JSON payload)
+router.patch('/avatar', protect, upload.fields([{ name: 'avatar', maxCount: 1 }, { name: 'image', maxCount: 1 }]), authController.updateAvatar);
+router.get('/avatar', protect, authController.getAvatar);
+
 router.post('/logout', protect, authController.logout);
 
 // FCM Device Token Registration & Removal (Convenience Auth Endpoints)
