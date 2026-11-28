@@ -102,4 +102,9 @@ module.exports = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
   REDIS_TLS: process.env.REDIS_TLS === 'true',
   GARMENT_AI_CONCURRENCY: parseInt(process.env.GARMENT_AI_CONCURRENCY, 10) || 2,
+
+  // Python Avatar AI Service (Stylized Avatar Generation)
+  AVATAR_AI_SERVICE_URL: process.env.AVATAR_AI_SERVICE_URL || 'http://127.0.0.1:8000',
+  AVATAR_AI_TIMEOUT_MS: parseInt(process.env.AVATAR_AI_TIMEOUT_MS, 10) || 180000,
+  AVATAR_AI_CONCURRENCY: parseInt(process.env.AVATAR_AI_CONCURRENCY, 10) || 2,
 };

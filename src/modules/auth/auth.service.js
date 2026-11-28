@@ -457,8 +457,27 @@ class AuthService {
       throw new ApiError(400, 'Avatar image file or avatar URL is required');
     }
 
+    // 1. Save original upload immediately so the user gets a fast response
     user.avatar = resolvedAvatar;
     await user.save();
+
+    // 2. If a file was uploaded, queue it for AI-stylized avatar generation (non-blocking)
+    if (file) {
+      try {
+        const { enqueueAvatarJob } = require('../../queues');
+        await enqueueAvatarJob({
+          userId: String(user._id),
+          filePath: file.path,
+          filename: file.filename || file.originalname,
+          mimetype: file.mimetype,
+          originalAvatarUrl: resolvedAvatar,
+          // style / haloColor / doodleAccent — can be extended later via request body
+        });
+      } catch (queueErr) {
+        // Queue failure must not break the response — just log and continue
+        console.warn('[AuthService] Avatar AI queue enqueue failed:', queueErr.message);
+      }
+    }
 
     return {
       _id: user._id,
@@ -466,6 +485,7 @@ class AuthService {
       phone: user.phone,
       avatar: user.avatar,
       profileImage: user.profileImage,
+      aiProcessing: !!file, // hint to client that AI stylization is in progress
     };
   }
 
