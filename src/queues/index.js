@@ -7,6 +7,8 @@ const { jewelleryAiQueue, enqueueJewelleryJob } = require('./jewelleryAi/jewelle
 const { initJewelleryAiWorker } = require('./jewelleryAi/jewelleryAi.worker');
 const { avatarAiQueue, enqueueAvatarJob } = require('./avatarAi/avatarAi.queue');
 const { initAvatarAiWorker } = require('./avatarAi/avatarAi.worker');
+const { aiStylistQueue, enqueueAiStylistJob } = require('./aiStylist/aiStylist.queue');
+const { initAiStylistWorker } = require('./aiStylist/aiStylist.worker');
 
 let isInitialized = false;
 
@@ -28,6 +30,9 @@ const initQueuesAndWorkers = () => {
 
     // 4. Initialize Avatar AI Worker
     initAvatarAiWorker();
+
+    // 5. Initialize AI Stylist Virtual Try-On Worker
+    initAiStylistWorker();
 
     isInitialized = true;
     console.log('⚡ [Queue Engine] Redis & BullMQ subsystem initialized successfully.');
@@ -61,4 +66,7 @@ module.exports = {
   // Avatar AI
   avatarAiQueue,
   enqueueAvatarJob,
+  // AI Stylist
+  aiStylistQueue,
+  enqueueAiStylistJob,
 };

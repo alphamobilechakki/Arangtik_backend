@@ -10,6 +10,7 @@ const hubIntegrationRoutes = require('../modules/integration/hub/hub.routes');
 const kitchenBoxIntegrationRoutes = require('../modules/integration/kitchenBox/kitchenBox.routes');
 const kitchenBoxCaptureIntegrationRoutes = require('../modules/integration/kitchenBoxCaptures/kitchenBoxCapture.routes');
 const outfitRoutes = require('../modules/outfit/outfit.routes');
+const aiStylistRoutes = require('../modules/aiStylist/aiStylist.routes');
 const orderRoutes = require('../modules/order/order.routes');
 const laundryRoutes = require('../modules/order/laundry/laundry.routes');
 const vendorRoutes = require('../modules/vendor/vendor.routes');
@@ -60,6 +61,9 @@ router.use('/integration', integrationRoutes);
 
 // Smart Outfit Suggestion & Styling Routes
 router.use('/outfit', outfitRoutes);
+
+// AI Stylist Virtual Try-On Routes
+router.use('/ai-stylist', aiStylistRoutes);
 
 // Occasions & Event Planning Routes (Personal & Groups/Clusters)
 router.use('/events', eventRoutes);

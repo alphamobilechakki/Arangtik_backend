@@ -107,4 +107,9 @@ module.exports = {
   AVATAR_AI_SERVICE_URL: process.env.AVATAR_AI_SERVICE_URL || 'http://127.0.0.1:8000',
   AVATAR_AI_TIMEOUT_MS: parseInt(process.env.AVATAR_AI_TIMEOUT_MS, 10) || 180000,
   AVATAR_AI_CONCURRENCY: parseInt(process.env.AVATAR_AI_CONCURRENCY, 10) || 2,
+
+  // Python Virtual Try-On Service (AI Stylist)
+  PYTHON_TRYON_URL: process.env.PYTHON_TRYON_URL || 'http://127.0.0.1:8000',
+  PYTHON_TRYON_TIMEOUT_MS: parseInt(process.env.PYTHON_TRYON_TIMEOUT_MS, 10) || 300000,
+  AI_STYLIST_CONCURRENCY: parseInt(process.env.AI_STYLIST_CONCURRENCY, 10) || 2,
 };
